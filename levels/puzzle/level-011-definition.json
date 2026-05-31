@@ -1,0 +1,321 @@
+{
+  "levelNumber": 11,
+  "mode": "Puzzle",
+  "difficulty": "Level 11: 14 producer cells, open board, no rocks",
+  "generationSeed": 1011,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N"
+  ],
+  "cells": [
+    {
+      "id": "cell-k",
+      "producedResource": "K",
+      "needs": [
+        "B",
+        "J",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-b",
+      "producedResource": "B",
+      "needs": [
+        "K",
+        "J",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-c",
+      "producedResource": "C",
+      "needs": [
+        "J",
+        "B",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-j",
+      "producedResource": "J",
+      "needs": [
+        "L",
+        "C",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-l",
+      "producedResource": "L",
+      "needs": [
+        "J",
+        "I",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-i",
+      "producedResource": "I",
+      "needs": [
+        "J",
+        "E",
+        "L"
+      ]
+    },
+    {
+      "id": "cell-e",
+      "producedResource": "E",
+      "needs": [
+        "H",
+        "I",
+        "L"
+      ]
+    },
+    {
+      "id": "cell-h",
+      "producedResource": "H",
+      "needs": [
+        "I",
+        "A",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-a",
+      "producedResource": "A",
+      "needs": [
+        "N",
+        "E",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-n",
+      "producedResource": "N",
+      "needs": [
+        "A",
+        "D",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-d",
+      "producedResource": "D",
+      "needs": [
+        "N",
+        "A",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-f",
+      "producedResource": "F",
+      "needs": [
+        "N",
+        "D",
+        "G"
+      ]
+    },
+    {
+      "id": "cell-g",
+      "producedResource": "G",
+      "needs": [
+        "D",
+        "F",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-m",
+      "producedResource": "M",
+      "needs": [
+        "D",
+        "F",
+        "G"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 6,
+    "height": 6,
+    "cells": [
+      {
+        "cellId": "cell-g",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "cellId": "cell-m",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-n",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-l",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "cellId": "cell-c",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "cellId": "cell-k",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-h",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "cell-a",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-e",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "cell-d",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "cellId": "cell-j",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-i",
+        "x": 4,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "B.N...\n...J.C\n..A.I.\n.H.M.K\nG.E...\n.F.D.L"
+  },
+  "solutionLayout": {
+    "width": 4,
+    "height": 4,
+    "cells": [
+      {
+        "cellId": "cell-k",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-j",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "cell-l",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-i",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-e",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-h",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-n",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "cellId": "cell-d",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-f",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "cellId": "cell-g",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-m",
+        "x": 2,
+        "y": 3
+      }
+    ],
+    "rocks": [],
+    "ascii": "KBCJ\nHEIL\nANDF\n..MG"
+  },
+  "solverSummary": {
+    "won": true,
+    "acceptedNearWin": false,
+    "needAttempt": 1,
+    "candidateIndex": 0,
+    "candidateCount": 512,
+    "ticksPerCandidate": 260,
+    "glowingCells": 4,
+    "totalSwaps": 1988,
+    "totalReactions": 1217,
+    "activeCellsInLastWindow": 13,
+    "strainPenalty": 6683,
+    "finalScore": 6732,
+    "adjacentPairs": 20
+  }
+}

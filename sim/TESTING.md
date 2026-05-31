@@ -53,6 +53,12 @@ dotnet run --project sim/CellularSim.Examples -- sim/fixtures/routing.json 3
   - generated cells use one `SourceOutput` and three `Need` slots
   - generated cells and rocks do not overlap
   - generated summaries can inspect larger runs
+- `LevelGenerationTests`
+  - puzzle level 1 has four unique resources and all-other needs
+  - higher levels keep one unique producer and three non-self needs per cell
+  - generated puzzle levels record start layout, solution layout, and solver summary
+  - strict puzzle generation rejects unsolved candidates
+  - separated start layouts do not solve before player movement
 
 ## Proof Fixtures
 
@@ -67,4 +73,4 @@ When adding a rule, add a proof fixture or direct proof test that shows:
 
 This keeps rules auditable before they are turned into Godot visuals.
 
-Latest explicit run: `dotnet test sim/CellularSim.Tests` passed 29 tests.
+Latest recorded run before puzzle-level generator additions: `dotnet test sim/CellularSim.Tests` passed 33 tests. Run the suite again before committing the new level-generation work.

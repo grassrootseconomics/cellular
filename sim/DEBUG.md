@@ -30,7 +30,7 @@ dotnet run --project sim/CellularSim.Examples -- --debug --verbose sim/fixtures/
 
 - `help`: show commands.
 - `setup`: show each cell's produced resources, needed resources, any routing-only resources, and reaction set.
-- `map`: show an ASCII grid. Cells are shown by produced-resource character, rocks as `#`, empty tiles as `.`.
+- `map`: show an ASCII grid. Producer cells are shown by produced-resource character, myco/no-source cells as `0`, rocks as `#`, empty tiles as `.`.
 - `touching`: show orthogonally touching cell pairs. Only these pairs can attempt swaps.
 - `state`: show all current pool balances, glow state, strain, score, and circuit state.
 - `cell <id>`: inspect one cell.
@@ -46,7 +46,7 @@ Cells that are diagonal or separated by empty/rock tiles cannot swap. The future
 
 ## Generate Larger Scenarios
 
-Generated scenarios are deterministic from their seed and stay inside the same pool rules as fixtures: one produced `SourceOutput`, exactly three `Need` resources, four pool slots total, and a cap of `100` per slot.
+Generated scenarios are deterministic from their seed and stay inside the same pool rules as fixtures: one produced `SourceOutput`, exactly three `Need` resources, four pool slots total, and a cap of `100` per slot. Hand-authored fixtures may also include myco cells with no source; these render as `0`.
 
 Print a square 100-cell scenario and run a stability summary:
 
@@ -71,6 +71,7 @@ Example map legend:
 ```text
 A = cell producing A
 B = cell producing B
+0 = myco cell with no source
 # = rock
 . = empty
 ```
@@ -81,4 +82,10 @@ Use generated scenarios in debug mode:
 
 ```bash
 dotnet run --project sim/CellularSim.Examples -- --generate --seed 12345 --size 20 --cells 100 --resources 6 --rocks 30 --debug --commands "map;touching;tick 10;score"
+```
+
+Generate an offline puzzle level and save its start and solution artifacts:
+
+```bash
+dotnet run --project sim/CellularSim.Examples -- --generate-puzzle-level --level 1 --level-seed 10 --save-dir sim/generated/level-001
 ```

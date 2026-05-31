@@ -13,6 +13,7 @@ Cellular must handle thousands of cells on low-end computers. The sim core shoul
 - Score and win scans avoid LINQ allocation in the tick path.
 - Event buffers are bounded by `EngineOptions.EventCapacity`.
 - Generated scenarios can create repeatable 100+ cell maps for backend inspection without Godot.
+- Offline puzzle generation can search many small candidate layouts before a level is shipped.
 
 ## Current Known Costs
 
@@ -28,6 +29,7 @@ Cellular must handle thousands of cells on low-end computers. The sim core shoul
 4. Add a benchmark runner with target sizes such as 2k, 10k, and 50k cells.
 5. Consider struct event buffers for hot gameplay builds while keeping record events for tests/debug output.
 6. Add stable-configuration search tooling that sweeps seeds and records the best scoring scenarios.
+7. Add search pruning for larger puzzle candidates so arrangement search does not become brute-force-only.
 
 ## Manual Check
 

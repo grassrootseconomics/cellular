@@ -80,6 +80,9 @@ var _title_tuktuk_engine_sound_player: AudioStreamPlayer = null
 var _title_basket_land_sound_player: AudioStreamPlayer = null
 var _title_quit_button: Button = null
 var _title_quit_requested := false
+var _puzzle_progress_label: Label = null
+var _puzzle_reset_button: Button = null
+var _arcade_high_score_label: Label = null
 
 
 func _get_ge_logo_texture() -> Texture2D:
@@ -189,6 +192,88 @@ func _style_title_quit_button(button: Button) -> void:
 	button.add_theme_stylebox_override("focus", _make_cta_style(base_bg.lightened(0.12), Color(1, 1, 1, 0.95), 4))
 
 
+func _style_title_secondary_button(button: Button) -> void:
+	if not is_instance_valid(button):
+		return
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.focus_mode = Control.FOCUS_ALL
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color(0.92, 1.0, 0.96, 1.0))
+	var base_bg := Color(0.08, 0.22, 0.24, 0.92)
+	var base_border := Color(0.48, 0.86, 0.78, 0.86)
+	button.add_theme_stylebox_override("normal", _make_cta_style(base_bg, base_border, 2))
+	button.add_theme_stylebox_override("hover", _make_cta_style(base_bg.lightened(0.12), Color(0.68, 1.0, 0.92, 1.0), 3))
+	button.add_theme_stylebox_override("pressed", _make_cta_style(base_bg.darkened(0.18), Color(0.32, 0.66, 0.60, 1.0), 2))
+	button.add_theme_stylebox_override("focus", _make_cta_style(base_bg.lightened(0.12), Color(1, 1, 1, 0.95), 4))
+
+
+func _style_title_info_label(label: Label, font_size: int) -> void:
+	if not is_instance_valid(label):
+		return
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", Color(0.92, 1.0, 0.94, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.05, 0.92))
+	label.add_theme_constant_override("outline_size", 3)
+
+
+func _get_title_menu_box() -> VBoxContainer:
+	return get_node_or_null("CenterContainer/VBoxContainer") as VBoxContainer
+
+
+func _ensure_cellular_title_widgets() -> void:
+	var menu_box := _get_title_menu_box()
+	if not is_instance_valid(menu_box):
+		return
+	if not is_instance_valid(_puzzle_progress_label):
+		_puzzle_progress_label = menu_box.get_node_or_null("PuzzleProgressLabel") as Label
+	if not is_instance_valid(_puzzle_progress_label):
+		_puzzle_progress_label = Label.new()
+		_puzzle_progress_label.name = "PuzzleProgressLabel"
+		menu_box.add_child(_puzzle_progress_label)
+	if not is_instance_valid(_puzzle_reset_button):
+		_puzzle_reset_button = menu_box.get_node_or_null("ResetPuzzleButton") as Button
+	if not is_instance_valid(_puzzle_reset_button):
+		_puzzle_reset_button = Button.new()
+		_puzzle_reset_button.name = "ResetPuzzleButton"
+		menu_box.add_child(_puzzle_reset_button)
+	if not _puzzle_reset_button.pressed.is_connected(_on_reset_puzzle_progress_pressed):
+		_puzzle_reset_button.pressed.connect(_on_reset_puzzle_progress_pressed)
+	if not is_instance_valid(_arcade_high_score_label):
+		_arcade_high_score_label = menu_box.get_node_or_null("ArcadeHighScoreLabel") as Label
+	if not is_instance_valid(_arcade_high_score_label):
+		_arcade_high_score_label = Label.new()
+		_arcade_high_score_label.name = "ArcadeHighScoreLabel"
+		menu_box.add_child(_arcade_high_score_label)
+	var ordered_names := [
+		"RegenerationLabel",
+		"Tutorial",
+		"PuzzleProgressLabel",
+		"ResetPuzzleButton",
+		"ChallengeButton",
+		"ArcadeHighScoreLabel",
+		"LinkButton"
+	]
+	for index in range(ordered_names.size()):
+		var child := menu_box.get_node_or_null(ordered_names[index])
+		if is_instance_valid(child):
+			menu_box.move_child(child, index)
+	_puzzle_reset_button.text = "Reset Puzzle Progress"
+	_style_title_secondary_button(_puzzle_reset_button)
+	_refresh_cellular_title_stats()
+
+
+func _refresh_cellular_title_stats() -> void:
+	if is_instance_valid(_puzzle_progress_label):
+		_puzzle_progress_label.text = str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
+	if is_instance_valid(_arcade_high_score_label):
+		_arcade_high_score_label.text = str("Arcade High Score: ", Global.format_score_value(Global.high_score))
+
+
 func _ensure_title_quit_button() -> Button:
 	if is_instance_valid(_title_quit_button):
 		return _title_quit_button
@@ -215,8 +300,11 @@ func _ensure_title_quit_button() -> Button:
 func _setup_primary_buttons() -> void:
 	var story_button: Button = $CenterContainer/VBoxContainer/Tutorial
 	var challenge_button: Button = $CenterContainer/VBoxContainer/ChallengeButton
-	_style_cta_button(story_button, Color(0.15, 0.48, 0.24, 0.95), Color(0.72, 0.95, 0.77, 1.0))
-	_style_cta_button(challenge_button, Color(0.78, 0.34, 0.10, 0.95), Color(1.0, 0.80, 0.52, 1.0))
+	story_button.text = "Puzzle"
+	challenge_button.text = "Arcade"
+	_ensure_cellular_title_widgets()
+	_style_cta_button(story_button, Color(0.13, 0.42, 0.46, 0.95), Color(0.70, 0.98, 0.95, 1.0))
+	_style_cta_button(challenge_button, Color(0.68, 0.30, 0.18, 0.95), Color(1.0, 0.76, 0.48, 1.0))
 	_style_title_quit_button(_ensure_title_quit_button())
 
 
@@ -346,8 +434,8 @@ func _get_title_menu_column_rect(view_size: Vector2, fallback_width: float) -> R
 
 func _update_title_score_widgets(view_size: Vector2, compact: bool, tiny: bool) -> void:
 	_ensure_title_score_widgets()
-	var has_last_score = int(Global.last_score) > 0
-	var has_high_score = int(Global.high_score) > 0
+	var has_last_score = false
+	var has_high_score = false
 	var show_scores = has_last_score or has_high_score
 	var safe_rect := _get_title_padded_safe_view_rect(compact, tiny)
 	var safe_panel_max_width: float = maxf(1.0, minf(720.0, safe_rect.size.x))
@@ -746,8 +834,8 @@ func _get_title_basket_score_gap(compact: bool, tiny: bool) -> float:
 
 
 func _get_title_score_stack_height(compact: bool, tiny: bool) -> float:
-	var has_last_score: bool = int(Global.last_score) > 0
-	var has_high_score: bool = int(Global.high_score) > 0
+	var has_last_score := false
+	var has_high_score := false
 	var height: float = 0.0
 	if has_last_score:
 		height += 66.0 if tiny else (72.0 if compact else 78.0)
@@ -1169,6 +1257,15 @@ func _apply_responsive_layout() -> void:
 			continue
 		button.custom_minimum_size = Vector2(cta_width, cta_height)
 		button.add_theme_font_size_override("font_size", cta_font_size)
+	if is_instance_valid(_puzzle_reset_button):
+		var reset_width := clampf(cta_width * 0.78, minf(170.0, safe_rect.size.x), cta_width)
+		_puzzle_reset_button.custom_minimum_size = Vector2(reset_width, 42.0 if compact else 46.0)
+		_puzzle_reset_button.add_theme_font_size_override("font_size", 18 if compact else 20)
+	var info_font_size := 20 if compact else 22
+	if tiny:
+		info_font_size = 17
+	_style_title_info_label(_puzzle_progress_label, info_font_size)
+	_style_title_info_label(_arcade_high_score_label, info_font_size)
 	if is_instance_valid(_title_quit_button):
 		_title_quit_button.custom_minimum_size = Vector2(quit_width, quit_height)
 		_title_quit_button.size = Vector2(quit_width, quit_height)
@@ -1226,7 +1323,7 @@ func _apply_responsive_layout() -> void:
 		var title_height_box = 88.0 if tiny else (98.0 if compact else 112.0)
 		regen_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		regen_label.custom_minimum_size = Vector2(title_width, title_height_box)
-		regen_label.text = "Social Soil"
+		regen_label.text = "Cellular"
 		regen_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		regen_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		regen_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.24, 1.0))
@@ -1323,12 +1420,13 @@ func _reset_run_state() -> void:
 
 func _ready():
 	Global.reset_gameplay_speed()
-	DisplayServer.window_set_title("Social Soil")
+	DisplayServer.window_set_title("Cellular")
 	Global.record_last_score()
 	Global.score = 0
 	_ensure_responsive_background_nodes()
 	$CenterContainer/VBoxContainer/HBoxContainer.visible = false
 	_setup_primary_buttons()
+	_refresh_cellular_title_stats()
 	_setup_version_label()
 	_ensure_title_score_widgets()
 	_ensure_title_flyby_nodes()
@@ -1358,27 +1456,11 @@ func _exit_tree() -> void:
 
 func _on_tutorial_pressed() -> void:
 	_reset_run_state()
-	Global.mode = "story"
-	Global.is_raining = true
-	Global.is_birding = true
-	Global.is_killing = false
-	Global.is_max_babies = true
-	Global.enable_tuktuk_predators = false
-	Global.draw_lines = true
-	Global.bars_on = false
-	Global.stage = 1
-	Global.inventory = { #how many of each plant do we have to use
-	"bean": 3,
-	"squash": 3,				
-	"maize": 3,
-	"tree": 3,
-	"myco": 3,
-	"farmer": 0,
-	"vendor": 0,
-	"cook": 0,
-	"basket": 0
-	}
-	get_tree().change_scene_to_file("res://scenes/level.tscn")
+	Global.mode = "puzzle"
+	Global.active_mode_id = "cellular_puzzle"
+	Global.cellular_puzzle_current_level = maxi(1, Global.cellular_puzzle_highest_level)
+	Global.active_scenario_id = str("puzzle_level_", Global.cellular_puzzle_current_level)
+	get_tree().change_scene_to_file("res://scenes/cellular_puzzle_level.tscn")
 
 func _on_free_garden_pressed() -> void:
 	_on_challenge_button_pressed()
@@ -1386,6 +1468,7 @@ func _on_free_garden_pressed() -> void:
 func _on_challenge_button_pressed() -> void:
 	_reset_run_state()
 	Global.mode = "challenge"
+	Global.active_mode_id = "cellular_arcade"
 	Global.is_raining = true
 	Global.is_birding = true
 	Global.is_killing = true
@@ -1405,6 +1488,13 @@ func _on_challenge_button_pressed() -> void:
 	"basket": 3
 	}
 	get_tree().change_scene_to_file("res://scenes/level.tscn")
+
+
+func _on_reset_puzzle_progress_pressed() -> void:
+	if Global.has_method("reset_cellular_puzzle_progress"):
+		Global.reset_cellular_puzzle_progress()
+	_refresh_cellular_title_stats()
+	_request_title_layout_refresh(2)
 
 
 func _on_cofi_button_pressed() -> void:

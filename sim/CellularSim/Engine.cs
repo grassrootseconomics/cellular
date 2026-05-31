@@ -5,6 +5,7 @@ public sealed class EngineOptions
     public int GlowTtlTicks { get; set; } = 5;
     public int EventCapacity { get; set; } = 4096;
     public int EdgeThroughputPerDirection { get; set; } = 1;
+    public int MaxSwapQuantityPerEdge { get; set; } = 4;
     public int WinDurationTicks { get; set; } = 30;
     public int WinRecentFlowWindowTicks { get; set; } = 30;
     public List<string> RequiredCellIds { get; } = new();
@@ -46,6 +47,7 @@ public sealed class CellularEngine
 {
     private readonly EventBuffer _events;
     private readonly List<SwapProposal> _swapProposals = new(1024);
+    private readonly List<PrioritizedSwapProposal> _candidateSwapProposals = new(1024);
     private readonly List<int> _reactedCells = new(1024);
     private readonly HashSet<string> _reachSeen = new(StringComparer.Ordinal);
     private readonly Stack<string> _reachStack = new();
@@ -67,6 +69,11 @@ public sealed class CellularEngine
         if (Options.EdgeThroughputPerDirection <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Edge throughput must be positive.");
+        }
+
+        if (Options.MaxSwapQuantityPerEdge <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Max swap quantity per edge must be positive.");
         }
 
         _events = new EventBuffer(Options.EventCapacity);
@@ -143,23 +150,43 @@ public sealed class CellularEngine
     private void GenerateSwapProposals()
     {
         _swapProposals.Clear();
+        _candidateSwapProposals.Clear();
         ClearReservations();
 
+        var edgeOrder = 0;
         foreach (var edge in World.GetAdjacentEdges())
         {
-            if (TryBuildSwap(edge.A, edge.B, out var forwardProposal)
-                || TryBuildSwap(edge.B, edge.A, out forwardProposal))
+            AddSwapCandidatesForDirection(edge.A, edge.B, edgeOrder);
+            AddSwapCandidatesForDirection(edge.B, edge.A, edgeOrder);
+
+            edgeOrder++;
+        }
+
+        var edgeUseCounts = new int[edgeOrder];
+        var maxAcceptedSwapsPerEdge = Math.Min(Options.EdgeThroughputPerDirection, 1);
+        _candidateSwapProposals.Sort(ComparePrioritizedSwapProposals);
+        for (var i = 0; i < _candidateSwapProposals.Count; i++)
+        {
+            var candidate = _candidateSwapProposals[i];
+            if (edgeUseCounts[candidate.EdgeOrder] >= maxAcceptedSwapsPerEdge)
             {
-                ReserveSwap(forwardProposal);
-                _swapProposals.Add(forwardProposal);
+                continue;
+            }
+
+            var proposal = candidate.Proposal;
+            if (CanReserveSwap(proposal))
+            {
+                ReserveSwap(proposal);
+                _swapProposals.Add(proposal);
+                edgeUseCounts[candidate.EdgeOrder]++;
             }
         }
     }
 
-    private bool TryBuildSwap(
+    private void AddSwapCandidatesForDirection(
         int initiatorIndex,
         int counterpartyIndex,
-        out SwapProposal proposal)
+        int edgeOrder)
     {
         var initiator = World.Cells[initiatorIndex];
         var counterparty = World.Cells[counterpartyIndex];
@@ -174,101 +201,217 @@ public sealed class CellularEngine
                 continue;
             }
 
-            var requestedResource = requestedSlot.Resource;
-            if (!counterparty.Pool.CanSend(
-                    requestedResource,
-                    1,
-                    GetReservedOut(counterpartyIndex, requestedResource)))
-            {
-                continue;
-            }
-
-            if (!initiator.Pool.CanReceive(
-                    requestedResource,
-                    1,
-                    GetReservedIn(initiatorIndex, requestedResource)))
-            {
-                continue;
-            }
-
-            if (TrySelectOffer(initiator.Pool, counterpartyPool, initiatorIndex, counterpartyIndex, requestedResource, out var offeredResource))
-            {
-                proposal = new SwapProposal(initiatorIndex, counterpartyIndex, offeredResource, requestedResource, 1);
-                return true;
-            }
+            AddSwapCandidatesForRequestedResource(
+                    initiator.Pool,
+                    counterpartyPool,
+                    initiatorIndex,
+                    counterpartyIndex,
+                    requestedSlot,
+                    edgeOrder);
         }
-
-        proposal = default;
-        return false;
     }
 
-    private bool TrySelectOffer(
+    private bool CanReserveSwap(SwapProposal proposal)
+    {
+        var initiator = World.Cells[proposal.InitiatorIndex];
+        var counterparty = World.Cells[proposal.CounterpartyIndex];
+        var initiatorPaidSlot = initiator.Pool.GetSlot(proposal.InitiatorPaidResource);
+        if (initiatorPaidSlot is null)
+        {
+            return false;
+        }
+
+        if (GetOfferableSwapQuantity(
+                initiator.Pool,
+                proposal.InitiatorPaidResource,
+                GetReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource)) < proposal.Quantity)
+        {
+            return false;
+        }
+
+        if (GetOfferableSwapQuantity(
+                counterparty.Pool,
+                proposal.CounterpartyPaidResource,
+                GetReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource)) < proposal.Quantity)
+        {
+            return false;
+        }
+
+        if (GetReceivableSwapQuantity(
+                initiator.Pool,
+                proposal.CounterpartyPaidResource,
+                GetReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource)) < proposal.Quantity)
+        {
+            return false;
+        }
+
+        return GetReceivableSwapQuantity(
+            counterparty.Pool,
+            proposal.InitiatorPaidResource,
+            GetReservedIn(proposal.CounterpartyIndex, proposal.InitiatorPaidResource)) >= proposal.Quantity;
+    }
+
+    private void AddSwapCandidatesForRequestedResource(
         SwapPoolState initiatorPool,
         SwapPoolState counterpartyPool,
         int initiatorIndex,
         int counterpartyIndex,
-        ResourceId requestedResource,
-        out ResourceId offeredResource)
+        PoolSlot requestedSlot,
+        int edgeOrder)
     {
-        if (TrySelectOfferByRole(initiatorPool, counterpartyPool, initiatorIndex, counterpartyIndex, requestedResource, PoolSlotRole.SourceOutput, out offeredResource))
+        var requestedResource = requestedSlot.Resource;
+        var counterpartyRequestedOfferable = GetOfferableSwapQuantity(
+            counterpartyPool,
+            requestedResource,
+            GetReservedOut(counterpartyIndex, requestedResource));
+        if (counterpartyRequestedOfferable <= 0)
         {
-            return true;
+            return;
         }
 
-        if (TrySelectOfferByRole(initiatorPool, counterpartyPool, initiatorIndex, counterpartyIndex, requestedResource, PoolSlotRole.Need, out offeredResource))
+        var initiatorRequestedReceivable = GetReceivableSwapQuantity(
+            initiatorPool,
+            requestedResource,
+            GetReservedIn(initiatorIndex, requestedResource));
+        if (initiatorRequestedReceivable <= 0)
         {
-            return true;
+            return;
         }
 
-        return TrySelectOfferByRole(initiatorPool, counterpartyPool, initiatorIndex, counterpartyIndex, requestedResource, PoolSlotRole.AcceptOnly, out offeredResource);
-    }
-
-    private bool TrySelectOfferByRole(
-        SwapPoolState initiatorPool,
-        SwapPoolState counterpartyPool,
-        int initiatorIndex,
-        int counterpartyIndex,
-        ResourceId requestedResource,
-        PoolSlotRole role,
-        out ResourceId offeredResource)
-    {
         var slots = initiatorPool.Slots;
-        ResourceId best = default;
-        var hasBest = false;
         for (var i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
-            if (slot.Role != role || slot.Quantity <= 0 || slot.Resource == requestedResource)
+            if (slot.Quantity <= 0 || slot.Resource == requestedResource)
             {
                 continue;
             }
 
             var candidate = slot.Resource;
-            if (!initiatorPool.CanSend(candidate, 1, GetReservedOut(initiatorIndex, candidate)))
+            var initiatorCandidateOfferable = GetOfferableSwapQuantity(
+                initiatorPool,
+                candidate,
+                GetReservedOut(initiatorIndex, candidate));
+            if (initiatorCandidateOfferable <= 0)
             {
                 continue;
             }
 
             var counterpartyReceiveSlot = counterpartyPool.GetSlot(candidate);
-            if (counterpartyReceiveSlot is null || counterpartyReceiveSlot.Role == PoolSlotRole.SourceOutput)
+            if (counterpartyReceiveSlot is null)
             {
                 continue;
             }
 
-            if (!counterpartyPool.CanReceive(candidate, 1, GetReservedIn(counterpartyIndex, candidate)))
+            var counterpartyReservedIn = GetReservedIn(counterpartyIndex, candidate);
+            var counterpartyCandidateReceivable = GetReceivableSwapQuantity(
+                counterpartyPool,
+                candidate,
+                counterpartyReservedIn);
+            if (counterpartyCandidateReceivable <= 0)
             {
                 continue;
             }
 
-            if (!hasBest || candidate.Value < best.Value)
+            var quantity = Math.Min(
+                Options.MaxSwapQuantityPerEdge,
+                Math.Min(
+                    Math.Min(initiatorCandidateOfferable, counterpartyRequestedOfferable),
+                    Math.Min(initiatorRequestedReceivable, counterpartyCandidateReceivable)));
+            if (quantity <= 0)
             {
-                best = candidate;
-                hasBest = true;
+                continue;
+            }
+
+            var candidatePriority = CreateOfferPriority(
+                slot,
+                counterpartyReceiveSlot,
+                counterpartyReservedIn);
+            var proposal = new SwapProposal(initiatorIndex, counterpartyIndex, candidate, requestedResource, quantity);
+            var priority = new SwapPriority(
+                requestedSlot.Quantity + GetReservedIn(initiatorIndex, requestedResource),
+                candidatePriority);
+            _candidateSwapProposals.Add(new PrioritizedSwapProposal(proposal, priority, edgeOrder));
+        }
+    }
+
+    private static int GetReceivableSwapQuantity(
+        SwapPoolState pool,
+        ResourceId resource,
+        int reservedIncoming)
+    {
+        var slot = pool.GetSlot(resource);
+        if (slot is null)
+        {
+            return 0;
+        }
+
+        if (slot.Role == PoolSlotRole.SourceOutput)
+        {
+            return int.MaxValue;
+        }
+
+        return Math.Max(0, slot.Capacity - slot.Quantity - reservedIncoming);
+    }
+
+    private static int GetOfferableSwapQuantity(
+        SwapPoolState pool,
+        ResourceId resource,
+        int reservedOutgoing)
+    {
+        var slot = pool.GetSlot(resource);
+        if (slot is null)
+        {
+            return 0;
+        }
+
+        var available = slot.Quantity - reservedOutgoing;
+        if (slot.Role == PoolSlotRole.Need || slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
+        {
+            available--;
+        }
+
+        return Math.Max(0, available);
+    }
+
+    private static bool HasNeedSlot(SwapPoolState pool)
+    {
+        var slots = pool.Slots;
+        for (var i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].Role == PoolSlotRole.Need)
+            {
+                return true;
             }
         }
 
-        offeredResource = best;
-        return hasBest;
+        return false;
+    }
+
+    private static OfferPriority CreateOfferPriority(
+        PoolSlot offeredSlot,
+        PoolSlot counterpartyReceiveSlot,
+        int counterpartyReservedIn)
+    {
+        var counterpartyNeedBalance = counterpartyReceiveSlot.Quantity + counterpartyReservedIn;
+        var counterpartyMissingNeedRank = counterpartyReceiveSlot.Role == PoolSlotRole.Need
+            && counterpartyNeedBalance == 0
+                ? 0
+                : 1;
+        var sourceReturnRank = counterpartyReceiveSlot.Role == PoolSlotRole.SourceOutput ? 0 : 1;
+        var offeredRoleRank = offeredSlot.Role switch
+        {
+            PoolSlotRole.SourceOutput => 0,
+            PoolSlotRole.Need => 1,
+            PoolSlotRole.AcceptOnly => 2,
+            _ => 3
+        };
+
+        return new OfferPriority(
+            counterpartyMissingNeedRank,
+            sourceReturnRank,
+            counterpartyNeedBalance,
+            offeredRoleRank);
     }
 
     private void ReserveSwap(SwapProposal proposal)
@@ -325,6 +468,98 @@ public sealed class CellularEngine
                 proposal.Quantity,
                 FlowKind.Reciprocal));
         }
+    }
+
+    private int ComparePrioritizedSwapProposals(PrioritizedSwapProposal left, PrioritizedSwapProposal right)
+    {
+        var compareRequestedBalance = left.Priority.RequestedBalance.CompareTo(right.Priority.RequestedBalance);
+        if (compareRequestedBalance != 0)
+        {
+            return compareRequestedBalance;
+        }
+
+        var compareOffer = CompareOfferPriorities(left.Priority.OfferPriority, right.Priority.OfferPriority);
+        if (compareOffer != 0)
+        {
+            return compareOffer;
+        }
+
+        var compareQuantity = right.Proposal.Quantity.CompareTo(left.Proposal.Quantity);
+        if (compareQuantity != 0)
+        {
+            return compareQuantity;
+        }
+
+        var compareEdge = left.EdgeOrder.CompareTo(right.EdgeOrder);
+        if (compareEdge != 0)
+        {
+            return compareEdge;
+        }
+
+        var compareInitiator = CompareCellsForStableProposalOrder(
+            World.Cells[left.Proposal.InitiatorIndex],
+            World.Cells[right.Proposal.InitiatorIndex]);
+        if (compareInitiator != 0)
+        {
+            return compareInitiator;
+        }
+
+        var compareCounterparty = CompareCellsForStableProposalOrder(
+            World.Cells[left.Proposal.CounterpartyIndex],
+            World.Cells[right.Proposal.CounterpartyIndex]);
+        if (compareCounterparty != 0)
+        {
+            return compareCounterparty;
+        }
+
+        var compareInitiatorPaid = left.Proposal.InitiatorPaidResource.Value
+            .CompareTo(right.Proposal.InitiatorPaidResource.Value);
+        if (compareInitiatorPaid != 0)
+        {
+            return compareInitiatorPaid;
+        }
+
+        return left.Proposal.CounterpartyPaidResource.Value.CompareTo(right.Proposal.CounterpartyPaidResource.Value);
+    }
+
+    private static int CompareOfferPriorities(OfferPriority left, OfferPriority right)
+    {
+        var compareSourceReturn = left.SourceReturnRank.CompareTo(right.SourceReturnRank);
+        if (compareSourceReturn != 0)
+        {
+            return compareSourceReturn;
+        }
+
+        var compareMissingNeed = left.CounterpartyMissingNeedRank.CompareTo(right.CounterpartyMissingNeedRank);
+        if (compareMissingNeed != 0)
+        {
+            return compareMissingNeed;
+        }
+
+        var compareCounterpartyNeed = left.CounterpartyNeedBalance.CompareTo(right.CounterpartyNeedBalance);
+        if (compareCounterpartyNeed != 0)
+        {
+            return compareCounterpartyNeed;
+        }
+
+        return left.OfferedRoleRank.CompareTo(right.OfferedRoleRank);
+    }
+
+    private static int CompareCellsForStableProposalOrder(CellState left, CellState right)
+    {
+        var compareY = left.Position.Y.CompareTo(right.Position.Y);
+        if (compareY != 0)
+        {
+            return compareY;
+        }
+
+        var compareX = left.Position.X.CompareTo(right.Position.X);
+        if (compareX != 0)
+        {
+            return compareX;
+        }
+
+        return string.CompareOrdinal(left.Id, right.Id);
     }
 
     private void ResolveReactions()
@@ -599,4 +834,17 @@ public sealed class CellularEngine
         ResourceId InitiatorPaidResource,
         ResourceId CounterpartyPaidResource,
         int Quantity);
+
+    private readonly record struct OfferPriority(
+        int CounterpartyMissingNeedRank,
+        int SourceReturnRank,
+        int CounterpartyNeedBalance,
+        int OfferedRoleRank);
+
+    private readonly record struct SwapPriority(int RequestedBalance, OfferPriority OfferPriority);
+
+    private readonly record struct PrioritizedSwapProposal(
+        SwapProposal Proposal,
+        SwapPriority Priority,
+        int EdgeOrder);
 }

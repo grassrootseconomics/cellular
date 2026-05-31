@@ -1,0 +1,241 @@
+{
+  "levelNumber": 7,
+  "mode": "Puzzle",
+  "difficulty": "Level 7: 10 producer cells, open board, no rocks",
+  "generationSeed": 1007,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J"
+  ],
+  "cells": [
+    {
+      "id": "cell-g",
+      "producedResource": "G",
+      "needs": [
+        "A",
+        "E",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-e",
+      "producedResource": "E",
+      "needs": [
+        "G",
+        "A",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-b",
+      "producedResource": "B",
+      "needs": [
+        "E",
+        "G",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-a",
+      "producedResource": "A",
+      "needs": [
+        "J",
+        "B",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-j",
+      "producedResource": "J",
+      "needs": [
+        "A",
+        "B",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-h",
+      "producedResource": "H",
+      "needs": [
+        "A",
+        "D",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-d",
+      "producedResource": "D",
+      "needs": [
+        "F",
+        "H",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-f",
+      "producedResource": "F",
+      "needs": [
+        "C",
+        "D",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-c",
+      "producedResource": "C",
+      "needs": [
+        "D",
+        "I",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-i",
+      "producedResource": "I",
+      "needs": [
+        "C",
+        "D",
+        "F"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 6,
+    "height": 5,
+    "cells": [
+      {
+        "cellId": "cell-j",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-g",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "cellId": "cell-c",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-d",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "cell-i",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "cell-h",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-e",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-b",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-a",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f",
+        "x": 2,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "B.....\n.A....\nC.F.H.\n.I.J.E\n..D.G."
+  },
+  "solutionLayout": {
+    "width": 4,
+    "height": 3,
+    "cells": [
+      {
+        "cellId": "cell-g",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-e",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-a",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "cell-j",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-h",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-d",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-i",
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "GEBA\nFDHJ\nCI.."
+  },
+  "solverSummary": {
+    "won": true,
+    "acceptedNearWin": false,
+    "needAttempt": 1,
+    "candidateIndex": 0,
+    "candidateCount": 256,
+    "ticksPerCandidate": 200,
+    "glowingCells": 4,
+    "totalSwaps": 1315,
+    "totalReactions": 787,
+    "activeCellsInLastWindow": 10,
+    "strainPenalty": 2987,
+    "finalScore": 5690,
+    "adjacentPairs": 13
+  }
+}

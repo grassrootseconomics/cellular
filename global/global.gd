@@ -7,9 +7,12 @@ var high_score := 0
 var last_score := 0
 var last_rank_key := 0
 const HIGH_SCORE_SAVE_PATH := "user://high_score.cfg"
+const CELLULAR_PROGRESS_SAVE_PATH := "user://cellular_progress.cfg"
 const GAMEPLAY_SPEED_NORMAL := 0
 const GAMEPLAY_SPEED_FAST := 1
 const GAMEPLAY_SPEED_SLOW := 2
+var cellular_puzzle_highest_level := 1
+var cellular_puzzle_current_level := 1
 
 var move_rate = 1 #4 #6
 var movement_speed = 50 #100 #200
@@ -450,6 +453,7 @@ var stage_colors = {
 
 func _ready() -> void:
 	load_high_score()
+	load_cellular_progress()
 	var seeded = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
@@ -487,6 +491,39 @@ func save_high_score() -> void:
 	cfg.set_value("scores", "last_score", max(0, last_score))
 	cfg.set_value("scores", "last_rank_key", last_rank_key)
 	cfg.save(HIGH_SCORE_SAVE_PATH)
+
+
+func load_cellular_progress() -> void:
+	var cfg := ConfigFile.new()
+	var err := cfg.load(CELLULAR_PROGRESS_SAVE_PATH)
+	if err == OK:
+		cellular_puzzle_highest_level = maxi(1, int(cfg.get_value("puzzle", "highest_level", 1)))
+	else:
+		cellular_puzzle_highest_level = 1
+	cellular_puzzle_current_level = cellular_puzzle_highest_level
+
+
+func save_cellular_progress() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("puzzle", "highest_level", maxi(1, cellular_puzzle_highest_level))
+	cfg.save(CELLULAR_PROGRESS_SAVE_PATH)
+
+
+func reset_cellular_puzzle_progress() -> void:
+	cellular_puzzle_highest_level = 1
+	cellular_puzzle_current_level = 1
+	save_cellular_progress()
+
+
+func record_cellular_puzzle_level_complete(level_number: int) -> bool:
+	var completed_level := maxi(1, level_number)
+	var next_level := completed_level + 1
+	if next_level <= cellular_puzzle_highest_level:
+		return false
+	cellular_puzzle_highest_level = next_level
+	cellular_puzzle_current_level = next_level
+	save_cellular_progress()
+	return true
 
 
 func update_high_score(score_value: int = -1) -> bool:

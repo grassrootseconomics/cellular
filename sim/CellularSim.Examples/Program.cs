@@ -4,8 +4,14 @@ using CellularSim;
 
 var run = ParseRun(args);
 GeneratedScenario? generated = null;
+GeneratedPuzzleLevel? puzzleLevel = null;
 FixtureLoadResult loaded;
-if (run.GenerateOptions is not null)
+if (run.PuzzleLevelOptions is not null)
+{
+    puzzleLevel = PuzzleLevelGenerator.Generate(run.PuzzleLevelOptions);
+    loaded = puzzleLevel.StartingLoaded;
+}
+else if (run.GenerateOptions is not null)
 {
     generated = RandomScenarioGenerator.Generate(run.GenerateOptions);
     loaded = generated.Loaded;
@@ -21,10 +27,18 @@ if (generated is not null && run.SaveDirectory is not null)
 {
     SaveGeneratedScenario(generated, null, run.SaveDirectory);
 }
+else if (puzzleLevel is not null && run.SaveDirectory is not null)
+{
+    SavePuzzleLevel(puzzleLevel, run.SaveDirectory);
+}
 
 if (run.Debug)
 {
     RunDebug(loaded, engine, run);
+}
+else if (puzzleLevel is not null)
+{
+    RunPuzzleLevelExample(puzzleLevel);
 }
 else if (generated is not null)
 {
@@ -45,10 +59,17 @@ static RunOptions ParseRun(string[] args)
     string? commands = null;
     string? saveDirectory = null;
     RandomScenarioOptions? generateOptions = null;
+    PuzzleLevelOptions? puzzleLevelOptions = null;
 
     for (var i = 0; i < args.Length; i++)
     {
         var arg = args[i];
+        if (arg == "--generate-puzzle-level")
+        {
+            puzzleLevelOptions ??= new PuzzleLevelOptions();
+            continue;
+        }
+
         if (arg == "--generate")
         {
             generateOptions ??= new RandomScenarioOptions();
@@ -91,6 +112,11 @@ static RunOptions ParseRun(string[] args)
             continue;
         }
 
+        if (TryParsePuzzleLevelOption(args, ref i, arg, ref puzzleLevelOptions))
+        {
+            continue;
+        }
+
         if (fixturePath.Length == 0)
         {
             fixturePath = arg;
@@ -101,6 +127,11 @@ static RunOptions ParseRun(string[] args)
         }
     }
 
+    if (generateOptions is not null && puzzleLevelOptions is not null)
+    {
+        throw new ArgumentException("Use either --generate or --generate-puzzle-level, not both.");
+    }
+
     if (generateOptions is not null)
     {
         if (!ticksSpecified)
@@ -108,7 +139,17 @@ static RunOptions ParseRun(string[] args)
             ticks = 100;
         }
 
-        return new RunOptions("", ticks, debug, verbose, commands, generateOptions, saveDirectory);
+        return new RunOptions("", ticks, debug, verbose, commands, generateOptions, puzzleLevelOptions, saveDirectory);
+    }
+
+    if (puzzleLevelOptions is not null)
+    {
+        if (!ticksSpecified)
+        {
+            ticks = puzzleLevelOptions.TicksPerCandidate;
+        }
+
+        return new RunOptions("", ticks, debug, verbose, commands, null, puzzleLevelOptions, saveDirectory);
     }
 
     if (fixturePath.Length == 0)
@@ -116,7 +157,7 @@ static RunOptions ParseRun(string[] args)
         fixturePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../fixtures/routing.json"));
     }
 
-    return new RunOptions(fixturePath, ticks, debug, verbose, commands, null, saveDirectory);
+    return new RunOptions(fixturePath, ticks, debug, verbose, commands, null, null, saveDirectory);
 }
 
 static bool TryParseGeneratedOption(string[] args, ref int index, string arg, ref RandomScenarioOptions? options)
@@ -136,12 +177,16 @@ static bool TryParseGeneratedOption(string[] args, ref int index, string arg, re
         return false;
     }
 
+    if (options is null)
+    {
+        return false;
+    }
+
     if (index + 1 >= args.Length)
     {
         throw new ArgumentException($"{arg} requires a value.");
     }
 
-    options ??= new RandomScenarioOptions();
     var value = ParseInt(args[++index], arg);
     switch (arg)
     {
@@ -172,6 +217,76 @@ static bool TryParseGeneratedOption(string[] args, ref int index, string arg, re
             break;
         case "--max-needs":
             options.MaxNeeds = value;
+            break;
+        case "--source-rate":
+            options.SourceQuantityPerTick = value;
+            break;
+        case "--source-interval":
+            options.SourceIntervalTicks = value;
+            break;
+        case "--event-capacity":
+            options.EventCapacity = value;
+            break;
+    }
+
+    return true;
+}
+
+static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, ref PuzzleLevelOptions? options)
+{
+    static int ParseInt(string value, string name)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+        {
+            return result;
+        }
+
+        throw new ArgumentException($"Invalid integer for {name}: {value}");
+    }
+
+    if (arg == "--allow-near-win")
+    {
+        if (options is null)
+        {
+            return false;
+        }
+
+        options.AllowNearWin = true;
+        return true;
+    }
+
+    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity"))
+    {
+        return false;
+    }
+
+    if (options is null)
+    {
+        return false;
+    }
+
+    if (index + 1 >= args.Length)
+    {
+        throw new ArgumentException($"{arg} requires a value.");
+    }
+
+    var value = ParseInt(args[++index], arg);
+    switch (arg)
+    {
+        case "--level":
+            options.LevelNumber = value;
+            break;
+        case "--level-seed":
+            options.GenerationSeed = value;
+            break;
+        case "--need-attempts":
+            options.NeedAttemptLimit = value;
+            break;
+        case "--layout-candidates":
+            options.LayoutCandidateLimit = value;
+            break;
+        case "--solution-ticks":
+            options.TicksPerCandidate = value;
             break;
         case "--source-rate":
             options.SourceQuantityPerTick = value;
@@ -221,10 +336,29 @@ static void RunGeneratedExample(GeneratedScenario generated, CellularEngine engi
     }
 }
 
+static void RunPuzzleLevelExample(GeneratedPuzzleLevel level)
+{
+    Console.WriteLine("Cellular puzzle level");
+    Console.WriteLine($"  level: {level.Definition.LevelNumber}");
+    Console.WriteLine($"  seed: {level.Definition.GenerationSeed}");
+    Console.WriteLine($"  mode: {level.Definition.Mode}");
+    Console.WriteLine($"  difficulty: {level.Definition.Difficulty}");
+    Console.WriteLine();
+    Console.WriteLine("Starting layout");
+    Console.WriteLine(level.Definition.StartingLayout.Ascii);
+    Console.WriteLine();
+    Console.WriteLine("Best known solution layout");
+    Console.WriteLine(level.Definition.SolutionLayout.Ascii);
+    Console.WriteLine();
+    Console.Write(RenderPuzzleSummaryText(level));
+}
+
 static void RunDebug(FixtureLoadResult loaded, CellularEngine engine, RunOptions run)
 {
     Console.WriteLine("Cellular debug mode");
-    Console.WriteLine(run.GenerateOptions is null ? $"Fixture: {run.FixturePath}" : "Fixture: generated scenario");
+    Console.WriteLine(run.PuzzleLevelOptions is not null
+        ? "Fixture: generated puzzle level starting layout"
+        : run.GenerateOptions is null ? $"Fixture: {run.FixturePath}" : "Fixture: generated scenario");
     Console.WriteLine($"Verbose: {run.Verbose}");
     Console.WriteLine("Type `help` for commands.");
     Console.WriteLine();
@@ -490,7 +624,10 @@ static void AppendProducedResourceLegend(StringBuilder builder, FixtureLoadResul
         var symbol = ProducedResourceSymbol(loaded, cell);
         if (seen.Add(symbol))
         {
-            builder.AppendLine($"    {symbol} = cell producing {SourceOutputName(loaded, cell)}");
+            var sourceName = SourceOutputName(loaded, cell);
+            builder.AppendLine(sourceName.Length == 0
+                ? $"    {symbol} = myco cell with no source"
+                : $"    {symbol} = cell producing {sourceName}");
         }
     }
 }
@@ -500,7 +637,7 @@ static char ProducedResourceSymbol(FixtureLoadResult loaded, CellState cell)
     var name = SourceOutputName(loaded, cell);
     if (name.Length == 0)
     {
-        return '?';
+        return '0';
     }
 
     var symbol = name[0];
@@ -662,6 +799,35 @@ static string RenderSummaryText(SimulationSummary summary)
     return builder.ToString();
 }
 
+static string RenderPuzzleSummaryText(GeneratedPuzzleLevel level)
+{
+    var summary = level.SolverSummary;
+    var builder = new StringBuilder();
+    builder.AppendLine("Puzzle solver summary");
+    builder.AppendLine($"  won: {summary.Won}");
+    builder.AppendLine($"  accepted near win: {summary.AcceptedNearWin}");
+    builder.AppendLine($"  need attempt: {summary.NeedAttempt}");
+    builder.AppendLine($"  candidate index: {summary.CandidateIndex}");
+    builder.AppendLine($"  candidates evaluated in winning attempt: {summary.CandidateCount}");
+    builder.AppendLine($"  ticks per candidate: {summary.TicksPerCandidate}");
+    builder.AppendLine($"  glowing cells: {summary.GlowingCells}/{level.Definition.Cells.Count}");
+    builder.AppendLine($"  swaps: {summary.TotalSwaps}");
+    builder.AppendLine($"  reactions: {summary.TotalReactions}");
+    builder.AppendLine($"  active cells in last window: {summary.ActiveCellsInLastWindow}");
+    builder.AppendLine($"  touching pairs: {summary.AdjacentPairs}");
+    builder.AppendLine($"  strain penalty: -{summary.StrainPenalty}");
+    builder.AppendLine($"  final score: {summary.FinalScore}");
+    builder.AppendLine();
+    builder.AppendLine("Cells");
+    foreach (var cell in level.Definition.Cells)
+    {
+        builder.AppendLine($"  {cell.Id}: produces {cell.ProducedResource}; needs {string.Join(", ", cell.Needs)}");
+    }
+
+    builder.AppendLine();
+    return builder.ToString();
+}
+
 static void SaveGeneratedScenario(GeneratedScenario generated, SimulationSummary? summary, string directory)
 {
     Directory.CreateDirectory(directory);
@@ -672,6 +838,17 @@ static void SaveGeneratedScenario(GeneratedScenario generated, SimulationSummary
     {
         File.WriteAllText(Path.Combine(directory, "results.txt"), RenderSummaryText(summary));
     }
+}
+
+static void SavePuzzleLevel(GeneratedPuzzleLevel level, string directory)
+{
+    Directory.CreateDirectory(directory);
+    File.WriteAllText(Path.Combine(directory, "level.json"), level.LevelJson);
+    File.WriteAllText(Path.Combine(directory, "starting-fixture.json"), level.StartingFixtureJson);
+    File.WriteAllText(Path.Combine(directory, "solution-fixture.json"), level.SolutionFixtureJson);
+    File.WriteAllText(Path.Combine(directory, "starting-map.txt"), level.Definition.StartingLayout.Ascii + Environment.NewLine);
+    File.WriteAllText(Path.Combine(directory, "solution-map.txt"), level.Definition.SolutionLayout.Ascii + Environment.NewLine);
+    File.WriteAllText(Path.Combine(directory, "results.txt"), RenderPuzzleSummaryText(level));
 }
 
 static string NamesFor(CellState cell, FixtureLoadResult loaded, PoolSlotRole role)
@@ -777,4 +954,5 @@ internal sealed record RunOptions(
     bool Verbose,
     string? Commands,
     RandomScenarioOptions? GenerateOptions,
+    PuzzleLevelOptions? PuzzleLevelOptions,
     string? SaveDirectory);

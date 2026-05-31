@@ -1,0 +1,121 @@
+{
+  "levelNumber": 1,
+  "mode": "Puzzle",
+  "difficulty": "Level 1: 4 producer cells, open board, no rocks",
+  "generationSeed": 1001,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "cells": [
+    {
+      "id": "cell-a",
+      "producedResource": "A",
+      "needs": [
+        "B",
+        "C",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-b",
+      "producedResource": "B",
+      "needs": [
+        "A",
+        "C",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-c",
+      "producedResource": "C",
+      "needs": [
+        "A",
+        "B",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-d",
+      "producedResource": "D",
+      "needs": [
+        "A",
+        "B",
+        "C"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 4,
+    "height": 4,
+    "cells": [
+      {
+        "cellId": "cell-d",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-a",
+        "x": 1,
+        "y": 3
+      }
+    ],
+    "rocks": [],
+    "ascii": "..C.\n.D..\nB...\n.A.."
+  },
+  "solutionLayout": {
+    "width": 2,
+    "height": 2,
+    "cells": [
+      {
+        "cellId": "cell-a",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-b",
+        "x": 1,
+        "y": 0
+      }
+    ],
+    "rocks": [],
+    "ascii": "AB\nCD"
+  },
+  "solverSummary": {
+    "won": true,
+    "acceptedNearWin": false,
+    "needAttempt": 1,
+    "candidateIndex": 3,
+    "candidateCount": 256,
+    "ticksPerCandidate": 200,
+    "glowingCells": 4,
+    "totalSwaps": 794,
+    "totalReactions": 732,
+    "activeCellsInLastWindow": 4,
+    "strainPenalty": 73,
+    "finalScore": 7987,
+    "adjacentPairs": 4
+  }
+}

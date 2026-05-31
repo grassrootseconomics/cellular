@@ -1,8 +1,8 @@
 # Agent Defaults
 
 - This repository is `grassrootseconomics/cellular`.
-- Cellular is a deterministic C# simulation core and later Godot .NET game.
-- First milestone is the standalone C# sim under `sim/`; do not create Godot scenes or convert the project to Godot .NET yet.
+- Cellular is a deterministic C# simulation core and Godot .NET game.
+- Keep menus and lightweight UX in GDScript where useful; keep heavy simulation, swap, scoring, and validation logic in C#.
 - Keep simulation code independent of Godot APIs.
 - Prefer deterministic logic, explicit domain types, and allocation-conscious hot loops.
 - Keep AGPL licensing and replace old mycofig/Social Soil branding as Cellular work advances.

@@ -78,7 +78,7 @@ offset_top = 68.0
 offset_bottom = 228.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 56
-text = "Social Soil"
+text = "Cellular"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -107,14 +107,14 @@ theme_override_colors/font_shadow_color = Color(0.23, 0.09, 0.02, 0.68)
 theme_override_constants/outline_size = 8
 theme_override_constants/shadow_offset_x = 4
 theme_override_constants/shadow_offset_y = 7
-text = "Social Soil"
+text = "Cellular"
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Tutorial" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 43
-text = "Tutorial"
+text = "Puzzle"
 
 [node name="FreeGarden" type="Button" parent="CenterContainer/VBoxContainer"]
 visible = false
@@ -125,7 +125,7 @@ text = "Free Garden"
 [node name="ChallengeButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 43
-text = "Challenge"
+text = "Arcade"
 
 [node name="LinkButton" type="LinkButton" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2

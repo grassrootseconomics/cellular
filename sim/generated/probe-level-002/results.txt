@@ -1,0 +1,22 @@
+Puzzle solver summary
+  won: True
+  accepted near win: False
+  need attempt: 1
+  candidate index: 0
+  candidates evaluated in winning attempt: 1
+  ticks per candidate: 200
+  glowing cells: 3/5
+  swaps: 800
+  reactions: 232
+  active cells in last window: 5
+  touching pairs: 4
+  strain penalty: -2474
+  final score: 88
+
+Cells
+  cell-b: produces B; needs D, C, E
+  cell-c: produces C; needs E, B, D
+  cell-e: produces E; needs C, D, B
+  cell-d: produces D; needs E, C, A
+  cell-a: produces A; needs D, C, E
+

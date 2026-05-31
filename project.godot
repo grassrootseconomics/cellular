@@ -14,13 +14,14 @@ config/name="Cellular"
 config/version="0.1.0"
 run/main_scene="res://scenes/title_screen.tscn"
 config/quit_on_go_back=false
-config/features=PackedStringArray("4.5", "GL Compatibility")
+config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
 boot_splash/image="res://loading/shamba-logo-ge.png"
 config/icon="res://icon.svg"
 
 [autoload]
 
 Global="*res://global/global.gd"
+CellularSim="*res://global/cellular_sim.gd"
 
 [display]
 
@@ -30,6 +31,10 @@ window/stretch/mode="viewport"
 window/stretch/aspect="expand"
 window/stretch/scale=1.5
 window/handheld/orientation=6
+
+[dotnet]
+
+project/assembly_name="Cellular"
 
 [global_group]
 

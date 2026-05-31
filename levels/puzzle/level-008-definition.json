@@ -1,0 +1,261 @@
+{
+  "levelNumber": 8,
+  "mode": "Puzzle",
+  "difficulty": "Level 8: 11 producer cells, open board, no rocks",
+  "generationSeed": 1008,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K"
+  ],
+  "cells": [
+    {
+      "id": "cell-i",
+      "producedResource": "I",
+      "needs": [
+        "E",
+        "B",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-b",
+      "producedResource": "B",
+      "needs": [
+        "I",
+        "A",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-e",
+      "producedResource": "E",
+      "needs": [
+        "B",
+        "I",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-a",
+      "producedResource": "A",
+      "needs": [
+        "E",
+        "B",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-h",
+      "producedResource": "H",
+      "needs": [
+        "A",
+        "G",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-g",
+      "producedResource": "G",
+      "needs": [
+        "C",
+        "H",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-c",
+      "producedResource": "C",
+      "needs": [
+        "H",
+        "G",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-j",
+      "producedResource": "J",
+      "needs": [
+        "C",
+        "G",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-k",
+      "producedResource": "K",
+      "needs": [
+        "C",
+        "J",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-f",
+      "producedResource": "F",
+      "needs": [
+        "K",
+        "D",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-d",
+      "producedResource": "D",
+      "needs": [
+        "J",
+        "K",
+        "F"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 6,
+    "height": 5,
+    "cells": [
+      {
+        "cellId": "cell-b",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-h",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-c",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-j",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "cellId": "cell-d",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-g",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-k",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "cellId": "cell-e",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-f",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "cellId": "cell-i",
+        "x": 3,
+        "y": 3
+      }
+    ],
+    "rocks": [],
+    "ascii": "C.B...\n.G.D.J\n..E.H.\n...I.A\nK...F."
+  },
+  "solutionLayout": {
+    "width": 4,
+    "height": 3,
+    "cells": [
+      {
+        "cellId": "cell-i",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-e",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-a",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "cell-h",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-g",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-j",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-k",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-f",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "cellId": "cell-d",
+        "x": 2,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "IBEA\nJCGH\nKFD."
+  },
+  "solverSummary": {
+    "won": true,
+    "acceptedNearWin": false,
+    "needAttempt": 1,
+    "candidateIndex": 0,
+    "candidateCount": 256,
+    "ticksPerCandidate": 200,
+    "glowingCells": 4,
+    "totalSwaps": 1270,
+    "totalReactions": 822,
+    "activeCellsInLastWindow": 7,
+    "strainPenalty": 3457,
+    "finalScore": 5607,
+    "adjacentPairs": 15
+  }
+}

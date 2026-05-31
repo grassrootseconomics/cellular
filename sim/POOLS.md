@@ -6,10 +6,12 @@ Each cell has a bounded public pool.
 
 A pool can have at most four resource slots. Each slot has a default capacity of `100`.
 
-Generated milestone 1 scenarios use exactly four slots per cell:
+Generated milestone 1 scenarios currently use exactly four slots per producer cell:
 
-- one `SourceOutput`: the resource this cell produces and offers to neighbors.
+- one `SourceOutput`: the resource this cell produces, offers to neighbors, and can accept back as returned output.
 - three `Need` slots: resources this cell accepts from neighbors because it needs them.
+
+Later fixtures may also include myco cells: cells with no source and no `SourceOutput` slot. A myco cell can still have `Need` slots, receive resources, swap resources it has already received, and react if all active slots are filled. In ASCII maps, myco cells render as `0`.
 
 The code still supports `AcceptOnly`, a routing-only resource that can be received without being part of the reaction set. It is retained for small proof cases and design experiments, but it is not used by generated scenarios and may be removed or renamed after v1 pool rules settle.
 
@@ -43,6 +45,7 @@ This means:
 
 - `cell-a` produces `A` into its own pool.
 - `cell-a` can swap `A` with a neighbor that needs `A`.
+- `cell-a` can accept returned `A` from a neighbor; any returned `A` above cap `100` is discarded.
 - `cell-a` accepts `B`, `C`, and `D` from neighbors.
 - `cell-a` glows only when it has at least `1` each of `A`, `B`, `C`, and `D`.
 - On reaction, it consumes `1` from each active slot.
@@ -51,16 +54,34 @@ If a cell must both keep one unit for its own reaction and give one unit away, i
 
 ## Swap Validation
 
-For `cell-a swapped 1 A for 1 C from cell-c`, the sim checks all of these before mutating state:
+Swaps are bundled reciprocal trades. By default, one touching edge can resolve at most one swap per tick, but that swap can move up to `4` units each way.
 
-- `cell-a` has at least `1 A` available after prior reservations.
-- `cell-c` has a non-`SourceOutput` slot that accepts `A`.
-- `cell-c` will not exceed the `A` slot capacity, normally `100`.
-- `cell-c` has at least `1 C` available after prior reservations.
-- `cell-a` has a non-`SourceOutput` slot that accepts `C`.
-- `cell-a` will not exceed the `C` slot capacity, normally `100`.
+For `cell-a swapped 4 A for 4 C from cell-c`, the sim checks all of these before mutating state:
+
+- `cell-a` has enough `A` available after prior reservations.
+- `cell-c` has a slot that accepts `A`.
+- If `cell-c` accepts `A` through a `Need` or `AcceptOnly` slot, it will not exceed the `A` slot capacity, normally `100`.
+- If `cell-c` accepts returned `A` through its own `SourceOutput` slot, the swap is allowed and any amount above cap is discarded.
+- `cell-c` has enough `C` available after prior reservations.
+- `cell-a` has a slot that accepts `C`.
+- The same capacity rule applies: strict for `Need`/`AcceptOnly`, overflow-discard only for returned `SourceOutput`.
+- If either side offers a `Need` resource, it may only offer surplus above the one unit kept for its own reaction.
+- Producer cells also keep one unit of their own `SourceOutput` when they have needs, so a bundled swap cannot drain the produced resource needed for that same tick's reaction.
 
 Only after those checks pass are both sides updated.
+
+## Swap Arbitration
+
+When two touching pairs want the same limited resource in the same tick, the engine does not let the first scanned edge win by accident. It gathers valid proposals first, then reserves swaps with this deterministic priority:
+
+- the cell with the lowest balance of the requested `Need` resource gets first claim;
+- if requested balances match, an offer that fills a counterparty's missing `Need` is preferred;
+- returned `SourceOutput` payments are then preferred over non-missing top-ups as a gridlock release path;
+- remaining top-ups prefer the counterparty with the lower balance of that resource;
+- larger bundled swaps are preferred after those need-first priorities;
+- if there is still a true tie, stable board/cell/resource ordering decides it.
+
+This keeps cases like `C` needing `D=0` from losing `F`'s available `D` to `G` when `G` already has some `D`.
 
 ## Generated ASCII Maps
 
@@ -69,6 +90,7 @@ Generated maps render each cell by the first character of the resource it produc
 ```text
 A = cell producing A
 B = cell producing B
+0 = myco cell with no source
 # = rock
 . = empty
 ```

@@ -72,7 +72,7 @@ public enum PoolSlotRole
     AcceptOnly,
 
     /// <summary>
-    /// A resource produced by this cell. It can be offered outward but is not received from neighbors.
+    /// A resource produced by this cell. It can be offered outward and can receive returned output from neighbors.
     /// </summary>
     SourceOutput,
 
@@ -507,6 +507,46 @@ public sealed class GridWorld
 
     public bool HasRockAt(GridPosition position) => _rocks.Contains(position);
 
+    public bool CanMoveCell(string id, GridPosition position)
+    {
+        if (!_cellIndexesById.TryGetValue(id, out var index))
+        {
+            return false;
+        }
+
+        if (!InBounds(position) || _rocks.Contains(position))
+        {
+            return false;
+        }
+
+        return !_occupancy.TryGetValue(position, out var occupantIndex) || occupantIndex == index;
+    }
+
+    public bool MoveCell(string id, GridPosition position)
+    {
+        if (!_cellIndexesById.TryGetValue(id, out var index))
+        {
+            return false;
+        }
+
+        if (!CanMoveCell(id, position))
+        {
+            return false;
+        }
+
+        var cell = _cells[index];
+        if (cell.Position == position)
+        {
+            return true;
+        }
+
+        _occupancy.Remove(cell.Position);
+        cell.Position = position;
+        _occupancy[position] = index;
+        _adjacentEdgesDirty = true;
+        return true;
+    }
+
     internal IReadOnlyList<CellEdge> GetAdjacentEdges()
     {
         if (!_adjacentEdgesDirty)
@@ -525,18 +565,42 @@ public sealed class GridWorld
                 var neighborPosition = new GridPosition(cell.Position.X + offset.X, cell.Position.Y + offset.Y);
                 if (_occupancy.TryGetValue(neighborPosition, out var neighborIndex) && cell.Index < neighborIndex)
                 {
-                    _adjacentEdges.Add(new CellEdge(cell.Index, neighborIndex));
+                    var firstIndex = cell.Index;
+                    var secondIndex = neighborIndex;
+                    if (CompareCellsForStableEdgeOrder(_cells[firstIndex], _cells[secondIndex]) > 0)
+                    {
+                        (firstIndex, secondIndex) = (secondIndex, firstIndex);
+                    }
+
+                    _adjacentEdges.Add(new CellEdge(firstIndex, secondIndex));
                 }
             }
         }
 
         _adjacentEdges.Sort((left, right) =>
         {
-            var compareA = left.A.CompareTo(right.A);
-            return compareA != 0 ? compareA : left.B.CompareTo(right.B);
+            var compareA = CompareCellsForStableEdgeOrder(_cells[left.A], _cells[right.A]);
+            return compareA != 0 ? compareA : CompareCellsForStableEdgeOrder(_cells[left.B], _cells[right.B]);
         });
         _adjacentEdgesDirty = false;
         return _adjacentEdges;
+    }
+
+    private static int CompareCellsForStableEdgeOrder(CellState left, CellState right)
+    {
+        var compareY = left.Position.Y.CompareTo(right.Position.Y);
+        if (compareY != 0)
+        {
+            return compareY;
+        }
+
+        var compareX = left.Position.X.CompareTo(right.Position.X);
+        if (compareX != 0)
+        {
+            return compareX;
+        }
+
+        return string.CompareOrdinal(left.Id, right.Id);
     }
 
     private void EnsureInBounds(GridPosition position)

@@ -11,8 +11,8 @@
       "x": 0,
       "y": 0,
       "slots": [
-        { "resource": "A", "role": "SourceOutput", "quantity": 1 },
-        { "resource": "B", "role": "SourceOutput", "quantity": 1 },
+        { "resource": "A", "role": "SourceOutput", "quantity": 2 },
+        { "resource": "B", "role": "SourceOutput", "quantity": 2 },
         { "resource": "C", "role": "Need", "quantity": 0 },
         { "resource": "D", "role": "Need", "quantity": 0 }
       ]
@@ -22,8 +22,8 @@
       "x": 1,
       "y": 0,
       "slots": [
-        { "resource": "C", "role": "SourceOutput", "quantity": 1 },
-        { "resource": "D", "role": "SourceOutput", "quantity": 1 },
+        { "resource": "C", "role": "SourceOutput", "quantity": 2 },
+        { "resource": "D", "role": "SourceOutput", "quantity": 2 },
         { "resource": "A", "role": "Need", "quantity": 0 },
         { "resource": "B", "role": "Need", "quantity": 0 }
       ]

@@ -19,7 +19,7 @@ A pool is a bounded local rule-space:
 - Limitation: caps, slots, throughput, and safety boundaries.
 - Exchange: swaps, settlement, receipts, and events.
 
-In Cellular, a cell is a simplified local pool. The current generated gameplay model gives each cell one produced resource and three needed resources. Routing may emerge when a cell trades resources it has received, but routing-only roles should remain experimental until the puzzle design clearly needs them.
+In Cellular, a cell is a simplified local pool. The current generated gameplay model gives each producer cell one produced resource and three needed resources. Later levels may include myco cells with no source: they produce nothing, render as `0` in ASCII maps, and matter because they can route and settle resources they receive. Routing may emerge when a cell trades resources it has received, but routing-only roles should remain experimental until the puzzle design clearly needs them.
 
 ## Durable Mechanic Tests
 
@@ -46,6 +46,7 @@ Milestone 1 implements only the minimum deterministic sim needed for:
 - Generated backend scenarios.
 - Human-readable debug output.
 - Basic scoring and stability summaries.
+- Offline Puzzle mode level generation with recorded start and solution layouts.
 
 The first implementation includes structure for richer scoring and strain, but should not overbuild dead-loop, repair, hoarding, autonomy, or Godot visual systems yet.
 

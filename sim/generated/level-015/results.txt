@@ -1,0 +1,35 @@
+Puzzle solver summary
+  won: True
+  accepted near win: False
+  need attempt: 1
+  candidate index: 4
+  candidates evaluated in winning attempt: 512
+  ticks per candidate: 260
+  glowing cells: 5/18
+  swaps: 2289
+  reactions: 1307
+  active cells in last window: 9
+  touching pairs: 25
+  strain penalty: -8923
+  final score: 5490
+
+Cells
+  cell-q: produces Q; needs E, B, O
+  cell-o: produces O; needs B, E, Q
+  cell-e: produces E; needs O, B, Q
+  cell-b: produces B; needs O, E, L
+  cell-l: produces L; needs B, E, C
+  cell-c: produces C; needs L, B, N
+  cell-n: produces N; needs C, L, A
+  cell-a: produces A; needs J, N, C
+  cell-j: produces J; needs N, A, F
+  cell-f: produces F; needs J, M, A
+  cell-m: produces M; needs I, J, F
+  cell-i: produces I; needs F, H, M
+  cell-h: produces H; needs I, G, M
+  cell-g: produces G; needs P, I, H
+  cell-p: produces P; needs G, H, D
+  cell-d: produces D; needs G, P, K
+  cell-k: produces K; needs P, D, R
+  cell-r: produces R; needs D, P, K
+

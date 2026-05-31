@@ -1,0 +1,141 @@
+{
+  "levelNumber": 2,
+  "mode": "Puzzle",
+  "difficulty": "Level 2: 5 producer cells, open board, no rocks",
+  "generationSeed": 1002,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "cells": [
+    {
+      "id": "cell-b",
+      "producedResource": "B",
+      "needs": [
+        "D",
+        "C",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-c",
+      "producedResource": "C",
+      "needs": [
+        "E",
+        "B",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-e",
+      "producedResource": "E",
+      "needs": [
+        "C",
+        "D",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-d",
+      "producedResource": "D",
+      "needs": [
+        "E",
+        "C",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-a",
+      "producedResource": "A",
+      "needs": [
+        "D",
+        "C",
+        "E"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 9,
+    "height": 3,
+    "cells": [
+      {
+        "cellId": "cell-b",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-e",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "cellId": "cell-d",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a",
+        "x": 8,
+        "y": 1
+      }
+    ],
+    "rocks": [],
+    "ascii": ".........\nB.C.E.D.A\n........."
+  },
+  "solutionLayout": {
+    "width": 5,
+    "height": 1,
+    "cells": [
+      {
+        "cellId": "cell-b",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-e",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "cell-a",
+        "x": 4,
+        "y": 0
+      }
+    ],
+    "rocks": [],
+    "ascii": "BCEDA"
+  },
+  "solverSummary": {
+    "won": true,
+    "acceptedNearWin": false,
+    "needAttempt": 1,
+    "candidateIndex": 0,
+    "candidateCount": 1,
+    "ticksPerCandidate": 200,
+    "glowingCells": 3,
+    "totalSwaps": 800,
+    "totalReactions": 232,
+    "activeCellsInLastWindow": 5,
+    "strainPenalty": 2474,
+    "finalScore": 88,
+    "adjacentPairs": 4
+  }
+}

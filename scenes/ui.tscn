@@ -1,0 +1,392 @@
+[gd_scene load_steps=11 format=3 uid="uid://bmwuxpm12gkh7"]
+
+[ext_resource type="Script" path="res://scenes/ui.gd" id="1_j1sfg"]
+[ext_resource type="Texture2D" uid="uid://6hcegny21br4" path="res://graphics/squash_32.png" id="4_7oh4h"]
+[ext_resource type="Texture2D" uid="uid://c42hrmwwmrju8" path="res://graphics/maize_32.png" id="5_kmrjq"]
+[ext_resource type="Texture2D" uid="uid://0hgum67f21as" path="res://graphics/bean.png" id="5_s1f7h"]
+[ext_resource type="Texture2D" path="res://graphics/acorn_32.png" id="6_41l0c"]
+[ext_resource type="Script" path="res://scenes/pause_node.gd" id="7_65oah"]
+[ext_resource type="Texture2D" uid="uid://cqcp3xd8ymlh5" path="res://graphics/mushroom_32.png" id="7_w5alb"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_inventory_frame"]
+bg_color = Color(0, 0.129412, 0.47451, 0.572549)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.0352941, 0.0705882, 0.14902, 0.78)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_helper_frame"]
+bg_color = Color(0.0235294, 0.329412, 0.0941176, 0.92)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.0352941, 0.0705882, 0.14902, 0.78)
+shadow_color = Color(0, 0, 0, 0.25)
+shadow_size = 4
+
+[node name="UI" type="CanvasLayer" groups=["ui"]]
+script = ExtResource("1_j1sfg")
+
+[node name="HighScoreContainer" type="MarginContainer" parent="."]
+offset_left = 14.0
+offset_top = 14.0
+offset_right = 174.0
+offset_bottom = 64.0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HighScoreContainer"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="TitleLabel" type="Label" parent="HighScoreContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.89, 1, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+text = "High Score"
+
+[node name="ValueLabel" type="Label" parent="HighScoreContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.645213, 0.762612, 1, 1)
+theme_override_font_sizes/font_size = 25
+text = "0"
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -101.5
+offset_top = -159.0
+offset_right = 101.5
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="InventoryFrame" type="Panel" parent="MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inventory_frame")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="PalletContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseBeans" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+texture = ExtResource("5_s1f7h")
+stretch_mode = 2
+
+[node name="BeanInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "1"
+horizontal_alignment = 1
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseSquash" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+texture = ExtResource("4_7oh4h")
+stretch_mode = 2
+
+[node name="SquashInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer2"]
+layout_mode = 2
+text = "1"
+horizontal_alignment = 1
+
+[node name="VBoxContainer3" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseMaize" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer3"]
+layout_mode = 2
+texture = ExtResource("5_kmrjq")
+stretch_mode = 2
+
+[node name="MaizeInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer3"]
+layout_mode = 2
+text = "1"
+horizontal_alignment = 1
+
+[node name="VBoxContainer4" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseTree" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer4"]
+layout_mode = 2
+texture = ExtResource("6_41l0c")
+stretch_mode = 2
+
+[node name="TreeInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer4"]
+layout_mode = 2
+text = "1"
+horizontal_alignment = 1
+
+[node name="VBoxContainer5" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseMyco" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer5"]
+layout_mode = 2
+texture = ExtResource("7_w5alb")
+stretch_mode = 2
+
+[node name="MycoInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer5"]
+layout_mode = 2
+text = "1"
+horizontal_alignment = 1
+
+[node name="VBoxContainer6" type="VBoxContainer" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ChooseBasket" type="TextureRect" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer6"]
+layout_mode = 2
+stretch_mode = 2
+
+[node name="BasketInv" type="Label" parent="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer6"]
+layout_mode = 2
+text = "0"
+horizontal_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="ResVBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_stretch_ratio = 0.85
+theme_override_constants/separation = 1
+
+[node name="Resources" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/ResVBoxContainer"]
+layout_mode = 2
+text = "Res
+"
+horizontal_alignment = 1
+
+[node name="Resources2" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/ResVBoxContainer"]
+layout_mode = 2
+text = "Res
+"
+
+[node name="ValVBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Val" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/ValVBoxContainer"]
+layout_mode = 2
+text = "Val
+"
+
+[node name="HSlider" type="HSlider" parent="MarginContainer/VBoxContainer/HBoxContainer/ValVBoxContainer"]
+layout_mode = 2
+tick_count = 4
+ticks_on_borders = true
+
+[node name="EndGameContainer" type="MarginContainer" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -278.0
+offset_top = 14.0
+offset_right = -18.0
+offset_bottom = 74.0
+grow_horizontal = 0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="ScoreVBox" type="VBoxContainer" parent="EndGameContainer"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Label" type="Label" parent="EndGameContainer/ScoreVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.645213, 0.762612, 1, 1)
+theme_override_font_sizes/font_size = 25
+text = "0"
+horizontal_alignment = 1
+
+[node name="RankLabel" type="Label" parent="EndGameContainer/ScoreVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.89, 1, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+text = "Rank: Sporeling"
+horizontal_alignment = 1
+
+[node name="ScoreTimer" type="Timer" parent="."]
+autostart = true
+
+[node name="TutorialMarginContainer1" type="Control" parent="."]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 388.0
+offset_bottom = 194.0
+
+[node name="HelperPanel" type="Panel" parent="TutorialMarginContainer1"]
+layout_mode = 2
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_helper_frame")
+
+[node name="Label" type="Label" parent="TutorialMarginContainer1"]
+custom_minimum_size = Vector2(320, 120)
+layout_mode = 2
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 40.0
+offset_top = 22.0
+offset_right = -52.0
+offset_bottom = -30.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Stage1: Each plant is rich 
+in minerals:"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="RestartContainer" type="MarginContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Button" type="Button" parent="RestartContainer"]
+layout_mode = 2
+text = "Back to Main Menu"
+
+[node name="MarginCMarginContainer2ontainer" type="MarginContainer" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -122.0
+offset_top = -116.0
+offset_right = -14.0
+offset_bottom = -20.0
+custom_minimum_size = Vector2(102, 94)
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 6
+
+[node name="HBoxContainer" type="VBoxContainer" parent="MarginCMarginContainer2ontainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PauseButton" type="Button" parent="MarginCMarginContainer2ontainer/HBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(84, 38)
+text = "Pause"
+
+[node name="SpeedButton" type="Button" parent="MarginCMarginContainer2ontainer/HBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(84, 38)
+text = "Speed: 1x"
+
+[node name="QuitContainer" type="MarginContainer" parent="."]
+anchors_preset = 9
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 72.0
+offset_top = -116.0
+offset_right = 186.0
+offset_bottom = -20.0
+custom_minimum_size = Vector2(102, 94)
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="QuitContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ZoomButton" type="Button" parent="QuitContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(84, 38)
+text = "Zoom In"
+
+[node name="QuitButton" type="Button" parent="QuitContainer/VBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(84, 38)
+text = "Quit"
+
+[node name="PauseNode" type="Node" parent="."]
+process_mode = 2
+script = ExtResource("7_65oah")
+
+[connection signal="mouse_entered" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer/ChooseBeans" to="." method="_on_choose_beans_mouse_entered"]
+[connection signal="mouse_exited" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer/ChooseBeans" to="." method="_on_choose_beans_mouse_exited"]
+[connection signal="mouse_entered" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer2/ChooseSquash" to="." method="_on_choose_squash_mouse_entered"]
+[connection signal="mouse_exited" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer2/ChooseSquash" to="." method="_on_choose_squash_mouse_exited"]
+[connection signal="mouse_entered" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer3/ChooseMaize" to="." method="_on_choose_maize_mouse_entered"]
+[connection signal="mouse_exited" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer3/ChooseMaize" to="." method="_on_choose_maize_mouse_exited"]
+[connection signal="mouse_entered" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer4/ChooseTree" to="." method="_on_choose_tree_mouse_entered"]
+[connection signal="mouse_exited" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer4/ChooseTree" to="." method="_on_choose_tree_mouse_exited"]
+[connection signal="mouse_entered" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer5/ChooseMyco" to="." method="_on_choose_myco_mouse_entered"]
+[connection signal="mouse_exited" from="MarginContainer/VBoxContainer/PalletContainer/VBoxContainer/HBoxContainer/VBoxContainer5/ChooseMyco" to="." method="_on_choose_myco_mouse_exited"]
+[connection signal="drag_ended" from="MarginContainer/VBoxContainer/HBoxContainer/ValVBoxContainer/HSlider" to="." method="_on_h_slider_drag_ended"]
+[connection signal="timeout" from="ScoreTimer" to="." method="_on_score_timer_timeout"]
+[connection signal="pressed" from="RestartContainer/Button" to="." method="_on_restart_button_pressed"]
+[connection signal="pressed" from="QuitContainer/VBoxContainer/ZoomButton" to="." method="_on_zoom_button_pressed"]
+[connection signal="pressed" from="QuitContainer/VBoxContainer/QuitButton" to="." method="_on_quit_button_pressed"]
+[connection signal="pressed" from="MarginCMarginContainer2ontainer/HBoxContainer/PauseButton" to="." method="_on_pause_button_pressed"]
+[connection signal="pressed" from="MarginCMarginContainer2ontainer/HBoxContainer/SpeedButton" to="." method="_on_speed_button_pressed"]

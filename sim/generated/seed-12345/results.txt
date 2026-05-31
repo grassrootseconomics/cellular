@@ -1,0 +1,23 @@
+Simulation summary
+  ticks: 500
+  cells: 100
+  rocks: 30
+  touching pairs: 54
+  swaps: 2134 total, 4.27/tick average
+  reactions: 100 total, 0.20/tick average
+  last window: 100 ticks, 0 swaps, 0 reactions
+  active cells in last window: 0
+  glowing cells at end: 0
+  cells with strain at end: 100
+  strain events: 174137
+  overflow events: 43229
+  score breakdown:
+    reactions: +1000
+    flow diversity: +12
+    settlement: +100
+    strain penalty: -217366
+    hoarding penalty: -0
+    dead-loop penalty: -0
+    total: -216254
+  stable signal: False
+

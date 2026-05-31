@@ -1,0 +1,6 @@
+.godot/
+tmp/
+build/
+.setup/
+bin/
+obj/

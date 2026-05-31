@@ -1,0 +1,39 @@
+{
+  "resources": ["A", "B"],
+  "grid": {
+    "width": 2,
+    "height": 1,
+    "rocks": []
+  },
+  "cells": [
+    {
+      "id": "cell-a",
+      "x": 0,
+      "y": 0,
+      "slots": [
+        { "resource": "A", "role": "SourceOutput", "quantity": 0 },
+        { "resource": "B", "role": "Need", "quantity": 0 }
+      ],
+      "sources": [
+        { "resource": "A", "quantityPerTick": 2, "intervalTicks": 1 }
+      ]
+    },
+    {
+      "id": "cell-b",
+      "x": 1,
+      "y": 0,
+      "slots": [
+        { "resource": "B", "role": "SourceOutput", "quantity": 0 },
+        { "resource": "A", "role": "Need", "quantity": 0 }
+      ],
+      "sources": [
+        { "resource": "B", "quantityPerTick": 2, "intervalTicks": 1 }
+      ]
+    }
+  ],
+  "win": {
+    "requiredCells": ["cell-a", "cell-b"],
+    "requiredResources": ["A", "B"],
+    "durationTicks": 3
+  }
+}

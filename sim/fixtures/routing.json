@@ -1,0 +1,52 @@
+{
+  "resources": ["A", "B", "C"],
+  "grid": {
+    "width": 3,
+    "height": 1,
+    "rocks": []
+  },
+  "cells": [
+    {
+      "id": "cell-a",
+      "x": 0,
+      "y": 0,
+      "slots": [
+        { "resource": "A", "role": "SourceOutput", "quantity": 0 },
+        { "resource": "C", "role": "Need", "quantity": 0 }
+      ],
+      "sources": [
+        { "resource": "A", "quantityPerTick": 2, "intervalTicks": 1 }
+      ]
+    },
+    {
+      "id": "cell-c",
+      "x": 1,
+      "y": 0,
+      "slots": [
+        { "resource": "C", "role": "SourceOutput", "quantity": 0 },
+        { "resource": "A", "role": "Need", "quantity": 0 },
+        { "resource": "B", "role": "Need", "quantity": 0 }
+      ],
+      "sources": [
+        { "resource": "C", "quantityPerTick": 3, "intervalTicks": 1 }
+      ]
+    },
+    {
+      "id": "cell-b",
+      "x": 2,
+      "y": 0,
+      "slots": [
+        { "resource": "B", "role": "SourceOutput", "quantity": 0 },
+        { "resource": "C", "role": "Need", "quantity": 0 }
+      ],
+      "sources": [
+        { "resource": "B", "quantityPerTick": 2, "intervalTicks": 1 }
+      ]
+    }
+  ],
+  "win": {
+    "requiredCells": ["cell-a", "cell-c", "cell-b"],
+    "requiredResources": ["A", "B", "C"],
+    "durationTicks": 3
+  }
+}

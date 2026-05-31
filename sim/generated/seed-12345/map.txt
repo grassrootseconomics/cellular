@@ -1,0 +1,144 @@
+CELLULAR GENERATED SCENARIO
+
+setup:
+  seed: 12345
+  map: 20x20
+  cells: 100
+  rocks: 30
+  resources: 6
+  needs per cell: 3
+  source rate: 2 every 1 tick(s)
+
+ASCII map
+  Legend:
+    E = cell producing E
+    B = cell producing B
+    D = cell producing D
+    F = cell producing F
+    A = cell producing A
+    C = cell producing C
+    # = rock
+    . = empty
+
+  ...FB....#...#.C#A..
+  .B.......E#.....CE#.
+  #E....ED.E......A#F.
+  ..B#..EBEC.D.C......
+  .##..C.......AF...DE
+  #..F.AE......E.#..B.
+  ....#......EBDC...#.
+  B....E...E..#...##..
+  ...C...CA..C.C......
+  C......AA...#.....#.
+  .#.D#A.B.....A.EC..#
+  ...CB.....D...FB...C
+  ..D...EE.F.E...B...C
+  ........A.B.F.D..#..
+  ....B..#.....BB.DA..
+  .DD..C.....E....B...
+  CD..#......E.D......
+  .B.#...F..A..F.F....
+  #...B.CD.DA#...A.A..
+  .BC.....F..#.#....BE
+
+cells:
+  cell-000 @ (19,19): produces E; needs B, C, F
+  cell-001 @ (14,14): produces B; needs D, A, E
+  cell-002 @ (14,13): produces D; needs F, B, E
+  cell-003 @ (18,4): produces D; needs C, B, A
+  cell-004 @ (1,2): produces E; needs B, A, D
+  cell-005 @ (1,17): produces B; needs F, E, A
+  cell-006 @ (11,6): produces E; needs D, C, A
+  cell-007 @ (13,16): produces D; needs A, C, B
+  cell-008 @ (4,14): produces B; needs F, D, A
+  cell-009 @ (14,4): produces F; needs C, D, A
+  cell-010 @ (11,3): produces D; needs E, C, F
+  cell-011 @ (8,3): produces E; needs F, A, D
+  cell-012 @ (12,13): produces F; needs C, D, E
+  cell-013 @ (13,10): produces A; needs D, C, F
+  cell-014 @ (7,10): produces B; needs C, E, D
+  cell-015 @ (1,16): produces D; needs F, E, B
+  cell-016 @ (4,0): produces B; needs E, F, A
+  cell-017 @ (17,14): produces A; needs D, C, B
+  cell-018 @ (10,13): produces B; needs E, F, A
+  cell-019 @ (0,9): produces C; needs E, F, A
+  cell-020 @ (5,10): produces A; needs E, F, D
+  cell-021 @ (5,7): produces E; needs B, F, A
+  cell-022 @ (2,15): produces D; needs B, A, E
+  cell-023 @ (1,15): produces D; needs F, E, C
+  cell-024 @ (6,5): produces E; needs D, B, C
+  cell-025 @ (8,8): produces A; needs D, B, E
+  cell-026 @ (1,1): produces B; needs C, D, F
+  cell-027 @ (10,18): produces A; needs B, E, F
+  cell-028 @ (13,17): produces F; needs E, B, C
+  cell-029 @ (13,6): produces D; needs E, C, B
+  cell-030 @ (18,2): produces F; needs C, A, B
+  cell-031 @ (2,19): produces C; needs D, B, E
+  cell-032 @ (4,18): produces B; needs C, D, F
+  cell-033 @ (6,2): produces E; needs C, F, D
+  cell-034 @ (13,5): produces E; needs A, B, C
+  cell-035 @ (2,12): produces D; needs E, F, A
+  cell-036 @ (13,3): produces C; needs A, B, D
+  cell-037 @ (7,17): produces F; needs B, D, E
+  cell-038 @ (14,11): produces F; needs E, C, A
+  cell-039 @ (14,6): produces C; needs D, F, A
+  cell-040 @ (11,16): produces E; needs C, A, D
+  cell-041 @ (9,18): produces D; needs F, A, E
+  cell-042 @ (16,14): produces D; needs F, A, E
+  cell-043 @ (19,12): produces C; needs E, A, D
+  cell-044 @ (3,5): produces F; needs C, B, D
+  cell-045 @ (15,12): produces B; needs E, D, A
+  cell-046 @ (10,11): produces D; needs A, C, E
+  cell-047 @ (19,4): produces E; needs B, F, D
+  cell-048 @ (6,12): produces E; needs C, F, B
+  cell-049 @ (7,9): produces A; needs D, E, C
+  cell-050 @ (17,18): produces A; needs C, F, B
+  cell-051 @ (12,6): produces B; needs E, A, F
+  cell-052 @ (2,3): produces B; needs D, F, E
+  cell-053 @ (13,4): produces A; needs D, B, E
+  cell-054 @ (0,16): produces C; needs D, E, F
+  cell-055 @ (16,10): produces C; needs B, D, F
+  cell-056 @ (5,4): produces C; needs E, D, F
+  cell-057 @ (9,12): produces F; needs B, D, C
+  cell-058 @ (9,3): produces C; needs B, A, F
+  cell-059 @ (17,0): produces A; needs E, D, C
+  cell-060 @ (5,5): produces A; needs C, F, E
+  cell-061 @ (18,19): produces B; needs D, C, A
+  cell-062 @ (3,0): produces F; needs D, A, B
+  cell-063 @ (4,11): produces B; needs C, E, A
+  cell-064 @ (10,17): produces A; needs F, E, B
+  cell-065 @ (11,8): produces C; needs A, E, D
+  cell-066 @ (6,3): produces E; needs A, B, D
+  cell-067 @ (7,2): produces D; needs F, B, C
+  cell-068 @ (5,15): produces C; needs B, F, D
+  cell-069 @ (7,8): produces C; needs A, F, B
+  cell-070 @ (9,2): produces E; needs D, C, B
+  cell-071 @ (13,8): produces C; needs B, E, D
+  cell-072 @ (15,0): produces C; needs F, D, A
+  cell-073 @ (11,12): produces E; needs B, F, D
+  cell-074 @ (7,18): produces D; needs C, F, A
+  cell-075 @ (8,13): produces A; needs C, B, E
+  cell-076 @ (3,11): produces C; needs B, F, D
+  cell-077 @ (11,15): produces E; needs F, A, B
+  cell-078 @ (15,18): produces A; needs E, F, D
+  cell-079 @ (8,19): produces F; needs A, B, D
+  cell-080 @ (6,18): produces C; needs E, F, A
+  cell-081 @ (7,12): produces E; needs D, C, B
+  cell-082 @ (16,1): produces C; needs A, F, D
+  cell-083 @ (9,7): produces E; needs D, B, C
+  cell-084 @ (19,11): produces C; needs A, F, D
+  cell-085 @ (8,9): produces A; needs D, F, C
+  cell-086 @ (16,2): produces A; needs C, E, D
+  cell-087 @ (7,3): produces B; needs E, A, D
+  cell-088 @ (15,11): produces B; needs F, E, D
+  cell-089 @ (17,1): produces E; needs B, D, A
+  cell-090 @ (18,5): produces B; needs D, C, E
+  cell-091 @ (0,7): produces B; needs E, F, D
+  cell-092 @ (3,8): produces C; needs A, B, E
+  cell-093 @ (15,17): produces F; needs D, B, C
+  cell-094 @ (3,10): produces D; needs B, C, A
+  cell-095 @ (16,15): produces B; needs C, F, D
+  cell-096 @ (1,19): produces B; needs D, C, E
+  cell-097 @ (9,1): produces E; needs D, A, C
+  cell-098 @ (15,10): produces E; needs F, D, B
+  cell-099 @ (13,14): produces B; needs D, F, E

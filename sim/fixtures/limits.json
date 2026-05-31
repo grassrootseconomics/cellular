@@ -1,0 +1,21 @@
+{
+  "resources": ["A"],
+  "grid": {
+    "width": 1,
+    "height": 1,
+    "rocks": []
+  },
+  "cells": [
+    {
+      "id": "source-cell",
+      "x": 0,
+      "y": 0,
+      "slots": [
+        { "resource": "A", "role": "SourceOutput", "quantity": 100 }
+      ],
+      "sources": [
+        { "resource": "A", "quantityPerTick": 1, "intervalTicks": 1 }
+      ]
+    }
+  ]
+}

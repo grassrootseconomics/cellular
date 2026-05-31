@@ -1,0 +1,26 @@
+{
+  "resources": ["A"],
+  "grid": {
+    "width": 2,
+    "height": 1,
+    "rocks": []
+  },
+  "cells": [
+    {
+      "id": "sender",
+      "x": 0,
+      "y": 0,
+      "slots": [
+        { "resource": "A", "role": "SourceOutput", "quantity": 1 }
+      ]
+    },
+    {
+      "id": "receiver",
+      "x": 1,
+      "y": 0,
+      "slots": [
+        { "resource": "A", "role": "AcceptOnly", "quantity": 0 }
+      ]
+    }
+  ]
+}

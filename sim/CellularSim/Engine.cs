@@ -6,6 +6,10 @@ public sealed class EngineOptions
     public int EventCapacity { get; set; } = 4096;
     public int EdgeThroughputPerDirection { get; set; } = 1;
     public int MaxSwapQuantityPerEdge { get; set; } = 4;
+    public int SwapRoundsPerTick { get; set; } = 1;
+    public int NeedDesiredQuantity { get; set; } = 100;
+    public int NeedOfferReserve { get; set; } = 1;
+    public bool AllowNeedOverflowPayments { get; set; }
     public int WinDurationTicks { get; set; } = 30;
     public int WinRecentFlowWindowTicks { get; set; } = 30;
     public List<string> RequiredCellIds { get; } = new();
@@ -53,6 +57,7 @@ public sealed class CellularEngine
     private readonly Stack<string> _reachStack = new();
     private readonly Dictionary<string, List<string>> _winGraph = new(StringComparer.Ordinal);
     private readonly bool[] _flowResourceSeen;
+    private bool[] _edgeUsedThisTick = [];
     private int[,] _reservedOut = new int[0, 0];
     private int[,] _reservedIn = new int[0, 0];
 
@@ -74,6 +79,21 @@ public sealed class CellularEngine
         if (Options.MaxSwapQuantityPerEdge <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Max swap quantity per edge must be positive.");
+        }
+
+        if (Options.SwapRoundsPerTick <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Swap rounds per tick must be positive.");
+        }
+
+        if (Options.NeedDesiredQuantity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Need desired quantity must be positive.");
+        }
+
+        if (Options.NeedOfferReserve <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Need offer reserve must be positive.");
         }
 
         _events = new EventBuffer(Options.EventCapacity);
@@ -106,8 +126,7 @@ public sealed class CellularEngine
         CurrentTick++;
 
         RunSourceProduction();
-        GenerateSwapProposals();
-        ResolveSwapProposals();
+        ResolveSwapRounds();
         ResolveReactions();
         UpdateGlowAndStrain();
         UpdateScore();
@@ -147,28 +166,54 @@ public sealed class CellularEngine
         }
     }
 
-    private void GenerateSwapProposals()
+    private void ResolveSwapRounds()
+    {
+        var edges = World.GetAdjacentEdges();
+        if (edges.Count == 0)
+        {
+            return;
+        }
+
+        EnsureEdgeUseCapacity(edges.Count);
+        Array.Clear(_edgeUsedThisTick, 0, edges.Count);
+        for (var round = 0; round < Options.SwapRoundsPerTick; round++)
+        {
+            GenerateSwapProposals(edges, _edgeUsedThisTick);
+            if (_swapProposals.Count == 0)
+            {
+                break;
+            }
+
+            ResolveSwapProposals();
+        }
+    }
+
+    private void GenerateSwapProposals(IReadOnlyList<CellEdge> edges, bool[] edgeUsedThisTick)
     {
         _swapProposals.Clear();
         _candidateSwapProposals.Clear();
         ClearReservations();
 
         var edgeOrder = 0;
-        foreach (var edge in World.GetAdjacentEdges())
+        foreach (var edge in edges)
         {
+            if (edgeUsedThisTick[edgeOrder])
+            {
+                edgeOrder++;
+                continue;
+            }
+
             AddSwapCandidatesForDirection(edge.A, edge.B, edgeOrder);
             AddSwapCandidatesForDirection(edge.B, edge.A, edgeOrder);
 
             edgeOrder++;
         }
 
-        var edgeUseCounts = new int[edgeOrder];
-        var maxAcceptedSwapsPerEdge = Math.Min(Options.EdgeThroughputPerDirection, 1);
         _candidateSwapProposals.Sort(ComparePrioritizedSwapProposals);
         for (var i = 0; i < _candidateSwapProposals.Count; i++)
         {
             var candidate = _candidateSwapProposals[i];
-            if (edgeUseCounts[candidate.EdgeOrder] >= maxAcceptedSwapsPerEdge)
+            if (edgeUsedThisTick[candidate.EdgeOrder])
             {
                 continue;
             }
@@ -178,7 +223,7 @@ public sealed class CellularEngine
             {
                 ReserveSwap(proposal);
                 _swapProposals.Add(proposal);
-                edgeUseCounts[candidate.EdgeOrder]++;
+                edgeUsedThisTick[candidate.EdgeOrder] = true;
             }
         }
     }
@@ -224,20 +269,22 @@ public sealed class CellularEngine
         if (GetOfferableSwapQuantity(
                 initiator.Pool,
                 proposal.InitiatorPaidResource,
-                GetReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource)) < proposal.Quantity)
+                GetReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource),
+                Options.NeedOfferReserve) < proposal.Quantity)
         {
             return false;
         }
 
         if (GetOfferableSwapQuantity(
-                counterparty.Pool,
-                proposal.CounterpartyPaidResource,
-                GetReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource)) < proposal.Quantity)
+            counterparty.Pool,
+            proposal.CounterpartyPaidResource,
+            GetReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource),
+            Options.NeedOfferReserve) < proposal.Quantity)
         {
             return false;
         }
 
-        if (GetReceivableSwapQuantity(
+        if (GetRequestedResourceReceivableSwapQuantity(
                 initiator.Pool,
                 proposal.CounterpartyPaidResource,
                 GetReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource)) < proposal.Quantity)
@@ -263,13 +310,14 @@ public sealed class CellularEngine
         var counterpartyRequestedOfferable = GetOfferableSwapQuantity(
             counterpartyPool,
             requestedResource,
-            GetReservedOut(counterpartyIndex, requestedResource));
+            GetReservedOut(counterpartyIndex, requestedResource),
+            Options.NeedOfferReserve);
         if (counterpartyRequestedOfferable <= 0)
         {
             return;
         }
 
-        var initiatorRequestedReceivable = GetReceivableSwapQuantity(
+        var initiatorRequestedReceivable = GetRequestedResourceReceivableSwapQuantity(
             initiatorPool,
             requestedResource,
             GetReservedIn(initiatorIndex, requestedResource));
@@ -291,7 +339,8 @@ public sealed class CellularEngine
             var initiatorCandidateOfferable = GetOfferableSwapQuantity(
                 initiatorPool,
                 candidate,
-                GetReservedOut(initiatorIndex, candidate));
+                GetReservedOut(initiatorIndex, candidate),
+                Options.NeedOfferReserve);
             if (initiatorCandidateOfferable <= 0)
             {
                 continue;
@@ -335,7 +384,7 @@ public sealed class CellularEngine
         }
     }
 
-    private static int GetReceivableSwapQuantity(
+    private int GetRequestedResourceReceivableSwapQuantity(
         SwapPoolState pool,
         ResourceId resource,
         int reservedIncoming)
@@ -346,7 +395,28 @@ public sealed class CellularEngine
             return 0;
         }
 
-        if (slot.Role == PoolSlotRole.SourceOutput)
+        if (slot.Role == PoolSlotRole.Need)
+        {
+            var target = Math.Min(slot.Capacity, Options.NeedDesiredQuantity);
+            return Math.Max(0, target - slot.Quantity - reservedIncoming);
+        }
+
+        return GetReceivableSwapQuantity(pool, resource, reservedIncoming);
+    }
+
+    private int GetReceivableSwapQuantity(
+        SwapPoolState pool,
+        ResourceId resource,
+        int reservedIncoming)
+    {
+        var slot = pool.GetSlot(resource);
+        if (slot is null)
+        {
+            return 0;
+        }
+
+        if (slot.Role == PoolSlotRole.SourceOutput
+            || slot.Role == PoolSlotRole.Need && Options.AllowNeedOverflowPayments)
         {
             return int.MaxValue;
         }
@@ -357,7 +427,8 @@ public sealed class CellularEngine
     private static int GetOfferableSwapQuantity(
         SwapPoolState pool,
         ResourceId resource,
-        int reservedOutgoing)
+        int reservedOutgoing,
+        int needOfferReserve = 1)
     {
         var slot = pool.GetSlot(resource);
         if (slot is null)
@@ -366,7 +437,11 @@ public sealed class CellularEngine
         }
 
         var available = slot.Quantity - reservedOutgoing;
-        if (slot.Role == PoolSlotRole.Need || slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
+        if (slot.Role == PoolSlotRole.Need)
+        {
+            available -= needOfferReserve;
+        }
+        else if (slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
         {
             available--;
         }
@@ -801,6 +876,14 @@ public sealed class CellularEngine
         var resourceCapacity = _flowResourceSeen.Length;
         _reservedOut = new int[World.Cells.Count, resourceCapacity];
         _reservedIn = new int[World.Cells.Count, resourceCapacity];
+    }
+
+    private void EnsureEdgeUseCapacity(int edgeCount)
+    {
+        if (_edgeUsedThisTick.Length < edgeCount)
+        {
+            _edgeUsedThisTick = new bool[edgeCount];
+        }
     }
 
     private static int ComputeResourceCapacity(GridWorld world)

@@ -189,6 +189,27 @@ public static class FixtureLoader
     private static EngineOptions BuildOptions(FixtureDto fixture, ResourceCatalog catalog, GridWorld world)
     {
         var options = new EngineOptions();
+        var engine = fixture.Engine;
+        if (engine is not null)
+        {
+            if (engine.SwapRoundsPerTick > 0)
+            {
+                options.SwapRoundsPerTick = engine.SwapRoundsPerTick;
+            }
+
+            if (engine.NeedDesiredQuantity > 0)
+            {
+                options.NeedDesiredQuantity = engine.NeedDesiredQuantity;
+            }
+
+            if (engine.NeedOfferReserve > 0)
+            {
+                options.NeedOfferReserve = engine.NeedOfferReserve;
+            }
+
+            options.AllowNeedOverflowPayments = engine.AllowNeedOverflowPayments;
+        }
+
         var win = fixture.Win;
         if (win is null)
         {
@@ -237,6 +258,7 @@ public static class FixtureLoader
     {
         public List<string>? Resources { get; set; }
         public GridDto? Grid { get; set; }
+        public EngineDto? Engine { get; set; }
         public List<CellDto>? Cells { get; set; }
         public WinDto? Win { get; set; }
     }
@@ -276,6 +298,14 @@ public static class FixtureLoader
         public string Resource { get; set; } = "";
         public int QuantityPerTick { get; set; } = 1;
         public int IntervalTicks { get; set; } = 1;
+    }
+
+    private sealed class EngineDto
+    {
+        public int SwapRoundsPerTick { get; set; }
+        public int NeedDesiredQuantity { get; set; }
+        public int NeedOfferReserve { get; set; }
+        public bool AllowNeedOverflowPayments { get; set; }
     }
 
     private sealed class WinDto

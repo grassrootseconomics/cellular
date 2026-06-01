@@ -8,6 +8,11 @@ GeneratedPuzzleLevel? puzzleLevel = null;
 FixtureLoadResult loaded;
 if (run.PuzzleLevelOptions is not null)
 {
+    if (run.PuzzleLevelOptions.ProgressStride > 0)
+    {
+        run.PuzzleLevelOptions.ProgressLogger = Console.WriteLine;
+    }
+
     puzzleLevel = PuzzleLevelGenerator.Generate(run.PuzzleLevelOptions);
     loaded = puzzleLevel.StartingLoaded;
 }
@@ -255,7 +260,7 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
         return true;
     }
 
-    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity" or "--win-duration-ticks" or "--required-alive-ticks-at-end"))
+    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity" or "--win-duration-ticks" or "--required-alive-ticks-at-end" or "--progress-stride"))
     {
         return false;
     }
@@ -302,6 +307,9 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
             break;
         case "--required-alive-ticks-at-end":
             options.RequiredAliveTicksAtEnd = value;
+            break;
+        case "--progress-stride":
+            options.ProgressStride = value;
             break;
     }
 
@@ -439,6 +447,9 @@ static bool RunDebugCommand(string command, FixtureLoadResult loaded, CellularEn
         case "score":
             PrintScore(engine);
             return true;
+        case "circuit":
+            PrintCircuitDiagnostics(loaded, engine);
+            return true;
         case "cell":
             if (parts.Length < 2)
             {
@@ -467,6 +478,23 @@ static bool RunDebugCommand(string command, FixtureLoadResult loaded, CellularEn
             }
 
             return true;
+        case "trace":
+            var traceTicks = 100;
+            var stride = 10;
+            if (parts.Length > 1 && (!int.TryParse(parts[1], out traceTicks) || traceTicks < 1))
+            {
+                Console.WriteLine("Usage: trace [positive-count] [positive-stride]");
+                return true;
+            }
+
+            if (parts.Length > 2 && (!int.TryParse(parts[2], out stride) || stride < 1))
+            {
+                Console.WriteLine("Usage: trace [positive-count] [positive-stride]");
+                return true;
+            }
+
+            TraceCircuit(loaded, engine, traceTicks, stride);
+            return true;
         case "quit":
         case "exit":
             return false;
@@ -488,6 +516,8 @@ static void PrintHelp()
     Console.WriteLine("  events          Show non-flow events for the current tick.");
     Console.WriteLine("  events all      Show all non-flow events in the bounded event buffer.");
     Console.WriteLine("  score           Show score and circuit state.");
+    Console.WriteLine("  circuit         Show directed circuit diagnostics.");
+    Console.WriteLine("  trace [n] [s]   Run n ticks silently and print circuit diagnostics every s ticks.");
     Console.WriteLine("  quit            Exit debug mode.");
     Console.WriteLine();
 }
@@ -735,6 +765,127 @@ static void PrintScore(CellularEngine engine)
 {
     Console.WriteLine($"  score: total={engine.Score.TotalScore}, reactions={engine.Score.ReactionScore}, flowDiversity={engine.Score.FlowDiversityScore}, settlement={engine.Score.SettlementScore}, strainPenalty={engine.Score.StrainPenalty}");
     Console.WriteLine($"  circuit: alive={engine.Circuit.IsAliveThisTick}, sustainedTicks={engine.Circuit.SustainedTicks}, won={engine.Circuit.IsWon}");
+}
+
+static void TraceCircuit(FixtureLoadResult loaded, CellularEngine engine, int ticks, int stride)
+{
+    Console.WriteLine($"Circuit trace: ticks={ticks}, stride={stride}");
+    var previousAlive = engine.Circuit.IsAliveThisTick;
+    for (var i = 0; i < ticks; i++)
+    {
+        engine.Tick();
+        var shouldPrint = engine.CurrentTick % stride == 0
+            || i + 1 == ticks
+            || engine.Circuit.IsAliveThisTick != previousAlive;
+        if (shouldPrint)
+        {
+            PrintCircuitDiagnostics(loaded, engine, singleLine: true);
+        }
+
+        previousAlive = engine.Circuit.IsAliveThisTick;
+    }
+
+    PrintState($"State at tick {engine.CurrentTick}", loaded, engine);
+}
+
+static void PrintCircuitDiagnostics(
+    FixtureLoadResult loaded,
+    CellularEngine engine,
+    bool singleLine = false)
+{
+    var diagnostics = CircuitDiagnostics.Build(engine);
+    var strongGroups = FormatGroups(diagnostics.StrongGroups);
+    var weakGroups = FormatGroups(diagnostics.WeakGroups);
+    var missingResources = FormatResources(loaded, diagnostics.MissingRequiredResources);
+    var nonGlowing = diagnostics.NonGlowingRequiredCells.Count == 0
+        ? "none"
+        : string.Join(",", diagnostics.NonGlowingRequiredCells);
+    var blockers = FormatReactionBlockers(loaded, engine, diagnostics.NonGlowingRequiredCells);
+
+    if (singleLine)
+    {
+        Console.WriteLine(
+            $"  tick={engine.CurrentTick} alive={diagnostics.IsAlive} sustained={diagnostics.SustainedTicks} won={diagnostics.IsWon} "
+            + $"strong={strongGroups} weak={weakGroups} missingResources={missingResources} nonGlowing={nonGlowing} blockers={blockers}");
+        return;
+    }
+
+    Console.WriteLine("Directed circuit diagnostics");
+    Console.WriteLine($"  tick: {engine.CurrentTick}");
+    Console.WriteLine($"  alive: {diagnostics.IsAlive}");
+    Console.WriteLine($"  sustained ticks: {diagnostics.SustainedTicks}");
+    Console.WriteLine($"  won: {diagnostics.IsWon}");
+    Console.WriteLine($"  recent-flow window starts at tick: {diagnostics.SinceTick}");
+    Console.WriteLine($"  strong groups: {strongGroups}");
+    Console.WriteLine($"  weak groups: {weakGroups}");
+    Console.WriteLine($"  missing resources in recent flow: {missingResources}");
+    Console.WriteLine($"  non-glowing required cells: {nonGlowing}");
+    Console.WriteLine($"  current reaction blockers: {blockers}");
+    Console.WriteLine("  directed edges:");
+    if (diagnostics.DirectedEdges.Count == 0)
+    {
+        Console.WriteLine("    none");
+    }
+    else
+    {
+        foreach (var edge in diagnostics.DirectedEdges)
+        {
+            Console.WriteLine(
+                $"    {edge.SourceCellId} -> {edge.TargetCellId}: "
+                + $"{FormatResources(loaded, edge.Resources)} x{edge.Quantity}, latest tick {edge.LatestTick}");
+        }
+    }
+
+    Console.WriteLine();
+}
+
+static string FormatGroups(IReadOnlyList<CircuitDiagnosticGroup> groups)
+{
+    if (groups.Count == 0)
+    {
+        return "none";
+    }
+
+    return string.Join(" | ", groups.Select(group => $"[{string.Join(",", group.CellIds)}]"));
+}
+
+static string FormatResources(FixtureLoadResult loaded, IReadOnlyList<ResourceId> resources)
+{
+    if (resources.Count == 0)
+    {
+        return "none";
+    }
+
+    return string.Join(",", resources.Select(loaded.Catalog.GetName));
+}
+
+static string FormatReactionBlockers(
+    FixtureLoadResult loaded,
+    CellularEngine engine,
+    IReadOnlyList<string> cellIds)
+{
+    if (cellIds.Count == 0)
+    {
+        return "none";
+    }
+
+    var parts = new List<string>(cellIds.Count);
+    foreach (var cellId in cellIds)
+    {
+        if (!engine.World.TryGetCell(cellId, out var cell) || cell is null)
+        {
+            parts.Add($"{cellId}:missing-cell");
+            continue;
+        }
+
+        var missing = cell.Pool.Slots
+            .Where(slot => slot.Role != PoolSlotRole.AcceptOnly && slot.Quantity <= 0)
+            .Select(slot => loaded.Catalog.GetName(slot.Resource))
+            .ToArray();
+        parts.Add(missing.Length == 0 ? $"{cellId}:no-current-missing" : $"{cellId}:{string.Join("+", missing)}");
+    }
+
+    return string.Join(";", parts);
 }
 
 static void PrintGeneratedHeader(RandomScenarioOptions options)

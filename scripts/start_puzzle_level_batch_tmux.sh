@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-JOB="${1:-stable-levels-001-020}"
+JOB="${1:-stable-levels-001-020-200}"
 SESSION="${SESSION:-cellular-levels}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-sim/batches/$JOB}"
 LOG_FILE="${LOG_FILE:-$OUTPUT_ROOT/$JOB.log}"
@@ -37,6 +37,8 @@ FORWARDED_ENV_KEYS=(
   REQUIRED_ALIVE_TICKS_AT_END
   EVENT_CAPACITY
   CONFIGURATION
+  HEARTBEAT_SECONDS
+  PROGRESS_STRIDE
 )
 
 ENV_PREFIX=""

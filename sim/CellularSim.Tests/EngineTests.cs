@@ -389,6 +389,21 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void LevelThreeCeaFbd_StaysAliveForFiveHundredTicksAfterWarmup()
+    {
+        var loaded = TestSupport.LoadFixture("level-three-cea-fbd-stable.json");
+        loaded.Options.EventCapacity = 80_000;
+        var engine = new CellularEngine(loaded.World, loaded.Options);
+
+        engine.RunTicks(650);
+
+        Assert.True(engine.Circuit.IsWon);
+        Assert.True(engine.Circuit.IsAliveThisTick);
+        Assert.True(engine.Circuit.SustainedTicks >= 500);
+        Assert.All(loaded.World.Cells, cell => Assert.True(cell.IsGlowing, cell.Id));
+    }
+
+    [Fact]
     public void RepeatedRuns_ProduceIdenticalEventSequence()
     {
         static string[] Run()

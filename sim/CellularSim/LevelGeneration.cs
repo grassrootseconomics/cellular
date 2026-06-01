@@ -21,8 +21,14 @@ public sealed class PuzzleLevelOptions
     public int SourceQuantityPerTick { get; set; } = 4;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
+    public int SwapRoundsPerTick { get; set; } = 4;
+    public int NeedDesiredQuantity { get; set; } = 16;
+    public int NeedOfferReserve { get; set; } = 4;
+    public bool AllowNeedOverflowPayments { get; set; } = true;
     public int WinDurationTicks { get; set; } = 3;
     public int RequiredAliveTicksAtEnd { get; set; }
+    public int ProgressStride { get; set; }
+    public Action<string>? ProgressLogger { get; set; }
 }
 
 public sealed record GeneratedPuzzleLevel(
@@ -97,29 +103,42 @@ public static class PuzzleLevelGenerator
         var resources = BuildResourceNames(resourceCount);
         var random = new Random(options.GenerationSeed);
         SearchResult? bestOverall = null;
+        ReportProgress(
+            options,
+            $"search start level={options.LevelNumber} resources={resourceCount} "
+            + $"needAttempts={options.NeedAttemptLimit} layoutCandidates={options.LayoutCandidateLimit} "
+            + $"ticksPerCandidate={options.TicksPerCandidate} winDuration={options.WinDurationTicks} "
+            + $"requiredAliveAtEnd={options.RequiredAliveTicksAtEnd}");
 
         for (var needAttempt = 1; needAttempt <= options.NeedAttemptLimit; needAttempt++)
         {
+            ReportProgress(options, $"needAttempt={needAttempt}/{options.NeedAttemptLimit} start");
             var cells = BuildPuzzleCells(resources, random);
             var result = SearchBestLayout(cells, resources, options, random, needAttempt);
             if (bestOverall is null || IsBetter(result, bestOverall))
             {
                 bestOverall = result;
+                ReportProgress(options, $"new overall best {DescribeSummary(result.Summary)} layout={result.Layout.Width}x{result.Layout.Height}");
             }
 
             if (MeetsWinRequirements(result.Summary) && IsPreferredWinningLayout(result.Layout, cells.Count))
             {
+                ReportProgress(options, $"accepted preferred solution {DescribeSummary(result.Summary)}");
                 return BuildGeneratedLevel(options, resources, cells, result);
             }
+
+            ReportProgress(options, $"needAttempt={needAttempt}/{options.NeedAttemptLimit} best {DescribeSummary(result.Summary)}");
         }
 
         if (bestOverall is not null && MeetsWinRequirements(bestOverall.Summary))
         {
+            ReportProgress(options, $"accepted best overall solution {DescribeSummary(bestOverall.Summary)}");
             return BuildGeneratedLevel(options, resources, bestOverall.Cells, bestOverall);
         }
 
         if (bestOverall is not null && options.AllowNearWin)
         {
+            ReportProgress(options, $"accepted near win {DescribeSummary(bestOverall.Summary)}");
             return BuildGeneratedLevel(options, resources, bestOverall.Cells, bestOverall with
             {
                 Summary = bestOverall.Summary with { AcceptedNearWin = true }
@@ -167,6 +186,16 @@ public static class PuzzleLevelGenerator
             throw new ArgumentOutOfRangeException(nameof(options), "Source quantity and interval must be positive.");
         }
 
+        if (options.SwapRoundsPerTick <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Swap rounds per tick must be positive.");
+        }
+
+        if (options.NeedDesiredQuantity <= 0 || options.NeedOfferReserve <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Need intent quantities must be positive.");
+        }
+
         if (options.EventCapacity <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Event capacity must be positive.");
@@ -180,6 +209,11 @@ public static class PuzzleLevelGenerator
         if (options.RequiredAliveTicksAtEnd < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Required alive ticks at end cannot be negative.");
+        }
+
+        if (options.ProgressStride < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Progress stride cannot be negative.");
         }
     }
 
@@ -200,7 +234,7 @@ public static class PuzzleLevelGenerator
         var needsByResource = new Dictionary<string, string[]>(StringComparer.Ordinal);
         for (var i = 0; i < order.Length; i++)
         {
-            var needs = SelectNearestLineNeeds(order, i);
+            var needs = SelectBalancedRingNeeds(order, i);
             Shuffle(needs, random);
             needsByResource[order[i]] = needs;
         }
@@ -256,6 +290,20 @@ public static class PuzzleLevelGenerator
             {
                 best = result;
             }
+
+            var evaluated = candidateIndex + 1;
+            if (ShouldReportCandidateProgress(options, evaluated))
+            {
+                var totalEvaluated = ((needAttempt - 1) * options.LayoutCandidateLimit) + evaluated;
+                var totalCandidates = options.NeedAttemptLimit * options.LayoutCandidateLimit;
+                var percent = totalCandidates == 0 ? 0 : totalEvaluated * 100.0 / totalCandidates;
+                ReportProgress(
+                    options,
+                    $"progress needAttempt={needAttempt}/{options.NeedAttemptLimit} "
+                    + $"candidate={evaluated}/{options.LayoutCandidateLimit} "
+                    + $"overall={totalEvaluated}/{totalCandidates} ({percent:F1}%) "
+                    + $"best={DescribeSummary(best.Summary)}");
+            }
         }
 
         if (best is null)
@@ -299,6 +347,23 @@ public static class PuzzleLevelGenerator
     private static bool MeetsWinRequirements(PuzzleSolverSummary summary) =>
         summary.Won
         && (summary.RequiredAliveTicksAtEnd <= 0 || summary.StableAtEnd);
+
+    private static bool ShouldReportCandidateProgress(PuzzleLevelOptions options, int evaluated) =>
+        options.ProgressStride > 0
+        && (evaluated == 1
+            || evaluated % options.ProgressStride == 0
+            || evaluated == options.LayoutCandidateLimit);
+
+    private static void ReportProgress(PuzzleLevelOptions options, string message)
+    {
+        options.ProgressLogger?.Invoke($"[level-{options.LevelNumber:000}] {DateTimeOffset.UtcNow:O} {message}");
+    }
+
+    private static string DescribeSummary(PuzzleSolverSummary summary) =>
+        $"stable={summary.StableAtEnd} won={summary.Won} finalSustained={summary.FinalSustainedTicks} "
+        + $"glowing={summary.GlowingCells} activeLast={summary.ActiveCellsInLastWindow} "
+        + $"swaps={summary.TotalSwaps} reactions={summary.TotalReactions} score={summary.FinalScore} "
+        + $"candidate={summary.CandidateIndex}";
 
     private static bool IsPreferredWinningLayout(LevelLayout layout, int cellCount)
     {
@@ -566,6 +631,13 @@ public static class PuzzleLevelGenerator
                 Height = layout.Height,
                 Rocks = layout.Rocks.Select(rock => new LevelPositionDocument { X = rock.X, Y = rock.Y }).ToList()
             },
+            Engine = new LevelEngineDocument
+            {
+                SwapRoundsPerTick = options.SwapRoundsPerTick,
+                NeedDesiredQuantity = options.NeedDesiredQuantity,
+                NeedOfferReserve = options.NeedOfferReserve,
+                AllowNeedOverflowPayments = options.AllowNeedOverflowPayments
+            },
             Win = new LevelWinDocument
             {
                 RequiredCells = cells.Select(cell => cell.Id).ToList(),
@@ -653,15 +725,25 @@ public static class PuzzleLevelGenerator
         return resources;
     }
 
-    private static string[] SelectNearestLineNeeds(IReadOnlyList<string> order, int index)
+    private static string[] SelectBalancedRingNeeds(IReadOnlyList<string> order, int index)
     {
-        return Enumerable.Range(0, order.Count)
-            .Where(candidateIndex => candidateIndex != index)
-            .OrderBy(candidateIndex => Math.Abs(candidateIndex - index))
-            .ThenBy(candidateIndex => candidateIndex)
-            .Take(3)
-            .Select(candidateIndex => order[candidateIndex])
-            .ToArray();
+        if (order.Count <= 4)
+        {
+            return Enumerable.Range(0, order.Count)
+                .Where(candidateIndex => candidateIndex != index)
+                .Select(candidateIndex => order[candidateIndex])
+                .ToArray();
+        }
+
+        var previous = (index + order.Count - 1) % order.Count;
+        var next = (index + 1) % order.Count;
+        var nextRelay = (index + 2) % order.Count;
+        return
+        [
+            order[previous],
+            order[next],
+            order[nextRelay]
+        ];
     }
 
     private static int CountUsefulAdjacentPairs(
@@ -750,11 +832,29 @@ public static class PuzzleLevelGenerator
         [JsonPropertyName("grid")]
         public LevelGridDocument Grid { get; set; } = new();
 
+        [JsonPropertyName("engine")]
+        public LevelEngineDocument Engine { get; set; } = new();
+
         [JsonPropertyName("cells")]
         public List<LevelCellDocument> Cells { get; set; } = new();
 
         [JsonPropertyName("win")]
         public LevelWinDocument Win { get; set; } = new();
+    }
+
+    private sealed class LevelEngineDocument
+    {
+        [JsonPropertyName("swapRoundsPerTick")]
+        public int SwapRoundsPerTick { get; set; }
+
+        [JsonPropertyName("needDesiredQuantity")]
+        public int NeedDesiredQuantity { get; set; }
+
+        [JsonPropertyName("needOfferReserve")]
+        public int NeedOfferReserve { get; set; }
+
+        [JsonPropertyName("allowNeedOverflowPayments")]
+        public bool AllowNeedOverflowPayments { get; set; }
     }
 
     private sealed class LevelGridDocument

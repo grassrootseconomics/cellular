@@ -50,6 +50,26 @@ public sealed class LevelGenerationTests
     }
 
     [Fact]
+    public void PuzzleLevelGenerator_LevelNBalancesResourceNeedPressure()
+    {
+        var cells = PuzzleLevelGenerator.GenerateCellDefinitions(new PuzzleLevelOptions
+        {
+            LevelNumber = 3,
+            GenerationSeed = 1003
+        });
+
+        var needCounts = cells
+            .SelectMany(cell => cell.Needs)
+            .GroupBy(resource => resource, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        foreach (var cell in cells)
+        {
+            Assert.Equal(3, needCounts[cell.ProducedResource]);
+        }
+    }
+
+    [Fact]
     public void PuzzleLevelGenerator_RecordsStartingAndSolutionLayouts()
     {
         var level = PuzzleLevelGenerator.Generate(new PuzzleLevelOptions

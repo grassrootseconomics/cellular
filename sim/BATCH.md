@@ -8,26 +8,27 @@ CLI level generator.
 
 ## Stability Rule
 
-The puzzle scene currently advances one sim tick every `0.12` seconds.
-Ten seconds is therefore:
+The remote stable rebuild now requires a circuit to stay alive for `200`
+consecutive ticks at the end of the solver run. The puzzle scene currently
+advances one sim tick every `0.12` seconds, so this is roughly:
 
 ```text
-ceil(10 / 0.12) = 84 ticks
+200 * 0.12 = 24 seconds
 ```
 
-For the first stable batch, use:
+For the 20-level stable rebuild, use:
 
 ```text
-STABLE_TICKS=84
-WIN_DURATION_TICKS=84
-REQUIRED_ALIVE_TICKS_AT_END=84
+STABLE_TICKS=200
+WIN_DURATION_TICKS=200
+REQUIRED_ALIVE_TICKS_AT_END=200
 ```
 
 This means a candidate must:
 
 - become a valid full directed circuit,
 - keep that circuit alive long enough to satisfy the win duration,
-- still be alive at the end of the solver run with at least `84` consecutive
+- still be alive at the end of the solver run with at least `200` consecutive
   alive ticks.
 
 This prevents transient cases such as a level that completes briefly and then
@@ -86,11 +87,13 @@ instead of the HTTPS clone URL.
 
 ## Smoke Run
 
-Start with one level and fewer candidates:
+Start with one level and fewer candidates. For a quick smoke run, use a lower
+threshold explicitly so the command finishes quickly:
 
 ```bash
 cd /root/cellular
-LEVEL_START=1 LEVEL_END=1 WORKERS=1 NEED_ATTEMPTS=8 LAYOUT_CANDIDATES=64 SOLUTION_TICKS=180 \
+LEVEL_START=1 LEVEL_END=1 WORKERS=1 NEED_ATTEMPTS=8 LAYOUT_CANDIDATES=64 \
+STABLE_TICKS=20 WIN_DURATION_TICKS=20 REQUIRED_ALIVE_TICKS_AT_END=20 SOLUTION_TICKS=180 \
   scripts/run_puzzle_level_batch.sh stable-smoke
 ```
 
@@ -106,32 +109,58 @@ The result should show:
 
 ```text
 stable at end: True
-final sustained ticks: 84
+final sustained ticks: 20
 ```
 
 or higher.
 
-## Full 20-Level Batch
+## Full 20-Level Stable-200 Batch
 
 Run detached in `tmux` with 15 workers:
 
 ```bash
 cd /root/cellular
-WORKERS=15 \
-STABLE_TICKS=84 \
-WIN_DURATION_TICKS=84 \
-REQUIRED_ALIVE_TICKS_AT_END=84 \
-SOLUTION_TICKS=420 \
-NEED_ATTEMPTS=256 \
-LAYOUT_CANDIDATES=2048 \
-scripts/start_puzzle_level_batch_tmux.sh stable-levels-001-020
+scripts/start_stable_200_puzzle_levels_tmux.sh stable-levels-001-020-200
+```
+
+The wrapper uses:
+
+```text
+WORKERS=15
+STABLE_TICKS=200
+WIN_DURATION_TICKS=200
+REQUIRED_ALIVE_TICKS_AT_END=200
+SOLUTION_TICKS=900
+NEED_ATTEMPTS=512
+LAYOUT_CANDIDATES=4096
 ```
 
 Monitor:
 
 ```bash
-tail -f sim/batches/stable-levels-001-020/stable-levels-001-020.log
-tmux attach -t cellular-levels
+tail -f sim/batches/stable-levels-001-020-200/stable-levels-001-020-200.log
+tmux attach -t cellular-levels-200
+```
+
+The main log prints heartbeat lines like:
+
+```text
+[batch] progress 2026-06-01T11:20:00+00:00 finished=7/20 (35.0%) pass=7 fail=0 running=13 pending=0 unknown=0 active_workers=13
+[batch] log_dir=sim/batches/stable-levels-001-020-200/logs summary=sim/batches/stable-levels-001-020-200/summary.csv
+[batch] completed_levels=001,002,003,004,005,006,007
+```
+
+Per-level logs are under:
+
+```text
+sim/batches/stable-levels-001-020-200/logs/level-NNN.log
+```
+
+Each level log also prints internal solver progress every `PROGRESS_STRIDE`
+layout candidates:
+
+```text
+[level-003] ... progress needAttempt=4/512 candidate=512/4096 overall=12800/2097152 (0.6%) best=stable=False won=True finalSustained=19 ...
 ```
 
 Detach from tmux with `Ctrl-b`, then `d`.
@@ -139,19 +168,19 @@ Detach from tmux with `Ctrl-b`, then `d`.
 Check status:
 
 ```bash
-cat sim/batches/stable-levels-001-020/summary.csv
-find sim/batches/stable-levels-001-020/logs -maxdepth 1 -type f -name '*.log' | sort
+cat sim/batches/stable-levels-001-020-200/summary.csv
+find sim/batches/stable-levels-001-020-200/logs -maxdepth 1 -type f -name '*.log' | sort
 ```
 
 Each level writes:
 
 ```text
-sim/batches/stable-levels-001-020/levels/level-NNN/level.json
-sim/batches/stable-levels-001-020/levels/level-NNN/starting-fixture.json
-sim/batches/stable-levels-001-020/levels/level-NNN/solution-fixture.json
-sim/batches/stable-levels-001-020/levels/level-NNN/starting-map.txt
-sim/batches/stable-levels-001-020/levels/level-NNN/solution-map.txt
-sim/batches/stable-levels-001-020/levels/level-NNN/results.txt
+sim/batches/stable-levels-001-020-200/levels/level-NNN/level.json
+sim/batches/stable-levels-001-020-200/levels/level-NNN/starting-fixture.json
+sim/batches/stable-levels-001-020-200/levels/level-NNN/solution-fixture.json
+sim/batches/stable-levels-001-020-200/levels/level-NNN/starting-map.txt
+sim/batches/stable-levels-001-020-200/levels/level-NNN/solution-map.txt
+sim/batches/stable-levels-001-020-200/levels/level-NNN/results.txt
 ```
 
 ## If A Level Fails
@@ -166,10 +195,10 @@ If one or more levels fail, rerun only those levels with a wider search:
 cd /root/cellular
 LEVEL_START=8 LEVEL_END=8 \
 WORKERS=1 \
-STABLE_TICKS=84 \
-WIN_DURATION_TICKS=84 \
-REQUIRED_ALIVE_TICKS_AT_END=84 \
-SOLUTION_TICKS=600 \
+STABLE_TICKS=200 \
+WIN_DURATION_TICKS=200 \
+REQUIRED_ALIVE_TICKS_AT_END=200 \
+SOLUTION_TICKS=1200 \
 NEED_ATTEMPTS=1024 \
 LAYOUT_CANDIDATES=8192 \
 scripts/start_puzzle_level_batch_tmux.sh stable-level-008-deep
@@ -189,24 +218,24 @@ From the local machine:
 
 ```bash
 rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
-  root@128.140.120.36:/root/cellular/sim/batches/stable-levels-001-020/ \
-  /home/wor/src/cellular/sim/batches/stable-levels-001-020/
+  root@128.140.120.36:/root/cellular/sim/batches/stable-levels-001-020-200/ \
+  /home/wor/src/cellular/sim/batches/stable-levels-001-020-200/
 ```
 
 Review locally before replacing shipped levels:
 
 ```bash
 cd /home/wor/src/cellular
-cat sim/batches/stable-levels-001-020/summary.csv
-cat sim/batches/stable-levels-001-020/levels/level-008/results.txt
-cat sim/batches/stable-levels-001-020/levels/level-008/solution-map.txt
+cat sim/batches/stable-levels-001-020-200/summary.csv
+cat sim/batches/stable-levels-001-020-200/levels/level-008/results.txt
+cat sim/batches/stable-levels-001-020-200/levels/level-008/solution-map.txt
 ```
 
 After review, copy approved `level.json` files into `levels/puzzle/` using the
 existing naming convention:
 
 ```bash
-cp sim/batches/stable-levels-001-020/levels/level-008/level.json levels/puzzle/level-008-definition.json
+cp sim/batches/stable-levels-001-020-200/levels/level-008/level.json levels/puzzle/level-008-definition.json
 ```
 
 Repeat for each approved level.
@@ -216,7 +245,7 @@ Repeat for each approved level.
 Stop a running batch:
 
 ```bash
-tmux kill-session -t cellular-levels
+tmux kill-session -t cellular-levels-200
 ```
 
 Start a second batch under a different tmux session:

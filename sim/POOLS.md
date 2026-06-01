@@ -54,18 +54,25 @@ If a cell must both keep one unit for its own reaction and give one unit away, i
 
 ## Swap Validation
 
-Swaps are bundled reciprocal trades. By default, one touching edge can resolve at most one swap per tick, but that swap can move up to `4` units each way.
+Swaps are bundled reciprocal trades. A touching edge can resolve at most one swap per tick, but that swap can move up to `4` units each way.
+
+The base engine keeps conservative one-round swap behavior for older fixtures. Generated puzzle levels can opt into puzzle intent settings in fixture `engine` metadata:
+
+- `swapRoundsPerTick`: allows unused edges to resolve in later rounds of the same tick, so relay cells can pass resources through chains without waiting a full tick per hop.
+- `needDesiredQuantity`: a cell stops actively requesting a `Need` resource once it has this working stock, even though the slot cap remains `100`.
+- `needOfferReserve`: a cell only offers a `Need` resource outward from surplus above this reserve.
+- `allowNeedOverflowPayments`: lets a full `Need` slot accept a swap payment and discard overflow above cap, preventing gridlock from payment refusal. This is opt-in for puzzle fixtures; strict older fixtures still block full `Need` payments.
 
 For `cell-a swapped 4 A for 4 C from cell-c`, the sim checks all of these before mutating state:
 
 - `cell-a` has enough `A` available after prior reservations.
 - `cell-c` has a slot that accepts `A`.
-- If `cell-c` accepts `A` through a `Need` or `AcceptOnly` slot, it will not exceed the `A` slot capacity, normally `100`.
+- If `cell-c` accepts `A` through a `Need` or `AcceptOnly` slot, it will not exceed the `A` slot capacity, normally `100`, unless the fixture has opted into `allowNeedOverflowPayments` for `Need` payment overflow.
 - If `cell-c` accepts returned `A` through its own `SourceOutput` slot, the swap is allowed and any amount above cap is discarded.
 - `cell-c` has enough `C` available after prior reservations.
 - `cell-a` has a slot that accepts `C`.
-- The same capacity rule applies: strict for `Need`/`AcceptOnly`, overflow-discard only for returned `SourceOutput`.
-- If either side offers a `Need` resource, it may only offer surplus above the one unit kept for its own reaction.
+- The same capacity rule applies: strict for `AcceptOnly`; strict for `Need` unless puzzle overflow payments are enabled; overflow-discard always applies for returned `SourceOutput`.
+- If either side offers a `Need` resource, it may only offer surplus above the configured reserve, usually one unit in legacy fixtures and a larger relay reserve in puzzle fixtures.
 - Producer cells also keep one unit of their own `SourceOutput` when they have needs, so a bundled swap cannot drain the produced resource needed for that same tick's reaction.
 
 Only after those checks pass are both sides updated.

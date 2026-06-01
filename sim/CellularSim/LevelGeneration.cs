@@ -18,7 +18,7 @@ public sealed class PuzzleLevelOptions
     public int LayoutCandidateLimit { get; set; } = 512;
     public int TicksPerCandidate { get; set; } = 100;
     public bool AllowNearWin { get; set; }
-    public int SourceQuantityPerTick { get; set; } = 4;
+    public int SourceQuantityPerTick { get; set; } = 8;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
     public int GlowTtlTicks { get; set; } = 200;

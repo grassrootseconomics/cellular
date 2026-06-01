@@ -44,7 +44,7 @@
       "sources": [
         {
           "resource": "F",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -78,7 +78,7 @@
       "sources": [
         {
           "resource": "H",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -112,7 +112,7 @@
       "sources": [
         {
           "resource": "C",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -146,7 +146,7 @@
       "sources": [
         {
           "resource": "D",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -180,7 +180,7 @@
       "sources": [
         {
           "resource": "A",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -214,7 +214,7 @@
       "sources": [
         {
           "resource": "B",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -248,7 +248,7 @@
       "sources": [
         {
           "resource": "E",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -282,7 +282,7 @@
       "sources": [
         {
           "resource": "G",
-          "quantityPerTick": 4,
+          "quantityPerTick": 8,
           "intervalTicks": 1
         }
       ]
@@ -310,5 +310,12 @@
       "H"
     ],
     "durationTicks": 3
+  },
+  "engine": {
+    "glowTtlTicks": 200,
+    "swapRoundsPerTick": 4,
+    "needDesiredQuantity": 16,
+    "needOfferReserve": 4,
+    "allowNeedOverflowPayments": true
   }
 }

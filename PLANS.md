@@ -94,6 +94,8 @@ Milestone 2: Godot visual MVP shell on top of the deterministic C# simulation wo
 - [x] Change generated Puzzle needs to a balanced local backbone so compact layouts avoid distant mutual deadlocks.
 - [x] Add rectangular Hamiltonian-cycle needs for full compact grids and generated glow TTL support for larger stable circuits.
 - [x] Clarify batch success as `WIN_DURATION_TICKS=200`; final-tick soak testing remains optional.
+- [x] Increase generated Puzzle source output from `4` to `8` units per tick in shipped and generated fixtures.
+- [x] Add puzzle engine settings to shipped/generated fixtures so Godot uses the intended glow TTL and staged swap rounds.
 
 ## In Progress
 

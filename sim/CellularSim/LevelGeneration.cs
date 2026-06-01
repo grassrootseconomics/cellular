@@ -87,7 +87,7 @@ public sealed record PuzzleSolverSummary(
 
 public static class PuzzleLevelGenerator
 {
-    private const int MatchAwareCandidateCount = 96;
+    private const int MatchAwareCandidateCount = 10;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -522,14 +522,7 @@ public static class PuzzleLevelGenerator
             return BuildMatchAwareSolutionLayout(cells, random, candidateIndex);
         }
 
-        var foldedWidths = BuildFoldedLineWidths(cells.Count);
-        var foldedIndex = candidateIndex - MatchAwareCandidateCount - 1;
-        if (foldedIndex >= 0 && foldedIndex < foldedWidths.Count)
-        {
-            return BuildFoldedLineSolutionLayout(cells, foldedWidths[foldedIndex]);
-        }
-
-        return BuildRandomSolutionLayout(cells, random);
+        return BuildMatchAwareSolutionLayout(cells, random, candidateIndex);
     }
 
     private static LevelLayout BuildMatchAwareSolutionLayout(
@@ -737,68 +730,6 @@ public static class PuzzleLevelGenerator
         var width = normalized.Max(placement => placement.X) + 1;
         var height = normalized.Max(placement => placement.Y) + 1;
         return new LevelLayout(width, height, normalized, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, normalized));
-    }
-
-    private static IReadOnlyList<int> BuildFoldedLineWidths(int cellCount)
-    {
-        var (compactWidth, _) = ComputeCompactDimensions(cellCount);
-        var (startWidth, _) = ComputeStartingLayoutDimensions(cellCount);
-        var maxWidth = Math.Min(cellCount, startWidth);
-        var widths = new List<int>();
-
-        AddWidthIfValid(widths, compactWidth + 1, maxWidth);
-        AddWidthIfValid(widths, compactWidth, maxWidth);
-        AddWidthIfValid(widths, compactWidth + 2, maxWidth);
-
-        for (var width = compactWidth; width <= maxWidth; width++)
-        {
-            AddWidthIfValid(widths, width, maxWidth);
-        }
-
-        return widths;
-    }
-
-    private static void AddWidthIfValid(List<int> widths, int width, int maxWidth)
-    {
-        if (width >= 2 && width <= maxWidth && !widths.Contains(width))
-        {
-            widths.Add(width);
-        }
-    }
-
-    private static LevelLayout BuildFoldedLineSolutionLayout(
-        IReadOnlyList<LevelCellDefinition> cells,
-        int width)
-    {
-        width = Math.Clamp(width, 2, cells.Count);
-        var height = (int)Math.Ceiling((double)cells.Count / width);
-        var placements = new LevelCellPlacement[cells.Count];
-        for (var i = 0; i < cells.Count; i++)
-        {
-            var y = i / width;
-            var indexInRow = i % width;
-            var x = y % 2 == 0 ? indexInRow : width - 1 - indexInRow;
-            placements[i] = new LevelCellPlacement(cells[i].Id, x, y);
-        }
-
-        return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements));
-    }
-
-    private static LevelLayout BuildRandomSolutionLayout(IReadOnlyList<LevelCellDefinition> cells, Random random)
-    {
-        var (width, height) = ComputeCompactDimensions(cells.Count);
-        var positions = BuildSnakePositions(width, height).ToArray();
-        Shuffle(positions, random);
-        var cellOrder = cells.ToArray();
-        Shuffle(cellOrder, random);
-
-        var placements = new LevelCellPlacement[cells.Count];
-        for (var i = 0; i < cellOrder.Length; i++)
-        {
-            placements[i] = new LevelCellPlacement(cellOrder[i].Id, positions[i].X, positions[i].Y);
-        }
-
-        return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements));
     }
 
     private static (int Width, int Height) ComputeCompactDimensions(int cellCount)

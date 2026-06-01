@@ -292,6 +292,15 @@ public static class PuzzleLevelGenerator
             }
 
             var evaluated = candidateIndex + 1;
+            if (MeetsWinRequirements(solverSummary) && IsPreferredWinningLayout(layout, cells.Count))
+            {
+                ReportProgress(
+                    options,
+                    $"early accepted preferred layout candidate={evaluated}/{options.LayoutCandidateLimit} "
+                    + DescribeSummary(solverSummary));
+                return result;
+            }
+
             if (ShouldReportCandidateProgress(options, evaluated))
             {
                 var totalEvaluated = ((needAttempt - 1) * options.LayoutCandidateLimit) + evaluated;

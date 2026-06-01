@@ -130,10 +130,12 @@ WORKERS=15
 STABLE_TICKS=200
 WIN_DURATION_TICKS=200
 REQUIRED_ALIVE_TICKS_AT_END=200
-SOLUTION_TICKS=900
-NEED_ATTEMPTS=512
-LAYOUT_CANDIDATES=4096
+SOLUTION_TICKS=600
+NEED_ATTEMPTS=64
+LAYOUT_CANDIDATES=512
 ```
+
+This is a fast first pass. Rerun only failed levels with deeper settings.
 
 Monitor:
 
@@ -160,7 +162,7 @@ Each level log also prints internal solver progress every `PROGRESS_STRIDE`
 layout candidates:
 
 ```text
-[level-003] ... progress needAttempt=4/512 candidate=512/4096 overall=12800/2097152 (0.6%) best=stable=False won=True finalSustained=19 ...
+[level-003] ... progress needAttempt=4/64 candidate=512/512 overall=2048/32768 (6.2%) best=stable=False won=True finalSustained=19 ...
 ```
 
 Detach from tmux with `Ctrl-b`, then `d`.

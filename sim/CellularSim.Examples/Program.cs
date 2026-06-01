@@ -377,7 +377,7 @@ static void RunDebug(FixtureLoadResult loaded, CellularEngine engine, RunOptions
 
     if (!string.IsNullOrWhiteSpace(run.Commands))
     {
-        foreach (var command in run.Commands.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var command in run.Commands.Split(new char[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             Console.WriteLine($"> {command}");
             if (!RunDebugCommand(command, loaded, engine, run.Verbose))

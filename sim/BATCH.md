@@ -92,7 +92,7 @@ threshold explicitly so the command finishes quickly:
 
 ```bash
 cd /root/cellular
-LEVEL_START=1 LEVEL_END=1 WORKERS=1 NEED_ATTEMPTS=8 LAYOUT_CANDIDATES=64 \
+LEVEL_START=1 LEVEL_END=1 WORKERS=1 NEED_ATTEMPTS=8 LAYOUT_CANDIDATES=11 \
 STABLE_TICKS=20 WIN_DURATION_TICKS=20 REQUIRED_ALIVE_TICKS_AT_END=20 SOLUTION_TICKS=180 \
   scripts/run_puzzle_level_batch.sh stable-smoke
 ```
@@ -132,7 +132,7 @@ WIN_DURATION_TICKS=200
 REQUIRED_ALIVE_TICKS_AT_END=200
 SOLUTION_TICKS=600
 NEED_ATTEMPTS=64
-LAYOUT_CANDIDATES=512
+LAYOUT_CANDIDATES=11
 ```
 
 This is a fast first pass. Rerun only failed levels with deeper settings.
@@ -162,7 +162,7 @@ Each level log also prints internal solver progress every `PROGRESS_STRIDE`
 layout candidates:
 
 ```text
-[level-003] ... progress needAttempt=4/64 candidate=512/512 overall=2048/32768 (6.2%) best=stable=False won=True finalSustained=19 ...
+[level-003] ... progress needAttempt=4/64 candidate=11/11 overall=44/704 (6.2%) best=stable=False won=True finalSustained=19 ...
 ```
 
 Detach from tmux with `Ctrl-b`, then `d`.
@@ -202,15 +202,18 @@ WIN_DURATION_TICKS=200 \
 REQUIRED_ALIVE_TICKS_AT_END=200 \
 SOLUTION_TICKS=1200 \
 NEED_ATTEMPTS=1024 \
-LAYOUT_CANDIDATES=8192 \
+LAYOUT_CANDIDATES=11 \
 scripts/start_puzzle_level_batch_tmux.sh stable-level-008-deep
 ```
 
 For hard levels, increase in this order:
 
-1. `LAYOUT_CANDIDATES`
-2. `NEED_ATTEMPTS`
-3. `SOLUTION_TICKS`
+1. `NEED_ATTEMPTS`
+2. `SOLUTION_TICKS`
+
+`LAYOUT_CANDIDATES` is currently capped by the generator at `11`: one compact
+canonical layout plus ten match-aware layouts. A deeper run should search more
+need graphs, not more blind layouts.
 
 Do not use `--allow-near-win` for shipped puzzle levels.
 

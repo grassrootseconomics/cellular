@@ -88,6 +88,7 @@ public sealed record PuzzleSolverSummary(
 public static class PuzzleLevelGenerator
 {
     private const int MatchAwareCandidateCount = 10;
+    private const int MaxSolutionCandidateCount = 1 + MatchAwareCandidateCount;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -108,7 +109,7 @@ public static class PuzzleLevelGenerator
         ReportProgress(
             options,
             $"search start level={options.LevelNumber} resources={resourceCount} "
-            + $"needAttempts={options.NeedAttemptLimit} layoutCandidates={options.LayoutCandidateLimit} "
+            + $"needAttempts={options.NeedAttemptLimit} layoutCandidates={GetEffectiveLayoutCandidateLimit(options)} "
             + $"ticksPerCandidate={options.TicksPerCandidate} winDuration={options.WinDurationTicks} "
             + $"requiredAliveAtEnd={options.RequiredAliveTicksAtEnd}");
 
@@ -257,7 +258,8 @@ public static class PuzzleLevelGenerator
         int needAttempt)
     {
         SearchResult? best = null;
-        for (var candidateIndex = 0; candidateIndex < options.LayoutCandidateLimit; candidateIndex++)
+        var layoutCandidateLimit = GetEffectiveLayoutCandidateLimit(options);
+        for (var candidateIndex = 0; candidateIndex < layoutCandidateLimit; candidateIndex++)
         {
             var layout = BuildSolutionLayoutCandidate(cells, random, candidateIndex);
             var fixtureJson = BuildFixtureJson(resources, cells, layout, options);
@@ -298,20 +300,20 @@ public static class PuzzleLevelGenerator
             {
                 ReportProgress(
                     options,
-                    $"early accepted preferred layout candidate={evaluated}/{options.LayoutCandidateLimit} "
+                    $"early accepted preferred layout candidate={evaluated}/{layoutCandidateLimit} "
                     + DescribeSummary(solverSummary));
                 return result;
             }
 
             if (ShouldReportCandidateProgress(options, evaluated))
             {
-                var totalEvaluated = ((needAttempt - 1) * options.LayoutCandidateLimit) + evaluated;
-                var totalCandidates = options.NeedAttemptLimit * options.LayoutCandidateLimit;
+                var totalEvaluated = ((needAttempt - 1) * layoutCandidateLimit) + evaluated;
+                var totalCandidates = options.NeedAttemptLimit * layoutCandidateLimit;
                 var percent = totalCandidates == 0 ? 0 : totalEvaluated * 100.0 / totalCandidates;
                 ReportProgress(
                     options,
                     $"progress needAttempt={needAttempt}/{options.NeedAttemptLimit} "
-                    + $"candidate={evaluated}/{options.LayoutCandidateLimit} "
+                    + $"candidate={evaluated}/{layoutCandidateLimit} "
                     + $"overall={totalEvaluated}/{totalCandidates} ({percent:F1}%) "
                     + $"best={DescribeSummary(best.Summary)}");
             }
@@ -324,9 +326,12 @@ public static class PuzzleLevelGenerator
 
         return best with
         {
-            Summary = best.Summary with { CandidateCount = options.LayoutCandidateLimit }
+            Summary = best.Summary with { CandidateCount = layoutCandidateLimit }
         };
     }
+
+    private static int GetEffectiveLayoutCandidateLimit(PuzzleLevelOptions options) =>
+        Math.Min(options.LayoutCandidateLimit, MaxSolutionCandidateCount);
 
     private static bool IsBetter(SearchResult candidate, SearchResult currentBest)
     {
@@ -522,7 +527,7 @@ public static class PuzzleLevelGenerator
             return BuildMatchAwareSolutionLayout(cells, random, candidateIndex);
         }
 
-        return BuildMatchAwareSolutionLayout(cells, random, candidateIndex);
+        throw new ArgumentOutOfRangeException(nameof(candidateIndex), "Only canonical plus match-aware solution candidates are supported.");
     }
 
     private static LevelLayout BuildMatchAwareSolutionLayout(

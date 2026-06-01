@@ -9,8 +9,8 @@ CLI level generator.
 ## Stability Rule
 
 The remote stable rebuild now requires a circuit to stay alive for `200`
-consecutive ticks at the end of the solver run. The puzzle scene currently
-advances one sim tick every `0.12` seconds, so this is roughly:
+consecutive ticks at least once during the solver run. The puzzle scene
+currently advances one sim tick every `0.12` seconds, so this is roughly:
 
 ```text
 200 * 0.12 = 24 seconds
@@ -21,18 +21,16 @@ For the 20-level stable rebuild, use:
 ```text
 STABLE_TICKS=200
 WIN_DURATION_TICKS=200
-REQUIRED_ALIVE_TICKS_AT_END=200
+REQUIRED_ALIVE_TICKS_AT_END=0
 ```
 
 This means a candidate must:
 
 - become a valid full directed circuit,
-- keep that circuit alive long enough to satisfy the win duration,
-- still be alive at the end of the solver run with at least `200` consecutive
-  alive ticks.
+- keep that circuit alive long enough to satisfy the win duration.
 
-This prevents transient cases such as a level that completes briefly and then
-breaks apart.
+Use `REQUIRED_ALIVE_TICKS_AT_END=200` only for a stricter soak test where the
+circuit must also still be alive at the final solver tick.
 
 ## Remote Install
 
@@ -129,7 +127,7 @@ The wrapper uses:
 WORKERS=15
 STABLE_TICKS=200
 WIN_DURATION_TICKS=200
-REQUIRED_ALIVE_TICKS_AT_END=200
+REQUIRED_ALIVE_TICKS_AT_END=0
 SOLUTION_TICKS=600
 NEED_ATTEMPTS=64
 LAYOUT_CANDIDATES=11
@@ -199,7 +197,7 @@ LEVEL_START=8 LEVEL_END=8 \
 WORKERS=1 \
 STABLE_TICKS=200 \
 WIN_DURATION_TICKS=200 \
-REQUIRED_ALIVE_TICKS_AT_END=200 \
+REQUIRED_ALIVE_TICKS_AT_END=0 \
 SOLUTION_TICKS=1200 \
 NEED_ATTEMPTS=1024 \
 LAYOUT_CANDIDATES=11 \

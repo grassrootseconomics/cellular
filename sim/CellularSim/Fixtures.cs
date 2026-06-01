@@ -192,6 +192,11 @@ public static class FixtureLoader
         var engine = fixture.Engine;
         if (engine is not null)
         {
+            if (engine.GlowTtlTicks > 0)
+            {
+                options.GlowTtlTicks = engine.GlowTtlTicks;
+            }
+
             if (engine.SwapRoundsPerTick > 0)
             {
                 options.SwapRoundsPerTick = engine.SwapRoundsPerTick;
@@ -302,6 +307,7 @@ public static class FixtureLoader
 
     private sealed class EngineDto
     {
+        public int GlowTtlTicks { get; set; }
         public int SwapRoundsPerTick { get; set; }
         public int NeedDesiredQuantity { get; set; }
         public int NeedOfferReserve { get; set; }

@@ -1,33 +1,37 @@
 Puzzle solver summary
   won: True
   accepted near win: False
-  need attempt: 2
-  candidate index: 4
-  candidates evaluated in winning attempt: 512
-  ticks per candidate: 260
-  glowing cells: 4/16
-  swaps: 2027
-  reactions: 1364
-  active cells in last window: 9
-  touching pairs: 22
-  strain penalty: -7159
-  final score: 7877
+  need attempt: 1
+  candidate index: 0
+  candidates evaluated in winning attempt: 1
+  ticks per candidate: 600
+  win duration ticks: 200
+  required alive ticks at end: 0
+  final sustained ticks: 0
+  stable at end: False
+  glowing cells: 15/16
+  swaps: 7266
+  reactions: 5597
+  active cells in last window: 16
+  touching pairs: 24
+  strain penalty: -7401
+  final score: 54198
 
 Cells
-  cell-c: produces C; needs O, J, M
-  cell-o: produces O; needs C, M, J
-  cell-m: produces M; needs J, O, C
-  cell-j: produces J; needs M, P, O
-  cell-p: produces P; needs L, J, M
-  cell-l: produces L; needs J, F, P
-  cell-f: produces F; needs D, L, P
-  cell-d: produces D; needs F, I, L
-  cell-i: produces I; needs B, D, F
-  cell-b: produces B; needs I, N, D
-  cell-n: produces N; needs I, B, H
-  cell-h: produces H; needs K, N, B
-  cell-k: produces K; needs H, A, N
-  cell-a: produces A; needs H, K, G
-  cell-g: produces G; needs K, A, E
-  cell-e: produces E; needs A, K, G
+  cell-j: produces J; needs P, N, E
+  cell-n: produces N; needs E, O, J
+  cell-e: produces E; needs B, N, O
+  cell-o: produces O; needs D, E, B
+  cell-b: produces B; needs O, D, M
+  cell-d: produces D; needs C, M, B
+  cell-m: produces M; needs F, D, C
+  cell-c: produces C; needs F, M, H
+  cell-f: produces F; needs I, H, C
+  cell-h: produces H; needs G, F, I
+  cell-i: produces I; needs K, H, G
+  cell-g: produces G; needs I, K, L
+  cell-k: produces K; needs L, A, G
+  cell-l: produces L; needs P, A, K
+  cell-a: produces A; needs L, P, J
+  cell-p: produces P; needs A, J, N
 

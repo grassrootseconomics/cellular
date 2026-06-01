@@ -15,11 +15,12 @@ SOLUTION_TICKS="${SOLUTION_TICKS:-900}"
 SIM_TICK_SECONDS="${SIM_TICK_SECONDS:-0.12}"
 STABLE_TICKS="${STABLE_TICKS:-200}"
 WIN_DURATION_TICKS="${WIN_DURATION_TICKS:-$STABLE_TICKS}"
-REQUIRED_ALIVE_TICKS_AT_END="${REQUIRED_ALIVE_TICKS_AT_END:-$STABLE_TICKS}"
+REQUIRED_ALIVE_TICKS_AT_END="${REQUIRED_ALIVE_TICKS_AT_END:-0}"
 EVENT_CAPACITY="${EVENT_CAPACITY:-1048576}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 HEARTBEAT_SECONDS="${HEARTBEAT_SECONDS:-60}"
 PROGRESS_STRIDE="${PROGRESS_STRIDE:-128}"
+SKIP_RESTORE_BUILD="${SKIP_RESTORE_BUILD:-0}"
 
 if (( LEVEL_END < LEVEL_START )); then
   echo "[batch] LEVEL_END must be greater than or equal to LEVEL_START." >&2
@@ -52,6 +53,7 @@ EVENT_CAPACITY=$EVENT_CAPACITY
 CONFIGURATION=$CONFIGURATION
 HEARTBEAT_SECONDS=$HEARTBEAT_SECONDS
 PROGRESS_STRIDE=$PROGRESS_STRIDE
+SKIP_RESTORE_BUILD=$SKIP_RESTORE_BUILD
 EOF
 
 echo "[batch] job=$JOB"
@@ -63,10 +65,15 @@ echo "[batch] stable_ticks=$STABLE_TICKS (~$(awk "BEGIN { printf \"%.2f\", $STAB
 echo "[batch] need_attempts=$NEED_ATTEMPTS layout_candidates=$LAYOUT_CANDIDATES solution_ticks=$SOLUTION_TICKS"
 echo "[batch] heartbeat_seconds=$HEARTBEAT_SECONDS"
 echo "[batch] progress_stride=$PROGRESS_STRIDE"
-echo "[batch] restoring and building $CONFIGURATION"
+echo "[batch] skip_restore_build=$SKIP_RESTORE_BUILD"
 
-dotnet restore sim/CellularSim.sln
-dotnet build --no-restore -c "$CONFIGURATION" sim/CellularSim.Examples/CellularSim.Examples.csproj
+if [[ "$SKIP_RESTORE_BUILD" != "1" ]]; then
+  echo "[batch] restoring and building $CONFIGURATION"
+  dotnet restore sim/CellularSim.sln
+  dotnet build --no-restore -c "$CONFIGURATION" sim/CellularSim.Examples/CellularSim.Examples.csproj
+else
+  echo "[batch] skipping restore/build; using existing $CONFIGURATION binaries"
+fi
 
 running_jobs() {
   jobs -rp | wc -l

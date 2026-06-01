@@ -21,6 +21,7 @@ public sealed class PuzzleLevelOptions
     public int SourceQuantityPerTick { get; set; } = 4;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
+    public int GlowTtlTicks { get; set; } = 200;
     public int SwapRoundsPerTick { get; set; } = 4;
     public int NeedDesiredQuantity { get; set; } = 16;
     public int NeedOfferReserve { get; set; } = 4;
@@ -204,6 +205,11 @@ public static class PuzzleLevelGenerator
             throw new ArgumentOutOfRangeException(nameof(options), "Event capacity must be positive.");
         }
 
+        if (options.GlowTtlTicks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Glow TTL must be positive.");
+        }
+
         if (options.WinDurationTicks <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Win duration ticks must be positive.");
@@ -234,13 +240,8 @@ public static class PuzzleLevelGenerator
 
         var order = resources.ToArray();
         Shuffle(order, random);
-        var needsByResource = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        for (var i = 0; i < order.Length; i++)
-        {
-            var needs = SelectBalancedRingNeeds(order, i);
-            Shuffle(needs, random);
-            needsByResource[order[i]] = needs;
-        }
+        var positions = BuildCompactSolutionPositions(order.Length).ToArray();
+        var needsByResource = BuildBackboneGridNeeds(order, positions, random);
 
         return order.Select(resource =>
             new LevelCellDefinition(
@@ -376,7 +377,7 @@ public static class PuzzleLevelGenerator
     }
 
     private static string DescribeSummary(PuzzleSolverSummary summary) =>
-        $"stable={summary.StableAtEnd} won={summary.Won} finalSustained={summary.FinalSustainedTicks} "
+        $"stableAtEnd={summary.StableAtEnd} won={summary.Won} finalSustained={summary.FinalSustainedTicks} "
         + $"glowing={summary.GlowingCells} activeLast={summary.ActiveCellsInLastWindow} "
         + $"swaps={summary.TotalSwaps} reactions={summary.TotalReactions} score={summary.FinalScore} "
         + $"candidate={summary.CandidateIndex}";
@@ -747,7 +748,66 @@ public static class PuzzleLevelGenerator
     private static IEnumerable<GridPosition> BuildCompactSolutionPositions(int cellCount)
     {
         var (width, height) = ComputeCompactDimensions(cellCount);
+        if (width * height == cellCount && TryBuildHamiltonianCyclePositions(width, height, out var cyclePositions))
+        {
+            return cyclePositions;
+        }
+
         return BuildSnakePositions(width, height).Take(cellCount);
+    }
+
+    private static bool TryBuildHamiltonianCyclePositions(
+        int width,
+        int height,
+        out GridPosition[] positions)
+    {
+        if (width <= 1 || height <= 1 || width % 2 != 0 && height % 2 != 0)
+        {
+            positions = [];
+            return false;
+        }
+
+        if (height % 2 == 0)
+        {
+            positions = BuildEvenHeightCyclePositions(width, height).ToArray();
+            return true;
+        }
+
+        positions = BuildEvenHeightCyclePositions(height, width)
+            .Select(position => new GridPosition(position.Y, position.X))
+            .ToArray();
+        return true;
+    }
+
+    private static IEnumerable<GridPosition> BuildEvenHeightCyclePositions(int width, int height)
+    {
+        for (var x = 0; x < width; x++)
+        {
+            yield return new GridPosition(x, 0);
+        }
+
+        for (var y = 1; y < height; y++)
+        {
+            if (y % 2 == 1)
+            {
+                for (var x = width - 1; x >= 1; x--)
+                {
+                    yield return new GridPosition(x, y);
+                }
+            }
+            else
+            {
+                for (var x = 1; x < width; x++)
+                {
+                    yield return new GridPosition(x, y);
+                }
+            }
+        }
+
+        for (var y = height - 1; y >= 1; y--)
+        {
+            yield return new GridPosition(0, y);
+        }
     }
 
     private static IEnumerable<GridPosition> BuildSnakePositions(int width, int height)
@@ -788,6 +848,7 @@ public static class PuzzleLevelGenerator
             },
             Engine = new LevelEngineDocument
             {
+                GlowTtlTicks = options.GlowTtlTicks,
                 SwapRoundsPerTick = options.SwapRoundsPerTick,
                 NeedDesiredQuantity = options.NeedDesiredQuantity,
                 NeedOfferReserve = options.NeedOfferReserve,
@@ -880,25 +941,382 @@ public static class PuzzleLevelGenerator
         return resources;
     }
 
-    private static string[] SelectBalancedRingNeeds(IReadOnlyList<string> order, int index)
+    private static Dictionary<string, string[]> BuildBackboneGridNeeds(
+        IReadOnlyList<string> order,
+        IReadOnlyList<GridPosition> positions,
+        Random random)
     {
-        if (order.Count <= 4)
+        if (IsClosedOrthogonalCycle(positions))
         {
-            return Enumerable.Range(0, order.Count)
-                .Where(candidateIndex => candidateIndex != index)
-                .Select(candidateIndex => order[candidateIndex])
-                .ToArray();
+            return BuildCycleNeeds(order, positions, random);
         }
 
-        var previous = (index + order.Count - 1) % order.Count;
-        var next = (index + 1) % order.Count;
-        var nextRelay = (index + 2) % order.Count;
-        return
-        [
-            order[previous],
-            order[next],
-            order[nextRelay]
-        ];
+        for (var attempt = 0; attempt < 64; attempt++)
+        {
+            var incoming = order.ToDictionary(resource => resource, _ => 0, StringComparer.Ordinal);
+            var needs = order.ToDictionary(resource => resource, _ => new List<string>(3), StringComparer.Ordinal);
+            var positionByResource = new Dictionary<string, GridPosition>(StringComparer.Ordinal);
+            for (var i = 0; i < order.Count; i++)
+            {
+                positionByResource[order[i]] = positions[i];
+            }
+
+            for (var i = 0; i < order.Count; i++)
+            {
+                var source = order[i];
+                if (i > 0)
+                {
+                    AddBalancedNeed(needs[source], incoming, source, order[i - 1]);
+                }
+
+                if (i + 1 < order.Count)
+                {
+                    AddBalancedNeed(needs[source], incoming, source, order[i + 1]);
+                }
+            }
+
+            var filled = true;
+            while (needs.Values.Any(resourceNeeds => resourceNeeds.Count < 3))
+            {
+                var progressed = false;
+                var sources = order.Where(resource => needs[resource].Count < 3).ToArray();
+                Shuffle(sources, random);
+                foreach (var source in sources)
+                {
+                    var target = ChooseBalancedBackboneNeedTarget(
+                        source,
+                        order,
+                        needs,
+                        incoming,
+                        positionByResource,
+                        random);
+                    if (target is null)
+                    {
+                        continue;
+                    }
+
+                    progressed |= AddBalancedNeed(needs[source], incoming, source, target);
+                }
+
+                if (!progressed)
+                {
+                    filled = false;
+                    break;
+                }
+            }
+
+            if (filled
+                && needs.Values.All(resourceNeeds => resourceNeeds.Count == 3)
+                && incoming.Values.All(count => count == 3))
+            {
+                return needs.ToDictionary(
+                    pair => pair.Key,
+                    pair =>
+                    {
+                        var values = pair.Value.ToArray();
+                        Shuffle(values, random);
+                        return values;
+                    },
+                    StringComparer.Ordinal);
+            }
+        }
+
+        throw new InvalidOperationException("Could not build balanced local backbone needs.");
+    }
+
+    private static bool IsClosedOrthogonalCycle(IReadOnlyList<GridPosition> positions)
+    {
+        if (positions.Count <= 4)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < positions.Count; i++)
+        {
+            var next = positions[(i + 1) % positions.Count];
+            if (ManhattanDistance(positions[i], next) != 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int ManhattanDistance(GridPosition left, GridPosition right) =>
+        Math.Abs(left.X - right.X) + Math.Abs(left.Y - right.Y);
+
+    private static Dictionary<string, string[]> BuildCycleNeeds(
+        IReadOnlyList<string> order,
+        IReadOnlyList<GridPosition> positions,
+        Random random)
+    {
+        var needs = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        for (var i = 0; i < order.Count; i++)
+        {
+            var values = new[]
+            {
+                order[(i - 1 + order.Count) % order.Count],
+                order[(i + 1) % order.Count],
+                order[(i + 2) % order.Count]
+            };
+            Shuffle(values, random);
+            needs[order[i]] = values;
+        }
+
+        return needs;
+    }
+
+    private static bool AddBalancedNeed(
+        List<string> needs,
+        Dictionary<string, int> incoming,
+        string source,
+        string target)
+    {
+        if (target == source
+            || needs.Count >= 3
+            || incoming[target] >= 3
+            || needs.Contains(target, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        needs.Add(target);
+        incoming[target]++;
+        return true;
+    }
+
+    private static void AddNeed(List<string> needs, string source, string target)
+    {
+        if (target == source || needs.Count >= 3 || needs.Contains(target, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        needs.Add(target);
+    }
+
+    private static string? ChooseBalancedBackboneNeedTarget(
+        string source,
+        IReadOnlyList<string> order,
+        IReadOnlyDictionary<string, List<string>> needs,
+        IReadOnlyDictionary<string, int> incoming,
+        IReadOnlyDictionary<string, GridPosition> positionByResource,
+        Random random)
+    {
+        var bestScore = int.MinValue;
+        string? bestTarget = null;
+        var sourcePosition = positionByResource[source];
+        foreach (var target in order)
+        {
+            if (target == source
+                || needs[source].Contains(target, StringComparer.Ordinal)
+                || incoming[target] >= 3)
+            {
+                continue;
+            }
+
+            var targetPosition = positionByResource[target];
+            var distance = Math.Abs(sourcePosition.X - targetPosition.X) + Math.Abs(sourcePosition.Y - targetPosition.Y);
+            var score = -distance * 200;
+            if (distance == 1)
+            {
+                score += 500;
+            }
+            else if (distance == 2)
+            {
+                score += 220;
+            }
+
+            if (needs[target].Contains(source, StringComparer.Ordinal))
+            {
+                score += 80;
+            }
+
+            score -= incoming[target] * 60;
+            score += random.Next(40);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = target;
+            }
+        }
+
+        return bestTarget;
+    }
+
+    private static void FillNeedsFromCandidates(
+        string source,
+        List<string> needs,
+        IEnumerable<string> candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            AddNeed(needs, source, candidate);
+            if (needs.Count == 3)
+            {
+                return;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetOrthogonalResourceCandidates(
+        GridPosition sourcePosition,
+        IReadOnlyDictionary<GridPosition, string> resourceByPosition,
+        Random random)
+    {
+        var candidates = new List<string>(4);
+        foreach (var neighbor in EnumerateOrthogonalNeighbors(sourcePosition))
+        {
+            if (resourceByPosition.TryGetValue(neighbor, out var resource))
+            {
+                candidates.Add(resource);
+            }
+        }
+
+        Shuffle(candidates, random);
+        return candidates;
+    }
+
+    private static IEnumerable<string> GetDiagonalResourceCandidates(
+        GridPosition sourcePosition,
+        IReadOnlyDictionary<GridPosition, string> resourceByPosition,
+        Random random)
+    {
+        var candidates = new List<string>(4);
+        foreach (var diagonal in EnumerateDiagonalNeighbors(sourcePosition))
+        {
+            if (resourceByPosition.TryGetValue(diagonal, out var resource))
+            {
+                candidates.Add(resource);
+            }
+        }
+
+        Shuffle(candidates, random);
+        return candidates;
+    }
+
+    private static IEnumerable<GridPosition> EnumerateDiagonalNeighbors(GridPosition position)
+    {
+        yield return new GridPosition(position.X + 1, position.Y + 1);
+        yield return new GridPosition(position.X - 1, position.Y + 1);
+        yield return new GridPosition(position.X + 1, position.Y - 1);
+        yield return new GridPosition(position.X - 1, position.Y - 1);
+    }
+
+    private static IEnumerable<string> GetNearestResourceCandidates(
+        string source,
+        GridPosition sourcePosition,
+        IReadOnlyList<string> order,
+        IReadOnlyDictionary<string, GridPosition> positionByResource,
+        Random random)
+    {
+        return order
+            .Where(target => target != source)
+            .Select(target =>
+            {
+                var targetPosition = positionByResource[target];
+                var distance = Math.Abs(sourcePosition.X - targetPosition.X)
+                    + Math.Abs(sourcePosition.Y - targetPosition.Y);
+                return (Target: target, Distance: distance, TieBreak: random.Next());
+            })
+            .OrderBy(item => item.Distance)
+            .ThenBy(item => item.TieBreak)
+            .Select(item => item.Target)
+            .ToArray();
+    }
+
+    private static Dictionary<string, string[]> BuildBalancedGridNeeds(
+        IReadOnlyList<string> order,
+        IReadOnlyList<GridPosition> positions,
+        Random random)
+    {
+        for (var attempt = 0; attempt < 64; attempt++)
+        {
+            var incoming = order.ToDictionary(resource => resource, _ => 0, StringComparer.Ordinal);
+            var needs = order.ToDictionary(resource => resource, _ => new List<string>(3), StringComparer.Ordinal);
+            var positionByResource = new Dictionary<string, GridPosition>(StringComparer.Ordinal);
+            for (var i = 0; i < order.Count; i++)
+            {
+                positionByResource[order[i]] = positions[i];
+            }
+
+            var filled = true;
+            for (var round = 0; round < 3 && filled; round++)
+            {
+                var sources = order.ToArray();
+                Shuffle(sources, random);
+                foreach (var source in sources)
+                {
+                    var target = ChooseGridNeedTarget(source, order, needs, incoming, positionByResource, random);
+                    if (target is null)
+                    {
+                        filled = false;
+                        break;
+                    }
+
+                    needs[source].Add(target);
+                    incoming[target]++;
+                }
+            }
+
+            if (filled
+                && needs.Values.All(resourceNeeds => resourceNeeds.Count == 3)
+                && incoming.Values.All(count => count == 3))
+            {
+                return needs.ToDictionary(
+                    pair => pair.Key,
+                    pair =>
+                    {
+                        var values = pair.Value.ToArray();
+                        Shuffle(values, random);
+                        return values;
+                    },
+                    StringComparer.Ordinal);
+            }
+        }
+
+        throw new InvalidOperationException("Could not build balanced grid-aware needs.");
+    }
+
+    private static string? ChooseGridNeedTarget(
+        string source,
+        IReadOnlyList<string> order,
+        IReadOnlyDictionary<string, List<string>> needs,
+        IReadOnlyDictionary<string, int> incoming,
+        IReadOnlyDictionary<string, GridPosition> positionByResource,
+        Random random)
+    {
+        var bestScore = int.MinValue;
+        string? bestTarget = null;
+        foreach (var target in order)
+        {
+            if (target == source
+                || needs[source].Contains(target, StringComparer.Ordinal)
+                || incoming[target] >= 3)
+            {
+                continue;
+            }
+
+            var sourcePosition = positionByResource[source];
+            var targetPosition = positionByResource[target];
+            var distance = Math.Abs(sourcePosition.X - targetPosition.X) + Math.Abs(sourcePosition.Y - targetPosition.Y);
+            var score = -distance * 100;
+            if (needs[target].Contains(source, StringComparer.Ordinal))
+            {
+                score += 90;
+            }
+
+            score -= incoming[target] * 20;
+            score += random.Next(30);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = target;
+            }
+        }
+
+        return bestTarget;
     }
 
     private static int CountUsefulAdjacentPairs(
@@ -999,6 +1417,9 @@ public static class PuzzleLevelGenerator
 
     private sealed class LevelEngineDocument
     {
+        [JsonPropertyName("glowTtlTicks")]
+        public int GlowTtlTicks { get; set; }
+
         [JsonPropertyName("swapRoundsPerTick")]
         public int SwapRoundsPerTick { get; set; }
 

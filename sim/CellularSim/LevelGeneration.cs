@@ -334,10 +334,10 @@ public static class PuzzleLevelGenerator
             var rank = summary.StableAtEnd ? 250_000_000_000L : 0;
             rank += summary.Won ? 100_000_000_000L : 0;
             rank += summary.FinalSustainedTicks * 3_000_000_000L;
-            rank += CountReciprocalAdjacentPairs(result.Cells, result.Layout) * 2_000_000_000L;
-            rank += CountUsefulAdjacentPairs(result.Cells, result.Layout) * 150_000_000L;
-            rank += summary.ActiveCellsInLastWindow * 60_000_000L;
-            rank += summary.GlowingCells * 40_000_000L;
+            rank += summary.ActiveCellsInLastWindow * 250_000_000L;
+            rank += summary.GlowingCells * 150_000_000L;
+            rank += CountReciprocalAdjacentPairs(result.Cells, result.Layout) * 40_000_000L;
+            rank += CountUsefulAdjacentPairs(result.Cells, result.Layout) * 10_000_000L;
             rank += summary.TotalReactions * 200_000L;
             rank += summary.AdjacentPairs * 100_000L;
             rank += summary.TotalSwaps * 100L;
@@ -530,30 +530,34 @@ public static class PuzzleLevelGenerator
             return BuildFoldedLineSolutionLayout(cells, foldedWidths[foldedIndex]);
         }
 
-        if (foldedIndex == foldedWidths.Count)
-        {
-            return BuildLineSolutionLayout(cells);
-        }
-
         return BuildRandomSolutionLayout(cells, random);
     }
 
     private static IReadOnlyList<int> BuildFoldedLineWidths(int cellCount)
     {
         var (compactWidth, _) = ComputeCompactDimensions(cellCount);
-        var maxWidth = Math.Min(cellCount, Math.Max(compactWidth, (cellCount + 1) / 2));
-        var preferredWidth = Math.Min(maxWidth, compactWidth + 2);
-        var widths = new List<int> { preferredWidth };
+        var (startWidth, _) = ComputeStartingLayoutDimensions(cellCount);
+        var maxWidth = Math.Min(cellCount, startWidth);
+        var widths = new List<int>();
+
+        AddWidthIfValid(widths, compactWidth + 1, maxWidth);
+        AddWidthIfValid(widths, compactWidth, maxWidth);
+        AddWidthIfValid(widths, compactWidth + 2, maxWidth);
 
         for (var width = compactWidth; width <= maxWidth; width++)
         {
-            if (!widths.Contains(width))
-            {
-                widths.Add(width);
-            }
+            AddWidthIfValid(widths, width, maxWidth);
         }
 
         return widths;
+    }
+
+    private static void AddWidthIfValid(List<int> widths, int width, int maxWidth)
+    {
+        if (width >= 2 && width <= maxWidth && !widths.Contains(width))
+        {
+            widths.Add(width);
+        }
     }
 
     private static LevelLayout BuildFoldedLineSolutionLayout(

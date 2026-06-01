@@ -85,9 +85,12 @@ Milestone 2: Godot visual MVP shell on top of the deterministic C# simulation wo
 - [x] Keep searching need graphs when the first winning layout is only a long one-row fallback.
 - [x] Generate and ship Puzzle levels 11-20 with verified solution fixtures and ASCII solution maps.
 - [x] Review shipped solution maps so levels 1-20 fit inside their playable start grids.
+- [x] Add stable-at-end puzzle generation controls for rejecting transient win layouts.
+- [x] Add remote tmux batch scripts and `sim/BATCH.md` for 15-worker stable level generation.
 
 ## In Progress
 
+- [ ] Regenerate and review Puzzle levels 1-20 with at least 84 final sustained alive ticks.
 - [ ] Generate Puzzle levels 21+ with more varied geometry after Level 1-20 playtesting.
 - [ ] Optimize the C# bridge snapshot format for large boards after the visual contract settles.
 - [ ] Use generated scenarios to search for stable 100+ cell configurations.

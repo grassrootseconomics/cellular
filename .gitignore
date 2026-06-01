@@ -4,3 +4,4 @@ build/
 .setup/
 bin/
 obj/
+sim/batches/

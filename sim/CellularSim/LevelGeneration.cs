@@ -21,6 +21,8 @@ public sealed class PuzzleLevelOptions
     public int SourceQuantityPerTick { get; set; } = 4;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
+    public int WinDurationTicks { get; set; } = 3;
+    public int RequiredAliveTicksAtEnd { get; set; }
 }
 
 public sealed record GeneratedPuzzleLevel(
@@ -71,7 +73,11 @@ public sealed record PuzzleSolverSummary(
     int ActiveCellsInLastWindow,
     int StrainPenalty,
     int FinalScore,
-    int AdjacentPairs);
+    int AdjacentPairs,
+    int WinDurationTicks,
+    int RequiredAliveTicksAtEnd,
+    int FinalSustainedTicks,
+    bool StableAtEnd);
 
 public static class PuzzleLevelGenerator
 {
@@ -101,13 +107,13 @@ public static class PuzzleLevelGenerator
                 bestOverall = result;
             }
 
-            if (result.Summary.Won && IsPreferredWinningLayout(result.Layout, cells.Count))
+            if (MeetsWinRequirements(result.Summary) && IsPreferredWinningLayout(result.Layout, cells.Count))
             {
                 return BuildGeneratedLevel(options, resources, cells, result);
             }
         }
 
-        if (bestOverall is not null && bestOverall.Summary.Won)
+        if (bestOverall is not null && MeetsWinRequirements(bestOverall.Summary))
         {
             return BuildGeneratedLevel(options, resources, bestOverall.Cells, bestOverall);
         }
@@ -122,7 +128,8 @@ public static class PuzzleLevelGenerator
 
         throw new InvalidOperationException(
             $"No winning layout found for puzzle level {options.LevelNumber} after "
-            + $"{options.NeedAttemptLimit} need attempts and {options.LayoutCandidateLimit} layout candidates per attempt.");
+            + $"{options.NeedAttemptLimit} need attempts and {options.LayoutCandidateLimit} layout candidates per attempt "
+            + $"with winDurationTicks={options.WinDurationTicks} and requiredAliveTicksAtEnd={options.RequiredAliveTicksAtEnd}.");
     }
 
     public static IReadOnlyList<LevelCellDefinition> GenerateCellDefinitions(PuzzleLevelOptions options)
@@ -163,6 +170,16 @@ public static class PuzzleLevelGenerator
         if (options.EventCapacity <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Event capacity must be positive.");
+        }
+
+        if (options.WinDurationTicks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Win duration ticks must be positive.");
+        }
+
+        if (options.RequiredAliveTicksAtEnd < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Required alive ticks at end cannot be negative.");
         }
     }
 
@@ -212,6 +229,10 @@ public static class PuzzleLevelGenerator
             loaded.Options.EventCapacity = options.EventCapacity;
             var engine = new CellularEngine(loaded.World, loaded.Options);
             var summary = SimulationSummaryRunner.Run(engine, options.TicksPerCandidate);
+            var finalSustainedTicks = engine.Circuit.SustainedTicks;
+            var stableAtEnd = engine.Circuit.IsWon
+                && engine.Circuit.IsAliveThisTick
+                && finalSustainedTicks >= options.RequiredAliveTicksAtEnd;
             var solverSummary = new PuzzleSolverSummary(
                 engine.Circuit.IsWon,
                 false,
@@ -225,7 +246,11 @@ public static class PuzzleLevelGenerator
                 summary.ActiveCellsInLastWindow,
                 summary.StrainPenalty,
                 summary.FinalScore,
-                summary.AdjacentPairs);
+                summary.AdjacentPairs,
+                options.WinDurationTicks,
+                options.RequiredAliveTicksAtEnd,
+                finalSustainedTicks,
+                stableAtEnd);
             var result = new SearchResult(cells, layout, fixtureJson, loaded, solverSummary);
             if (best is null || IsBetter(result, best))
             {
@@ -249,7 +274,9 @@ public static class PuzzleLevelGenerator
         static long Rank(SearchResult result)
         {
             var summary = result.Summary;
-            var rank = summary.Won ? 100_000_000_000L : 0;
+            var rank = summary.StableAtEnd ? 250_000_000_000L : 0;
+            rank += summary.Won ? 100_000_000_000L : 0;
+            rank += summary.FinalSustainedTicks * 3_000_000_000L;
             rank += CountReciprocalAdjacentPairs(result.Cells, result.Layout) * 2_000_000_000L;
             rank += CountUsefulAdjacentPairs(result.Cells, result.Layout) * 150_000_000L;
             rank += summary.ActiveCellsInLastWindow * 60_000_000L;
@@ -268,6 +295,10 @@ public static class PuzzleLevelGenerator
 
         return Rank(candidate) > Rank(currentBest);
     }
+
+    private static bool MeetsWinRequirements(PuzzleSolverSummary summary) =>
+        summary.Won
+        && (summary.RequiredAliveTicksAtEnd <= 0 || summary.StableAtEnd);
 
     private static bool IsPreferredWinningLayout(LevelLayout layout, int cellCount)
     {
@@ -539,7 +570,7 @@ public static class PuzzleLevelGenerator
             {
                 RequiredCells = cells.Select(cell => cell.Id).ToList(),
                 RequiredResources = resources.ToList(),
-                DurationTicks = 3
+                DurationTicks = options.WinDurationTicks
             }
         };
 

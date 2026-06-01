@@ -255,7 +255,7 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
         return true;
     }
 
-    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity"))
+    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity" or "--win-duration-ticks" or "--required-alive-ticks-at-end"))
     {
         return false;
     }
@@ -296,6 +296,12 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
             break;
         case "--event-capacity":
             options.EventCapacity = value;
+            break;
+        case "--win-duration-ticks":
+            options.WinDurationTicks = value;
+            break;
+        case "--required-alive-ticks-at-end":
+            options.RequiredAliveTicksAtEnd = value;
             break;
     }
 
@@ -810,6 +816,10 @@ static string RenderPuzzleSummaryText(GeneratedPuzzleLevel level)
     builder.AppendLine($"  candidate index: {summary.CandidateIndex}");
     builder.AppendLine($"  candidates evaluated in winning attempt: {summary.CandidateCount}");
     builder.AppendLine($"  ticks per candidate: {summary.TicksPerCandidate}");
+    builder.AppendLine($"  win duration ticks: {summary.WinDurationTicks}");
+    builder.AppendLine($"  required alive ticks at end: {summary.RequiredAliveTicksAtEnd}");
+    builder.AppendLine($"  final sustained ticks: {summary.FinalSustainedTicks}");
+    builder.AppendLine($"  stable at end: {summary.StableAtEnd}");
     builder.AppendLine($"  glowing cells: {summary.GlowingCells}/{level.Definition.Cells.Count}");
     builder.AppendLine($"  swaps: {summary.TotalSwaps}");
     builder.AppendLine($"  reactions: {summary.TotalReactions}");

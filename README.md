@@ -34,6 +34,7 @@ Run the Godot project manually from the .NET build of Godot. The main scene is `
 - [PLANS.md](PLANS.md): current milestone, status, and next work.
 - [sim/POOLS.md](sim/POOLS.md): pool, slot, swap, and reaction semantics.
 - [sim/DEBUG.md](sim/DEBUG.md): fixture inspection, ASCII maps, generated scenarios.
+- [sim/BATCH.md](sim/BATCH.md): remote tmux batch workflow for stable puzzle-level generation.
 - [sim/SCORING.md](sim/SCORING.md): current score and stability calculations.
 - [sim/TESTING.md](sim/TESTING.md): unit/proof test map and fixture rules.
 - [sim/PERFORMANCE.md](sim/PERFORMANCE.md): current hot-path constraints and next optimizations.

@@ -15,7 +15,7 @@ const RESOURCE_COLORS := [
 	Color(0.92, 0.30, 0.50, 1.0),
 	Color(0.24, 0.80, 0.56, 1.0)
 ]
-const SIM_TICK_SECONDS := 0.18
+const SIM_TICK_SECONDS := 0.12
 const SWAP_VISUAL_TTL_TICKS := 10.0
 const REACTION_VISUAL_TTL_TICKS := 10.0
 const NEED_STATE_MISSING := "missing"
@@ -59,6 +59,7 @@ var _back_button: Button = null
 var _reset_button: Button = null
 var _hint_button: Button = null
 var _circuit_button: Button = null
+var _last_button: Button = null
 var _next_button: Button = null
 var _level_label: Label = null
 var _status_label: Label = null
@@ -72,6 +73,7 @@ var _sim_status_message := ""
 var _hint_pair: Array[String] = []
 var _hint_cursor := 0
 var _hint_text := ""
+var _solution_positions: Dictionary = {}
 var _resource_mark_mode := MARK_MODE_LETTERS
 var _circuit_overlay_enabled := true
 var _pip_angle_by_key: Dictionary = {}
@@ -124,6 +126,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			queue_redraw()
 		elif key_event.keycode == KEY_C:
 			_toggle_circuit_overlay()
+		elif key_event.keycode == KEY_H:
+			_on_hint_pressed()
 
 
 func _create_hud() -> void:
@@ -151,10 +155,16 @@ func _create_hud() -> void:
 	_circuit_button.pressed.connect(_toggle_circuit_overlay)
 	add_child(_circuit_button)
 
+	_last_button = Button.new()
+	_last_button.name = "LastLevelButton"
+	_last_button.text = "Last Level"
+	_last_button.pressed.connect(_on_last_pressed)
+	add_child(_last_button)
+
 	_next_button = Button.new()
 	_next_button.name = "NextLevelButton"
 	_next_button.text = "Next Level"
-	_next_button.visible = false
+	_next_button.visible = true
 	_next_button.pressed.connect(_on_next_pressed)
 	add_child(_next_button)
 
@@ -202,6 +212,7 @@ func _layout_hud() -> void:
 	_style_button(_reset_button)
 	_style_button(_hint_button)
 	_style_button(_circuit_button)
+	_style_button(_last_button)
 	_style_button(_next_button)
 	if is_instance_valid(_back_button):
 		_back_button.position = Vector2(margin, margin)
@@ -216,11 +227,16 @@ func _layout_hud() -> void:
 	if is_instance_valid(_reset_button):
 		_reset_button.position = Vector2(view_size.x - 116.0 - margin, margin)
 		_reset_button.size = Vector2(116, 44)
+	if is_instance_valid(_last_button):
+		_last_button.custom_minimum_size = Vector2(142, 44)
+		_last_button.position = Vector2(view_size.x - 142.0 - margin, margin + 52.0)
+		_last_button.size = Vector2(142, 44)
+		_last_button.disabled = _level_number <= 1
 	if is_instance_valid(_next_button):
 		_next_button.custom_minimum_size = Vector2(142, 44)
-		_next_button.position = Vector2(view_size.x - 142.0 - margin, margin + 52.0)
+		_next_button.position = Vector2(view_size.x - 142.0 - margin, margin + 104.0)
 		_next_button.size = Vector2(142, 44)
-		_next_button.visible = _solved
+		_next_button.visible = true
 	if is_instance_valid(_level_label):
 		_level_label.position = Vector2(144, 14)
 		_level_label.size = Vector2(maxf(1.0, view_size.x - 288.0), 54)
@@ -241,6 +257,7 @@ func _load_level(level_number: int) -> void:
 	_needs.clear()
 	_positions.clear()
 	_produced_by_cell.clear()
+	_solution_positions.clear()
 	_sim_snapshot.clear()
 	_cell_state_by_id.clear()
 	_sim_tick_accum = 0.0
@@ -272,6 +289,7 @@ func _load_level(level_number: int) -> void:
 	for index in range(_cells.size()):
 		_positions[_cells[index]] = starts[index]
 	_try_load_csharp_level()
+	_load_solution_layout_for_level()
 	_update_level_text()
 
 
@@ -307,6 +325,36 @@ func _load_fixture_json_for_level() -> String:
 		if file != null:
 			return file.get_as_text()
 	return ""
+
+
+func _load_solution_layout_for_level() -> void:
+	_solution_positions.clear()
+	var level_path := "res://levels/puzzle/level-%03d-definition.json" % _level_number
+	if not FileAccess.file_exists(level_path):
+		return
+	var file := FileAccess.open(level_path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return
+	var document: Dictionary = parsed as Dictionary
+	var layout_value: Variant = document.get("solutionLayout", {})
+	if not layout_value is Dictionary:
+		return
+	var layout: Dictionary = layout_value as Dictionary
+	var cells_value: Variant = layout.get("cells", [])
+	if not cells_value is Array:
+		return
+	var cells: Array = cells_value as Array
+	for cell_value in cells:
+		if not cell_value is Dictionary:
+			continue
+		var cell_doc := cell_value as Dictionary
+		var cell_id := str(cell_doc.get("cellId", ""))
+		if cell_id.is_empty():
+			continue
+		_solution_positions[cell_id] = Vector2i(int(cell_doc.get("x", 0)), int(cell_doc.get("y", 0)))
 
 
 func _apply_fixture_document_to_visual_model(fixture_json: String) -> void:
@@ -436,10 +484,13 @@ func _make_start_positions(count: int) -> Array[Vector2i]:
 
 func _update_level_text() -> void:
 	if is_instance_valid(_level_label):
-		_level_label.text = str("Cellular Puzzle Level ", _level_number)
+		_level_label.text = str("Level ", _level_number)
 	if is_instance_valid(_status_label):
 		if _solved:
-			_status_label.text = "Circuit complete"
+			if _circuit_alive_now():
+				_status_label.text = "Circuit complete"
+			else:
+				_status_label.text = "Circuit complete - flow broke apart"
 		elif not _hint_text.is_empty():
 			_status_label.text = _hint_text
 		elif _using_csharp_sim:
@@ -448,17 +499,26 @@ func _update_level_text() -> void:
 			_status_label.text = "Prototype fallback: C# sim unavailable"
 		else:
 			_status_label.text = "Form one connected circuit"
+	if is_instance_valid(_last_button):
+		_last_button.disabled = _level_number <= 1
 	if is_instance_valid(_next_button):
-		_next_button.visible = _solved
+		_next_button.visible = true
 	if is_instance_valid(_flow_label):
 		if _using_csharp_sim:
 			var swaps_value: Variant = _sim_snapshot.get("swaps", [])
 			var swap_count := (swaps_value as Array).size() if swaps_value is Array else 0
-			_flow_label.text = str("Tick ", int(_sim_snapshot.get("tick", 0)), "  |  Recent swaps ", swap_count, "  |  Score ", int(_sim_snapshot.get("score", 0)))
+			var circuit_state: String = "alive" if _circuit_alive_now() else ("complete" if _solved else "forming")
+			_flow_label.text = str("Tick ", int(_sim_snapshot.get("tick", 0)), "  |  Recent swaps ", swap_count, "  |  Score ", int(_sim_snapshot.get("score", 0)), "  |  Circuit ", circuit_state)
 		else:
 			var met := _count_met_needs()
 			var total := _cells.size() * 3
 			_flow_label.text = str("Flow ", met, "/", total, " needs  |  Swaps ", _active_swap_pairs().size())
+
+
+func _circuit_alive_now() -> bool:
+	if _using_csharp_sim:
+		return bool(_sim_snapshot.get("alive", false))
+	return _solved
 
 
 func _draw() -> void:
@@ -541,7 +601,7 @@ func _draw_circuit_flow_groups() -> void:
 	if edges.is_empty():
 		return
 
-	var alive_or_won := bool(diagnostics.get("alive", false)) or bool(diagnostics.get("won", false))
+	var alive_now: bool = bool(diagnostics.get("alive", false))
 	var window_ticks := maxf(1.0, float(_sim_snapshot.get("tick", 0)) - float(diagnostics.get("sinceTick", 0)))
 	var weak_group_by_cell: Dictionary = {}
 	var weak_color_by_group: Dictionary = {}
@@ -568,7 +628,6 @@ func _draw_circuit_flow_groups() -> void:
 			var cells: Array = _strings_from_variant_array(group_value)
 			if cells.size() < 2:
 				continue
-			var is_full_group := _flow_group_contains_all_cells(cells)
 			var color := _circuit_group_color(0)
 			color_by_group[active_group_index] = color
 			cells_by_group[active_group_index] = cells
@@ -589,7 +648,7 @@ func _draw_circuit_flow_groups() -> void:
 		if alpha_source_group < 0 or alpha_source_group != alpha_target_group:
 			continue
 		var alpha_age := maxf(0.0, float(alpha_edge.get("ageTicks", 0.0)))
-		var edge_alpha := clampf(1.0 - alpha_age / window_ticks, 0.0, 1.0)
+		var edge_alpha := _circuit_age_alpha(alpha_age, window_ticks)
 		alpha_by_group[alpha_source_group] = maxf(float(alpha_by_group.get(alpha_source_group, 0.0)), edge_alpha)
 
 	for group_key in cells_by_group.keys():
@@ -605,7 +664,7 @@ func _draw_circuit_flow_groups() -> void:
 		if color_value is Color:
 			color = color_value as Color
 		var is_full_group := _flow_group_contains_all_cells(cells)
-		_draw_circuit_component_halo(cells, color, is_full_group and alive_or_won, group_alpha)
+		_draw_circuit_component_halo(cells, color, is_full_group and alive_now, group_alpha)
 
 	for edge_value in edges:
 		if not edge_value is Dictionary:
@@ -616,7 +675,7 @@ func _draw_circuit_flow_groups() -> void:
 		if source.is_empty() or target.is_empty():
 			continue
 		var age := maxf(0.0, float(edge.get("ageTicks", 0.0)))
-		var alpha := clampf(1.0 - age / window_ticks, 0.0, 1.0)
+		var alpha := _circuit_age_alpha(age, window_ticks)
 		if alpha <= 0.0:
 			continue
 		var source_group := int(strong_group_by_cell.get(source, -1))
@@ -636,7 +695,7 @@ func _draw_circuit_flow_groups() -> void:
 				color = weak_color_value as Color
 		var start := _visual_cell_center(source)
 		var finish := _visual_cell_center(target)
-		_draw_directed_circuit_line(start, finish, color, alpha, same_strong_group and alive_or_won, not same_strong_group, same_weak_group)
+		_draw_directed_circuit_line(start, finish, color, alpha, same_strong_group and alive_now, not same_strong_group, same_weak_group)
 
 
 func _circuit_group_color(index: int) -> Color:
@@ -646,27 +705,88 @@ func _circuit_group_color(index: int) -> Color:
 	return Color(0.30, 1.0, 0.84, 1.0)
 
 
+func _circuit_age_alpha(age: float, window_ticks: float) -> float:
+	var raw: float = clampf(1.0 - age / maxf(1.0, window_ticks), 0.0, 1.0)
+	return float(pow(raw, 1.65))
+
+
 func _draw_circuit_component_halo(cells: Array, color: Color, complete: bool, strength: float) -> void:
 	strength = clampf(strength, 0.0, 1.0)
-	var pulse := 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
-	var fill_alpha := (0.10 + pulse * 0.03) * strength
-	var rim_alpha := (0.40 + pulse * 0.12) * strength
-	var radius := _tile_size * (0.62 if not complete else 0.70)
-	var rim_radius := _tile_size * (0.53 if not complete else 0.59)
-	var width := 4.2
-	if complete:
-		fill_alpha = (0.26 + pulse * 0.10) * strength
-		rim_alpha = (0.72 + pulse * 0.20) * strength
-		width = 6.0
+	if strength <= 0.0:
+		return
+	var tile_keys: Dictionary = {}
 	for cell_value in cells:
 		var cell := str(cell_value)
-		var center := _visual_cell_center(cell)
+		tile_keys[_component_tile_key(_get_cell_tile(cell))] = true
+
+	var pulse := 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
+	var fill_alpha := (0.13 + pulse * 0.04) * strength
+	var boundary_alpha := (0.56 + pulse * 0.14) * strength
+	var heat_radius := _tile_size * 0.56
+	var connector_width := _tile_size * 0.88
+	var boundary_width := 5.0
+	if complete:
+		fill_alpha = (0.28 + pulse * 0.10) * strength
+		boundary_alpha = (0.82 + pulse * 0.16) * strength
+		heat_radius = _tile_size * 0.64
+		connector_width = _tile_size * 0.96
+		boundary_width = 7.0
+
+	var heat := color
+	heat.a = fill_alpha
+	for cell_value in cells:
+		var cell := str(cell_value)
+		var tile := _get_cell_tile(cell)
+		var center := _tile_center(tile)
+		var right_tile := Vector2i(tile.x + 1, tile.y)
+		if _component_has_tile(tile_keys, right_tile):
+			draw_line(center, _tile_center(right_tile), heat, connector_width, true)
+		var down_tile := Vector2i(tile.x, tile.y + 1)
+		if _component_has_tile(tile_keys, down_tile):
+			draw_line(center, _tile_center(down_tile), heat, connector_width, true)
+
+	for cell_value in cells:
+		var cell := str(cell_value)
+		var center := _tile_center(_get_cell_tile(cell))
 		var halo := color
 		halo.a = fill_alpha
-		draw_circle(center, radius, halo)
-		var outer := color.lightened(0.22)
-		outer.a = rim_alpha
-		draw_arc(center, rim_radius, 0.0, TAU, 56, outer, width, true)
+		draw_circle(center, heat_radius, halo)
+
+	for cell_value in cells:
+		var cell := str(cell_value)
+		var tile := _get_cell_tile(cell)
+		var tile_origin := _board_rect.position + Vector2(tile) * _tile_size
+		var top_left := tile_origin
+		var top_right := tile_origin + Vector2(_tile_size, 0.0)
+		var bottom_left := tile_origin + Vector2(0.0, _tile_size)
+		var bottom_right := tile_origin + Vector2(_tile_size, _tile_size)
+		if not _component_has_tile(tile_keys, Vector2i(tile.x, tile.y - 1)):
+			_draw_component_boundary_segment(top_left, top_right, color, boundary_alpha, boundary_width)
+		if not _component_has_tile(tile_keys, Vector2i(tile.x + 1, tile.y)):
+			_draw_component_boundary_segment(top_right, bottom_right, color, boundary_alpha, boundary_width)
+		if not _component_has_tile(tile_keys, Vector2i(tile.x, tile.y + 1)):
+			_draw_component_boundary_segment(bottom_right, bottom_left, color, boundary_alpha, boundary_width)
+		if not _component_has_tile(tile_keys, Vector2i(tile.x - 1, tile.y)):
+			_draw_component_boundary_segment(bottom_left, top_left, color, boundary_alpha, boundary_width)
+
+
+func _component_tile_key(tile: Vector2i) -> String:
+	return str(tile.x, ":", tile.y)
+
+
+func _component_has_tile(tile_keys: Dictionary, tile: Vector2i) -> bool:
+	return bool(tile_keys.get(_component_tile_key(tile), false))
+
+
+func _draw_component_boundary_segment(start: Vector2, finish: Vector2, color: Color, alpha: float, width: float) -> void:
+	var glow := color
+	glow.a = alpha * 0.32
+	draw_line(start, finish, glow, width + 9.0, true)
+	var shadow := Color(0.00, 0.07, 0.08, alpha * 0.50)
+	draw_line(start, finish, shadow, width + 3.0, true)
+	var core := color.lightened(0.30)
+	core.a = alpha
+	draw_line(start, finish, core, width, true)
 
 
 func _strings_from_variant_array(value: Variant) -> Array:
@@ -840,7 +960,7 @@ func _draw_electric_flow_line(start: Vector2, finish: Vector2, color: Color, alp
 	var normal := delta.orthogonal().normalized()
 	var phase := Time.get_ticks_msec() / 82.0
 	var electric_color := color
-	electric_color.a = 0.24 + alpha * (0.38 if _solved else 0.26)
+	electric_color.a = 0.24 + alpha * (0.38 if _circuit_alive_now() else 0.26)
 	draw_line(start, finish, electric_color, 3.0 + alpha * 2.0, true)
 	for index in range(2):
 		var wave := sin(phase + float(index) * PI)
@@ -868,19 +988,20 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 	var radius := _tile_size * (0.39 if not dragging else 0.43)
 	var produced_resource := _cell_produced_resource(cell)
 	var color := _resource_color(produced_resource)
+	var live_complete: bool = _circuit_alive_now()
 	var glow_alpha := 0.46 if _cell_has_all_needs(cell) else 0.18
 	if _using_csharp_sim:
 		glow_alpha = 0.56 if _cell_is_glowing(cell) else 0.16
-	if _solved:
+	if live_complete:
 		glow_alpha = 0.72
 	var reaction_alpha := _recent_reaction_alpha(cell)
 	if reaction_alpha > 0.0:
 		glow_alpha = maxf(glow_alpha, 0.52 + reaction_alpha * 0.28)
 		draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18))
-	draw_circle(center, radius * (1.16 + (0.04 if _solved else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28))
+	draw_circle(center, radius * (1.16 + (0.04 if live_complete else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72))
 	draw_arc(center, radius * 0.96, 0.0, TAU, 64, Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
-	if _solved:
+	if live_complete:
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
 		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, 64, Color(0.62, 1.0, 0.88, 0.28 + solved_pulse * 0.18), 3.0, true)
 	if _using_csharp_sim:
@@ -1556,14 +1677,142 @@ func _cell_has_all_needs(cell: String) -> bool:
 
 
 func _find_matching_pairs() -> Array:
-	var pairs := []
+	var strong_group_by_cell := _diagnostic_group_by_cell("strongGroups")
+	var weak_group_by_cell := _diagnostic_group_by_cell("weakGroups")
+	var pairs := _best_solution_hint_pairs(strong_group_by_cell, weak_group_by_cell)
+	if not pairs.is_empty():
+		return pairs
+	return _best_resource_hint_pairs(strong_group_by_cell, weak_group_by_cell)
+
+
+func _best_solution_hint_pairs(strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary) -> Array:
+	if _solution_positions.is_empty():
+		return []
+	var pairs: Array = []
+	var best_score := -1000000.0
+	for i in range(_cells.size()):
+		var a := _cells[i]
+		if not _solution_positions.has(a):
+			continue
+		for j in range(i + 1, _cells.size()):
+			var b := _cells[j]
+			if not _solution_positions.has(b):
+				continue
+			var a_solution_value: Variant = _solution_positions.get(a, Vector2i.ZERO)
+			var b_solution_value: Variant = _solution_positions.get(b, Vector2i.ZERO)
+			if not a_solution_value is Vector2i or not b_solution_value is Vector2i:
+				continue
+			var a_solution: Vector2i = a_solution_value as Vector2i
+			var b_solution: Vector2i = b_solution_value as Vector2i
+			if a_solution.distance_squared_to(b_solution) != 1:
+				continue
+			var score := _hint_pair_score(a, b, strong_group_by_cell, weak_group_by_cell, true)
+			if score < -999999.0:
+				continue
+			if score > best_score:
+				best_score = score
+				pairs.clear()
+				pairs.append([a, b])
+			elif is_equal_approx(score, best_score):
+				pairs.append([a, b])
+	return pairs
+
+
+func _best_resource_hint_pairs(strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary) -> Array:
+	var pairs: Array = []
+	var best_score := -1000000.0
 	for i in range(_cells.size()):
 		for j in range(i + 1, _cells.size()):
 			var a := _cells[i]
 			var b := _cells[j]
-			if _cells_can_match(a, b):
+			if not _cells_can_match(a, b):
+				continue
+			var score := _hint_pair_score(a, b, strong_group_by_cell, weak_group_by_cell, false)
+			if score < -999999.0:
+				continue
+			if score > best_score:
+				best_score = score
+				pairs.clear()
+				pairs.append([a, b])
+			elif is_equal_approx(score, best_score):
 				pairs.append([a, b])
 	return pairs
+
+
+func _hint_pair_score(a: String, b: String, strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary, solution_pair: bool) -> float:
+	var a_strong := int(strong_group_by_cell.get(a, -1))
+	var b_strong := int(strong_group_by_cell.get(b, -2))
+	if a_strong >= 0 and a_strong == b_strong:
+		return -1000000.0
+	var score := 0.0
+	if solution_pair:
+		score += 1000.0
+	if _get_cell_tile(a).distance_squared_to(_get_cell_tile(b)) == 1:
+		score += 45.0
+	else:
+		score += 90.0
+	if a_strong >= 0 or b_strong >= 0:
+		score += 220.0
+	var a_weak := int(weak_group_by_cell.get(a, -1))
+	var b_weak := int(weak_group_by_cell.get(b, -2))
+	if a_weak >= 0 and b_weak >= 0 and a_weak != b_weak:
+		score += 120.0
+	elif a_weak != b_weak:
+		score += 60.0
+	if _pair_has_possible_swap(a, b):
+		score += 100.0
+	if _cells_can_match(a, b):
+		score += 80.0
+	score += _missing_need_score(a, _cell_produced_resource(b))
+	score += _missing_need_score(b, _cell_produced_resource(a))
+	return score
+
+
+func _missing_need_score(cell: String, resource: String) -> float:
+	if not _cell_needs_resource(cell, resource):
+		return 0.0
+	return (1.0 - _slot_fullness(cell, resource)) * 50.0
+
+
+func _pair_has_possible_swap(a: String, b: String) -> bool:
+	if not _using_csharp_sim:
+		return _can_swap_pair(a, b)
+	var possible_value: Variant = _sim_snapshot.get("possibleSwaps", [])
+	if not possible_value is Array:
+		return false
+	var possible_swaps: Array = possible_value as Array
+	for swap_value in possible_swaps:
+		if not swap_value is Dictionary:
+			continue
+		var swap := swap_value as Dictionary
+		var initiator := str(swap.get("initiator", ""))
+		var counterparty := str(swap.get("counterparty", ""))
+		if initiator == a and counterparty == b:
+			return true
+		if initiator == b and counterparty == a:
+			return true
+	return false
+
+
+func _diagnostic_group_by_cell(group_key: String) -> Dictionary:
+	var group_by_cell: Dictionary = {}
+	if not _using_csharp_sim:
+		return group_by_cell
+	var diagnostics_value: Variant = _sim_snapshot.get("circuitDiagnostics", {})
+	if not diagnostics_value is Dictionary:
+		return group_by_cell
+	var diagnostics: Dictionary = diagnostics_value as Dictionary
+	var groups_value: Variant = diagnostics.get(group_key, [])
+	if not groups_value is Array:
+		return group_by_cell
+	var groups: Array = groups_value as Array
+	for group_index in range(groups.size()):
+		var cells: Array = _strings_from_variant_array(groups[group_index])
+		if group_key == "strongGroups" and cells.size() < 2:
+			continue
+		for cell_value in cells:
+			group_by_cell[str(cell_value)] = group_index
+	return group_by_cell
 
 
 func _visual_cell_center(cell: String) -> Vector2:
@@ -1632,20 +1881,35 @@ func _on_reset_pressed() -> void:
 	queue_redraw()
 
 
+func _on_last_pressed() -> void:
+	var last_level := maxi(1, _level_number - 1)
+	Global.cellular_puzzle_current_level = last_level
+	_load_level(last_level)
+	_layout_hud()
+	queue_redraw()
+
+
 func _on_hint_pressed() -> void:
 	var pairs := _find_matching_pairs()
 	if pairs.is_empty():
 		_hint_pair.clear()
-		_hint_text = "No reciprocal matching pair found in this level"
+		_hint_text = "No missing solution connection found"
 		_update_level_text()
 		queue_redraw()
 		return
 	var pair: Array = pairs[_hint_cursor % pairs.size()]
 	_hint_cursor += 1
 	_hint_pair = [str(pair[0]), str(pair[1])]
-	_hint_text = str("Hint: ", _cell_produced_resource(_hint_pair[0]), " matches ", _cell_produced_resource(_hint_pair[1]))
+	_hint_text = str("Hint: connect ", _cell_hint_mark(_hint_pair[0]), " with ", _cell_hint_mark(_hint_pair[1]))
 	_update_level_text()
 	queue_redraw()
+
+
+func _cell_hint_mark(cell: String) -> String:
+	var produced := _cell_produced_resource(cell)
+	if not produced.is_empty():
+		return produced
+	return cell
 
 
 func _on_next_pressed() -> void:

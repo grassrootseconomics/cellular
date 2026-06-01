@@ -89,6 +89,7 @@ Milestone 2: Godot visual MVP shell on top of the deterministic C# simulation wo
 - [x] Add remote tmux batch scripts and `sim/BATCH.md` for 15-worker stable level generation.
 - [x] Add opt-in puzzle engine intent settings: staged swap rounds, Need request targets, Need offer reserves, and overflow-discard payments.
 - [x] Add a Level 3 `CEA/FBD` regression fixture that sustains a complete circuit for 500+ ticks after warm-up.
+- [x] Add match-aware solution layout candidates that place neighboring cells by reciprocal/useful resource matches before random search.
 
 ## In Progress
 

@@ -87,6 +87,8 @@ public sealed record PuzzleSolverSummary(
 
 public static class PuzzleLevelGenerator
 {
+    private const int MatchAwareCandidateCount = 96;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -505,14 +507,6 @@ public static class PuzzleLevelGenerator
         return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements));
     }
 
-    private static LevelLayout BuildLineSolutionLayout(IReadOnlyList<LevelCellDefinition> cells)
-    {
-        var placements = cells
-            .Select((cell, index) => new LevelCellPlacement(cell.Id, index, 0))
-            .ToArray();
-        return new LevelLayout(cells.Count, 1, placements, Array.Empty<GridPosition>(), RenderAscii(cells.Count, 1, cells, placements));
-    }
-
     private static LevelLayout BuildSolutionLayoutCandidate(
         IReadOnlyList<LevelCellDefinition> cells,
         Random random,
@@ -523,14 +517,226 @@ public static class PuzzleLevelGenerator
             return BuildCanonicalSolutionLayout(cells);
         }
 
+        if (candidateIndex <= MatchAwareCandidateCount)
+        {
+            return BuildMatchAwareSolutionLayout(cells, random, candidateIndex);
+        }
+
         var foldedWidths = BuildFoldedLineWidths(cells.Count);
-        var foldedIndex = candidateIndex - 1;
+        var foldedIndex = candidateIndex - MatchAwareCandidateCount - 1;
         if (foldedIndex >= 0 && foldedIndex < foldedWidths.Count)
         {
             return BuildFoldedLineSolutionLayout(cells, foldedWidths[foldedIndex]);
         }
 
         return BuildRandomSolutionLayout(cells, random);
+    }
+
+    private static LevelLayout BuildMatchAwareSolutionLayout(
+        IReadOnlyList<LevelCellDefinition> cells,
+        Random random,
+        int candidateIndex)
+    {
+        var (width, height) = ComputeStartingLayoutDimensions(cells.Count);
+        var center = new GridPosition(width / 2, height / 2);
+        var placedByPosition = new Dictionary<GridPosition, LevelCellDefinition>();
+        var placementsByCellId = new Dictionary<string, GridPosition>(StringComparer.Ordinal);
+        var unplaced = cells.ToList();
+
+        var strictness = candidateIndex % 3;
+        var startCell = PickMatchAwareStartCell(unplaced, cells, random, candidateIndex);
+        placedByPosition[center] = startCell;
+        placementsByCellId[startCell.Id] = center;
+        unplaced.Remove(startCell);
+
+        while (unplaced.Count > 0)
+        {
+            var bestScore = int.MinValue;
+            LevelCellDefinition? bestCell = null;
+            GridPosition bestPosition = default;
+
+            foreach (var cell in unplaced)
+            {
+                foreach (var position in EnumerateOpenNeighborPositions(placedByPosition, width, height))
+                {
+                    var score = ScoreMatchAwarePlacement(cell, position, placedByPosition, strictness);
+                    score += random.Next(8);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestCell = cell;
+                        bestPosition = position;
+                    }
+                }
+            }
+
+            if (bestCell is null)
+            {
+                bestCell = unplaced[0];
+                bestPosition = FindFirstOpenPosition(width, height, placedByPosition);
+            }
+
+            placedByPosition[bestPosition] = bestCell;
+            placementsByCellId[bestCell.Id] = bestPosition;
+            unplaced.Remove(bestCell);
+        }
+
+        var placements = cells
+            .Select(cell =>
+            {
+                var position = placementsByCellId[cell.Id];
+                return new LevelCellPlacement(cell.Id, position.X, position.Y);
+            })
+            .ToArray();
+        return NormalizeLayout(cells, placements);
+    }
+
+    private static LevelCellDefinition PickMatchAwareStartCell(
+        IReadOnlyList<LevelCellDefinition> candidates,
+        IReadOnlyList<LevelCellDefinition> allCells,
+        Random random,
+        int candidateIndex)
+    {
+        var ranked = candidates
+            .Select(cell => (Cell: cell, Degree: allCells.Where(other => !ReferenceEquals(cell, other)).Sum(other => GetCellMatchScore(cell, other))))
+            .OrderByDescending(item => item.Degree)
+            .ThenBy(item => item.Cell.Id, StringComparer.Ordinal)
+            .ToArray();
+        if (ranked.Length == 0)
+        {
+            throw new InvalidOperationException("Cannot build a match-aware layout with no cells.");
+        }
+
+        if (candidateIndex <= 3)
+        {
+            return ranked[0].Cell;
+        }
+
+        var topCount = Math.Min(ranked.Length, Math.Max(1, ranked.Length / 3));
+        return ranked[random.Next(topCount)].Cell;
+    }
+
+    private static IEnumerable<GridPosition> EnumerateOpenNeighborPositions(
+        Dictionary<GridPosition, LevelCellDefinition> placedByPosition,
+        int width,
+        int height)
+    {
+        var seen = new HashSet<GridPosition>();
+        foreach (var position in placedByPosition.Keys)
+        {
+            foreach (var neighbor in EnumerateOrthogonalNeighbors(position))
+            {
+                if (neighbor.X < 0
+                    || neighbor.Y < 0
+                    || neighbor.X >= width
+                    || neighbor.Y >= height
+                    || placedByPosition.ContainsKey(neighbor)
+                    || !seen.Add(neighbor))
+                {
+                    continue;
+                }
+
+                yield return neighbor;
+            }
+        }
+    }
+
+    private static int ScoreMatchAwarePlacement(
+        LevelCellDefinition cell,
+        GridPosition position,
+        IReadOnlyDictionary<GridPosition, LevelCellDefinition> placedByPosition,
+        int strictness)
+    {
+        var score = 0;
+        var matchedNeighbors = 0;
+        var unmatchedNeighbors = 0;
+        var neighborCount = 0;
+
+        foreach (var neighborPosition in EnumerateOrthogonalNeighbors(position))
+        {
+            if (!placedByPosition.TryGetValue(neighborPosition, out var neighbor))
+            {
+                continue;
+            }
+
+            neighborCount++;
+            var matchScore = GetCellMatchScore(cell, neighbor);
+            if (matchScore > 0)
+            {
+                matchedNeighbors++;
+                score += matchScore * 120;
+            }
+            else
+            {
+                unmatchedNeighbors++;
+            }
+        }
+
+        var unmatchedPenalty = strictness switch
+        {
+            0 => 220,
+            1 => 120,
+            _ => 60
+        };
+        score += matchedNeighbors * 40;
+        score += neighborCount * 4;
+        score -= unmatchedNeighbors * unmatchedPenalty;
+        return score;
+    }
+
+    private static IEnumerable<GridPosition> EnumerateOrthogonalNeighbors(GridPosition position)
+    {
+        yield return new GridPosition(position.X + 1, position.Y);
+        yield return new GridPosition(position.X - 1, position.Y);
+        yield return new GridPosition(position.X, position.Y + 1);
+        yield return new GridPosition(position.X, position.Y - 1);
+    }
+
+    private static int GetCellMatchScore(LevelCellDefinition a, LevelCellDefinition b)
+    {
+        var aNeedsB = a.Needs.Contains(b.ProducedResource, StringComparer.Ordinal);
+        var bNeedsA = b.Needs.Contains(a.ProducedResource, StringComparer.Ordinal);
+        return (aNeedsB, bNeedsA) switch
+        {
+            (true, true) => 6,
+            (true, false) => 2,
+            (false, true) => 2,
+            _ => 0
+        };
+    }
+
+    private static GridPosition FindFirstOpenPosition(
+        int width,
+        int height,
+        IReadOnlyDictionary<GridPosition, LevelCellDefinition> placedByPosition)
+    {
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var position = new GridPosition(x, y);
+                if (!placedByPosition.ContainsKey(position))
+                {
+                    return position;
+                }
+            }
+        }
+
+        throw new InvalidOperationException("No open position remains in the generated solution layout.");
+    }
+
+    private static LevelLayout NormalizeLayout(
+        IReadOnlyList<LevelCellDefinition> cells,
+        IReadOnlyList<LevelCellPlacement> placements)
+    {
+        var minX = placements.Min(placement => placement.X);
+        var minY = placements.Min(placement => placement.Y);
+        var normalized = placements
+            .Select(placement => new LevelCellPlacement(placement.CellId, placement.X - minX, placement.Y - minY))
+            .ToArray();
+        var width = normalized.Max(placement => placement.X) + 1;
+        var height = normalized.Max(placement => placement.Y) + 1;
+        return new LevelLayout(width, height, normalized, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, normalized));
     }
 
     private static IReadOnlyList<int> BuildFoldedLineWidths(int cellCount)

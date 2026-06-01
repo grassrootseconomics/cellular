@@ -1,0 +1,951 @@
+{
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y"
+  ],
+  "grid": {
+    "width": 7,
+    "height": 7,
+    "rocks": []
+  },
+  "engine": {
+    "glowTtlTicks": 200,
+    "winRecentFlowWindowTicks": 200,
+    "swapRoundsPerTick": 4,
+    "needDesiredQuantity": 16,
+    "needOfferReserve": 4,
+    "allowNeedOverflowPayments": true
+  },
+  "cells": [
+    {
+      "id": "cell-k",
+      "x": 3,
+      "y": 5,
+      "slots": [
+        {
+          "resource": "K",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "C",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "F",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "R",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "K",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-c",
+      "x": 2,
+      "y": 2,
+      "slots": [
+        {
+          "resource": "C",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "R",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "K",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "F",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "C",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-f",
+      "x": 2,
+      "y": 6,
+      "slots": [
+        {
+          "resource": "F",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "C",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "G",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "J",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "F",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-j",
+      "x": 5,
+      "y": 1,
+      "slots": [
+        {
+          "resource": "J",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "L",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "G",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "F",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "J",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-g",
+      "x": 1,
+      "y": 1,
+      "slots": [
+        {
+          "resource": "G",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "U",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "J",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "L",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "G",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-l",
+      "x": 6,
+      "y": 4,
+      "slots": [
+        {
+          "resource": "L",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "B",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "U",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "G",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "L",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-u",
+      "x": 6,
+      "y": 2,
+      "slots": [
+        {
+          "resource": "U",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "L",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "D",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "B",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "U",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-b",
+      "x": 3,
+      "y": 3,
+      "slots": [
+        {
+          "resource": "B",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "M",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "D",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "U",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "B",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-d",
+      "x": 5,
+      "y": 5,
+      "slots": [
+        {
+          "resource": "D",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "M",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "W",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "B",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "D",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-m",
+      "x": 0,
+      "y": 6,
+      "slots": [
+        {
+          "resource": "M",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "S",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "W",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "D",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "M",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-w",
+      "x": 6,
+      "y": 0,
+      "slots": [
+        {
+          "resource": "W",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "S",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "M",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "H",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "W",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-s",
+      "x": 1,
+      "y": 3,
+      "slots": [
+        {
+          "resource": "S",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "W",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "H",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "Q",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "S",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-h",
+      "x": 5,
+      "y": 3,
+      "slots": [
+        {
+          "resource": "H",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "Q",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "S",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "T",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "H",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-q",
+      "x": 2,
+      "y": 4,
+      "slots": [
+        {
+          "resource": "Q",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "T",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "H",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "O",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "Q",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-t",
+      "x": 3,
+      "y": 1,
+      "slots": [
+        {
+          "resource": "T",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "Q",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "A",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "O",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "T",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-o",
+      "x": 4,
+      "y": 2,
+      "slots": [
+        {
+          "resource": "O",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "V",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "T",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "A",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "O",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-a",
+      "x": 0,
+      "y": 4,
+      "slots": [
+        {
+          "resource": "A",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "V",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "Y",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "O",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "A",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-v",
+      "x": 6,
+      "y": 6,
+      "slots": [
+        {
+          "resource": "V",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "A",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "X",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "Y",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "V",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-y",
+      "x": 4,
+      "y": 6,
+      "slots": [
+        {
+          "resource": "Y",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "E",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "X",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "V",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "Y",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-x",
+      "x": 0,
+      "y": 0,
+      "slots": [
+        {
+          "resource": "X",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "E",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "I",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "Y",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "X",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-e",
+      "x": 4,
+      "y": 0,
+      "slots": [
+        {
+          "resource": "E",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "X",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "I",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "P",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "E",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-i",
+      "x": 0,
+      "y": 2,
+      "slots": [
+        {
+          "resource": "I",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "N",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "E",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "P",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "I",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-p",
+      "x": 4,
+      "y": 4,
+      "slots": [
+        {
+          "resource": "P",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "R",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "I",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "N",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "P",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-n",
+      "x": 1,
+      "y": 5,
+      "slots": [
+        {
+          "resource": "N",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "P",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "C",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "R",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "N",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    },
+    {
+      "id": "cell-r",
+      "x": 2,
+      "y": 0,
+      "slots": [
+        {
+          "resource": "R",
+          "role": "SourceOutput",
+          "quantity": 0
+        },
+        {
+          "resource": "F",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "C",
+          "role": "Need",
+          "quantity": 0
+        },
+        {
+          "resource": "N",
+          "role": "Need",
+          "quantity": 0
+        }
+      ],
+      "sources": [
+        {
+          "resource": "R",
+          "quantityPerTick": 12,
+          "intervalTicks": 1
+        }
+      ]
+    }
+  ],
+  "win": {
+    "requiredCells": [
+      "cell-k",
+      "cell-c",
+      "cell-f",
+      "cell-j",
+      "cell-g",
+      "cell-l",
+      "cell-u",
+      "cell-b",
+      "cell-d",
+      "cell-m",
+      "cell-w",
+      "cell-s",
+      "cell-h",
+      "cell-q",
+      "cell-t",
+      "cell-o",
+      "cell-a",
+      "cell-v",
+      "cell-y",
+      "cell-x",
+      "cell-e",
+      "cell-i",
+      "cell-p",
+      "cell-n",
+      "cell-r"
+    ],
+    "requiredResources": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "U",
+      "V",
+      "W",
+      "X",
+      "Y"
+    ],
+    "durationTicks": 3
+  }
+}

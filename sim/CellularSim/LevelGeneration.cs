@@ -18,10 +18,11 @@ public sealed class PuzzleLevelOptions
     public int LayoutCandidateLimit { get; set; } = 512;
     public int TicksPerCandidate { get; set; } = 100;
     public bool AllowNearWin { get; set; }
-    public int SourceQuantityPerTick { get; set; } = 8;
+    public int SourceQuantityPerTick { get; set; } = 12;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
     public int GlowTtlTicks { get; set; } = 200;
+    public int WinRecentFlowWindowTicks { get; set; } = 200;
     public int SwapRoundsPerTick { get; set; } = 4;
     public int NeedDesiredQuantity { get; set; } = 16;
     public int NeedOfferReserve { get; set; } = 4;
@@ -210,6 +211,11 @@ public static class PuzzleLevelGenerator
             throw new ArgumentOutOfRangeException(nameof(options), "Glow TTL must be positive.");
         }
 
+        if (options.WinRecentFlowWindowTicks <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Win recent-flow window must be positive.");
+        }
+
         if (options.WinDurationTicks <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Win duration ticks must be positive.");
@@ -240,8 +246,9 @@ public static class PuzzleLevelGenerator
 
         var order = resources.ToArray();
         Shuffle(order, random);
-        var positions = BuildCompactSolutionPositions(order.Length).ToArray();
-        var needsByResource = BuildBackboneGridNeeds(order, positions, random);
+        var needsByResource = TryBuildOddCycleWithLeafPositions(order.Length, out _)
+            ? BuildOddCycleWithLeafNeeds(order, random)
+            : BuildBackboneGridNeeds(order, BuildCompactSolutionPositions(order.Length).ToArray(), random);
 
         return order.Select(resource =>
             new LevelCellDefinition(
@@ -505,8 +512,9 @@ public static class PuzzleLevelGenerator
 
     private static LevelLayout BuildCanonicalSolutionLayout(IReadOnlyList<LevelCellDefinition> cells)
     {
-        var (width, height) = ComputeCompactDimensions(cells.Count);
         var positions = BuildCompactSolutionPositions(cells.Count).ToArray();
+        var width = positions.Max(position => position.X) + 1;
+        var height = positions.Max(position => position.Y) + 1;
         var placements = cells
             .Select((cell, index) => new LevelCellPlacement(cell.Id, positions[index].X, positions[index].Y))
             .ToArray();
@@ -740,13 +748,52 @@ public static class PuzzleLevelGenerator
 
     private static (int Width, int Height) ComputeCompactDimensions(int cellCount)
     {
+        var exact = FindExactCompactDimensions(cellCount);
+        if (exact is not null)
+        {
+            return exact.Value;
+        }
+
         var width = Math.Max(2, (int)Math.Ceiling(Math.Sqrt(cellCount)));
         var height = (int)Math.Ceiling((double)cellCount / width);
         return (width, height);
     }
 
+    private static (int Width, int Height)? FindExactCompactDimensions(int cellCount)
+    {
+        (int Width, int Height)? best = null;
+        var bestScore = int.MaxValue;
+        for (var height = 2; height <= Math.Sqrt(cellCount); height++)
+        {
+            if (cellCount % height != 0)
+            {
+                continue;
+            }
+
+            var width = cellCount / height;
+            var score = (width - height) * (width - height);
+            if (width % 2 == 0 || height % 2 == 0)
+            {
+                score -= 1_000;
+            }
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = (width, height);
+            }
+        }
+
+        return best;
+    }
+
     private static IEnumerable<GridPosition> BuildCompactSolutionPositions(int cellCount)
     {
+        if (TryBuildOddCycleWithLeafPositions(cellCount, out var oddPositions))
+        {
+            return oddPositions;
+        }
+
         var (width, height) = ComputeCompactDimensions(cellCount);
         if (width * height == cellCount && TryBuildHamiltonianCyclePositions(width, height, out var cyclePositions))
         {
@@ -754,6 +801,37 @@ public static class PuzzleLevelGenerator
         }
 
         return BuildSnakePositions(width, height).Take(cellCount);
+    }
+
+    private static bool TryBuildOddCycleWithLeafPositions(int cellCount, out GridPosition[] positions)
+    {
+        positions = [];
+        if (cellCount <= 5 || cellCount % 2 == 0)
+        {
+            return false;
+        }
+
+        var cycleCellCount = cellCount - 1;
+        var exactCycleDimensions = FindExactCompactDimensions(cycleCellCount);
+        if (exactCycleDimensions is null)
+        {
+            return false;
+        }
+
+        var (cycleWidth, cycleHeight) = exactCycleDimensions.Value;
+        if (!TryBuildHamiltonianCyclePositions(cycleWidth, cycleHeight, out var cyclePositions))
+        {
+            return false;
+        }
+
+        positions = new GridPosition[cellCount];
+        positions[0] = new GridPosition(0, 0);
+        for (var i = 0; i < cyclePositions.Length; i++)
+        {
+            positions[i + 1] = new GridPosition(cyclePositions[i].X, cyclePositions[i].Y + 1);
+        }
+
+        return true;
     }
 
     private static bool TryBuildHamiltonianCyclePositions(
@@ -849,6 +927,7 @@ public static class PuzzleLevelGenerator
             Engine = new LevelEngineDocument
             {
                 GlowTtlTicks = options.GlowTtlTicks,
+                WinRecentFlowWindowTicks = options.WinRecentFlowWindowTicks,
                 SwapRoundsPerTick = options.SwapRoundsPerTick,
                 NeedDesiredQuantity = options.NeedDesiredQuantity,
                 NeedOfferReserve = options.NeedOfferReserve,
@@ -1062,6 +1141,40 @@ public static class PuzzleLevelGenerator
             };
             Shuffle(values, random);
             needs[order[i]] = values;
+        }
+
+        return needs;
+    }
+
+    private static Dictionary<string, string[]> BuildOddCycleWithLeafNeeds(
+        IReadOnlyList<string> order,
+        Random random)
+    {
+        if (order.Count <= 5 || order.Count % 2 == 0)
+        {
+            throw new ArgumentException("Odd cycle-with-leaf needs require an odd cell count greater than five.", nameof(order));
+        }
+
+        var leaf = order[0];
+        var cycle = order.Skip(1).ToArray();
+        var needs = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        var leafNeeds = new[] { cycle[0], cycle[1], cycle[^1] };
+        Shuffle(leafNeeds, random);
+        needs[leaf] = leafNeeds;
+
+        for (var i = 0; i < cycle.Length; i++)
+        {
+            var values = i == 0
+                ? new[] { leaf, cycle[1], cycle[^1] }
+                : new[]
+                {
+                    cycle[(i - 1 + cycle.Length) % cycle.Length],
+                    cycle[(i + 1) % cycle.Length],
+                    cycle[(i + 2) % cycle.Length]
+                };
+            Shuffle(values, random);
+            needs[cycle[i]] = values;
         }
 
         return needs;
@@ -1419,6 +1532,9 @@ public static class PuzzleLevelGenerator
     {
         [JsonPropertyName("glowTtlTicks")]
         public int GlowTtlTicks { get; set; }
+
+        [JsonPropertyName("winRecentFlowWindowTicks")]
+        public int WinRecentFlowWindowTicks { get; set; }
 
         [JsonPropertyName("swapRoundsPerTick")]
         public int SwapRoundsPerTick { get; set; }

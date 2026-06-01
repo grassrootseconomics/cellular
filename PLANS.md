@@ -95,13 +95,24 @@ Milestone 2: Godot visual MVP shell on top of the deterministic C# simulation wo
 - [x] Add rectangular Hamiltonian-cycle needs for full compact grids and generated glow TTL support for larger stable circuits.
 - [x] Clarify batch success as `WIN_DURATION_TICKS=200`; final-tick soak testing remains optional.
 - [x] Increase generated Puzzle source output from `4` to `8` units per tick in shipped and generated fixtures.
+- [x] Use source output `12` units per tick for Puzzle level 22 and future generated levels.
 - [x] Add puzzle engine settings to shipped/generated fixtures so Godot uses the intended glow TTL and staged swap rounds.
+- [x] Change Puzzle HUD scoring to show rounded running score per tick instead of raw cumulative score.
+- [x] Smooth need-pip motion by preventing flow-line lookups from advancing pip interpolation state.
+- [x] Preserve puzzle engine settings when Godot resets the C# sim after dragging cells.
+- [x] Add first-pass C# `CellularBoardRenderer` for faster puzzle board, cell, pip, flow, and circuit drawing.
+- [x] Add renderer drag fast path and pip-partner hysteresis to reduce high-level choppiness.
+- [x] Reduce fullness-ring draw cost and smooth displayed inventory fullness.
+- [x] Fix fallback Puzzle start layout generation so levels past shipped fixtures do not reuse tiles.
+- [x] Prefer exact compact solution rectangles when possible and ship Puzzle level 21.
+- [x] Expose generated puzzle recent-flow window settings and ship Puzzle level 22.
+- [x] Add adaptive source-rate remote batch wrapper for Puzzle levels 23-100.
 
 ## In Progress
 
 - [ ] Regenerate and review Puzzle levels 1-20 with opt-in puzzle engine settings and at least 200 final sustained alive ticks.
 - [ ] Generate Puzzle levels 21+ with more varied geometry after Level 1-20 playtesting.
-- [ ] Optimize the C# bridge snapshot format for large boards after the visual contract settles.
+- [ ] Optimize the C# board renderer and bridge snapshot format for large boards after the visual contract settles.
 - [ ] Use generated scenarios to search for stable 100+ cell configurations.
 - [ ] Extend arrangement search to accept arbitrary hand-authored fixtures, not only generated puzzle levels.
 - [ ] Decide whether `AcceptOnly` should be removed, renamed, or kept as an experimental routing role.

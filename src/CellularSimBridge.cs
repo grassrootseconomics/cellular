@@ -541,6 +541,15 @@ public partial class CellularSimBridge : Node
                 ["height"] = engine.World.Height,
                 ["rocks"] = rocks
             },
+            ["engine"] = new Dictionary<string, object>
+            {
+                ["glowTtlTicks"] = engine.Options.GlowTtlTicks,
+                ["winRecentFlowWindowTicks"] = engine.Options.WinRecentFlowWindowTicks,
+                ["swapRoundsPerTick"] = engine.Options.SwapRoundsPerTick,
+                ["needDesiredQuantity"] = engine.Options.NeedDesiredQuantity,
+                ["needOfferReserve"] = engine.Options.NeedOfferReserve,
+                ["allowNeedOverflowPayments"] = engine.Options.AllowNeedOverflowPayments
+            },
             ["cells"] = cells,
             ["win"] = new Dictionary<string, object>
             {

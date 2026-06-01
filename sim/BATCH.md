@@ -20,7 +20,9 @@ For the 20-level stable rebuild, use:
 
 ```text
 STABLE_TICKS=200
+SOURCE_RATE=12
 WIN_DURATION_TICKS=200
+WIN_RECENT_FLOW_WINDOW_TICKS=200
 REQUIRED_ALIVE_TICKS_AT_END=0
 ```
 
@@ -91,7 +93,8 @@ threshold explicitly so the command finishes quickly:
 ```bash
 cd /root/cellular
 LEVEL_START=1 LEVEL_END=1 WORKERS=1 NEED_ATTEMPTS=8 LAYOUT_CANDIDATES=11 \
-STABLE_TICKS=20 WIN_DURATION_TICKS=20 REQUIRED_ALIVE_TICKS_AT_END=20 SOLUTION_TICKS=180 \
+STABLE_TICKS=20 SOURCE_RATE=12 WIN_DURATION_TICKS=20 WIN_RECENT_FLOW_WINDOW_TICKS=200 \
+REQUIRED_ALIVE_TICKS_AT_END=20 SOLUTION_TICKS=180 \
   scripts/run_puzzle_level_batch.sh stable-smoke
 ```
 
@@ -126,7 +129,10 @@ The wrapper uses:
 ```text
 WORKERS=15
 STABLE_TICKS=200
+SOURCE_RATE=12
+SOURCE_RATE_STEPS=12
 WIN_DURATION_TICKS=200
+WIN_RECENT_FLOW_WINDOW_TICKS=200
 REQUIRED_ALIVE_TICKS_AT_END=0
 SOLUTION_TICKS=600
 NEED_ATTEMPTS=64
@@ -134,6 +140,66 @@ LAYOUT_CANDIDATES=11
 ```
 
 This is a fast first pass. Rerun only failed levels with deeper settings.
+
+## Level 23-100 Batch
+
+Levels beyond 22 are larger and may need more source throughput. The high-level
+wrapper uses adaptive source-rate retries: it tries `12`, then `16`, then `20`,
+then `24`, stopping as soon as a level passes. The winning source rate is
+written to each `status/level-NNN.status` file and to `summary.csv`.
+
+Run detached in `tmux` with 15 workers:
+
+```bash
+cd /root/cellular
+scripts/start_puzzle_levels_023_100_tmux.sh stable-levels-023-100-200
+```
+
+The wrapper uses:
+
+```text
+WORKERS=15
+LEVEL_START=23
+LEVEL_END=100
+STABLE_TICKS=200
+SOURCE_RATE=12
+SOURCE_RATE_STEPS=12,16,20,24
+WIN_DURATION_TICKS=200
+WIN_RECENT_FLOW_WINDOW_TICKS=200
+REQUIRED_ALIVE_TICKS_AT_END=0
+SOLUTION_TICKS=900
+NEED_ATTEMPTS=64
+LAYOUT_CANDIDATES=11
+```
+
+To start from a clean output directory on the remote:
+
+```bash
+tmux kill-session -t cellular-levels-023-100 2>/dev/null || true
+rm -rf sim/batches/stable-levels-023-100-200
+scripts/start_puzzle_levels_023_100_tmux.sh stable-levels-023-100-200
+```
+
+Monitor:
+
+```bash
+tail -f sim/batches/stable-levels-023-100-200/stable-levels-023-100-200.log
+cat sim/batches/stable-levels-023-100-200/summary.csv
+```
+
+The per-level log shows each adaptive source attempt:
+
+```text
+[level-047] source_rate_steps=12,16,20,24
+[level-047] source_rate=12 attempt start ...
+[level-047] source_rate=12 failed rc=1 ...
+[level-047] source_rate=16 attempt start ...
+[level-047] source_rate=16 complete ...
+```
+
+The single-character `solution-map.txt` becomes ambiguous once generated
+resource names pass `Z` and switch to names like `R26`. Use `level.json` or
+`solution-fixture.json` as the authoritative layout for higher levels.
 
 Monitor:
 
@@ -196,7 +262,9 @@ cd /root/cellular
 LEVEL_START=8 LEVEL_END=8 \
 WORKERS=1 \
 STABLE_TICKS=200 \
+SOURCE_RATE=12 \
 WIN_DURATION_TICKS=200 \
+WIN_RECENT_FLOW_WINDOW_TICKS=200 \
 REQUIRED_ALIVE_TICKS_AT_END=0 \
 SOLUTION_TICKS=1200 \
 NEED_ATTEMPTS=1024 \
@@ -223,6 +291,14 @@ From the local machine:
 rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
   root@128.140.120.36:/root/cellular/sim/batches/stable-levels-001-020-200/ \
   /home/wor/src/cellular/sim/batches/stable-levels-001-020-200/
+```
+
+For the level 23-100 batch:
+
+```bash
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
+  root@128.140.120.36:/root/cellular/sim/batches/stable-levels-023-100-200/ \
+  /home/wor/src/cellular/sim/batches/stable-levels-023-100-200/
 ```
 
 Review locally before replacing shipped levels:

@@ -18,6 +18,8 @@ const RESOURCE_COLORS := [
 const SIM_TICK_SECONDS := 0.12
 const SWAP_VISUAL_TTL_TICKS := 10.0
 const REACTION_VISUAL_TTL_TICKS := 10.0
+const PIP_ANGLE_SMOOTH := 0.10
+const PIP_OFFSET_SMOOTH := 0.12
 const NEED_STATE_MISSING := "missing"
 const NEED_STATE_AVAILABLE := "available"
 const NEED_STATE_ACTIVE := "active"
@@ -65,10 +67,14 @@ var _level_label: Label = null
 var _status_label: Label = null
 var _flow_label: Label = null
 var _sim_bridge: Node = null
+var _board_renderer: Node = null
 var _sim_snapshot: Dictionary = {}
 var _cell_state_by_id: Dictionary = {}
 var _sim_tick_accum := 0.0
 var _using_csharp_sim := false
+var _using_board_renderer := false
+var _board_renderer_full_sync_needed := true
+var _board_renderer_has_state := false
 var _sim_status_message := ""
 var _hint_pair: Array[String] = []
 var _hint_cursor := 0
@@ -78,6 +84,9 @@ var _resource_mark_mode := MARK_MODE_LETTERS
 var _circuit_overlay_enabled := true
 var _pip_angle_by_key: Dictionary = {}
 var _pip_offset_by_key: Dictionary = {}
+var _display_fullness_by_key: Dictionary = {}
+var _last_draw_msec := 0
+var _frame_blend := 1.0
 
 
 func _ready() -> void:
@@ -85,6 +94,7 @@ func _ready() -> void:
 	Global.mode = "puzzle"
 	_sim_bridge = get_node_or_null("/root/CellularSim")
 	_create_hud()
+	_try_create_board_renderer()
 	_load_level(maxi(1, Global.cellular_puzzle_current_level))
 	set_process(true)
 	queue_redraw()
@@ -112,6 +122,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_pip_angle_by_key.clear()
 		_pip_offset_by_key.clear()
+		_board_renderer_full_sync_needed = true
 		_layout_hud()
 		queue_redraw()
 
@@ -123,6 +134,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			return
 		if key_event.keycode == KEY_L:
 			_resource_mark_mode = (_resource_mark_mode + 1) % 3
+			_board_renderer_full_sync_needed = true
 			queue_redraw()
 		elif key_event.keycode == KEY_C:
 			_toggle_circuit_overlay()
@@ -249,6 +261,30 @@ func _layout_hud() -> void:
 		_flow_label.position = Vector2(margin, view_size.y - 56.0)
 		_flow_label.size = Vector2(maxf(1.0, view_size.x - margin * 2.0), 36)
 		_style_label(_flow_label, 21, Color(1.0, 0.86, 0.36, 1.0))
+	if is_instance_valid(_board_renderer) and _board_renderer is Control:
+		var renderer := _board_renderer as Control
+		renderer.position = Vector2.ZERO
+		renderer.size = view_size
+
+
+func _try_create_board_renderer() -> void:
+	var renderer_path := "res://src/CellularBoardRenderer.cs"
+	if not ResourceLoader.exists(renderer_path):
+		return
+	var renderer_script: Resource = load(renderer_path)
+	if renderer_script == null or not renderer_script is Script:
+		return
+	var instance: Variant = (renderer_script as Script).new()
+	if not instance is Control:
+		return
+	_board_renderer = instance as Control
+	_board_renderer.name = "CellularBoardRenderer"
+	(_board_renderer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_board_renderer)
+	move_child(_board_renderer, 0)
+	_using_board_renderer = true
+	_board_renderer_full_sync_needed = true
+	_board_renderer_has_state = false
 
 
 func _load_level(level_number: int) -> void:
@@ -262,6 +298,8 @@ func _load_level(level_number: int) -> void:
 	_cell_state_by_id.clear()
 	_sim_tick_accum = 0.0
 	_using_csharp_sim = false
+	_board_renderer_full_sync_needed = true
+	_board_renderer_has_state = false
 	_sim_status_message = ""
 	_hint_pair.clear()
 	_hint_cursor = 0
@@ -417,13 +455,21 @@ func _build_current_fixture_document() -> Dictionary:
 			"y": tile.y,
 			"slots": slots,
 			"sources": [
-				{"resource": cell, "quantityPerTick": 4, "intervalTicks": 1}
+				{"resource": cell, "quantityPerTick": 12, "intervalTicks": 1}
 			]
 		})
 	return {
 		"resources": _cells.duplicate(),
 		"grid": {"width": _board_cols, "height": _board_rows, "rocks": []},
 		"cells": cell_docs,
+		"engine": {
+			"glowTtlTicks": 200,
+			"winRecentFlowWindowTicks": 200,
+			"swapRoundsPerTick": 4,
+			"needDesiredQuantity": 16,
+			"needOfferReserve": 4,
+			"allowNeedOverflowPayments": true
+		},
 		"win": {
 			"requiredCells": _cells.duplicate(),
 			"requiredResources": _cells.duplicate(),
@@ -458,28 +504,45 @@ func _refresh_sim_snapshot() -> void:
 			if not produced.is_empty():
 				_produced_by_cell[id] = produced
 	_solved = bool(_sim_snapshot.get("won", false))
+	_board_renderer_full_sync_needed = true
 
 
 func _make_start_positions(count: int) -> Array[Vector2i]:
-	var starts: Array[Vector2i] = [
+	var starts: Array[Vector2i] = []
+	var mid_col := int(floor(float(_board_cols) / 2.0))
+	var mid_row := int(floor(float(_board_rows) / 2.0))
+	var anchors: Array[Vector2i] = [
 		Vector2i(1, 1),
-		Vector2i(6, 1),
-		Vector2i(1, 6),
-		Vector2i(6, 6),
-		Vector2i(3, 1),
-		Vector2i(3, 6),
-		Vector2i(1, 3),
-		Vector2i(6, 3)
+		Vector2i(_board_cols - 2, 1),
+		Vector2i(1, _board_rows - 2),
+		Vector2i(_board_cols - 2, _board_rows - 2),
+		Vector2i(mid_col, 1),
+		Vector2i(mid_col, _board_rows - 2),
+		Vector2i(1, mid_row),
+		Vector2i(_board_cols - 2, mid_row)
 	]
-	var index := 0
-	while starts.size() < count:
-		var row := int(floor(float(index) / 3.0))
-		starts.append(Vector2i(1 + (index * 2) % 6, 2 + (row * 2) % 5))
-		index += 1
-	var trimmed: Array[Vector2i] = []
-	for trim_index in range(count):
-		trimmed.append(starts[trim_index])
-	return trimmed
+	for tile in anchors:
+		_append_start_tile_if_unique(starts, tile)
+		if starts.size() >= count:
+			return starts
+
+	for parity in [0, 1]:
+		for y in range(_board_rows):
+			for x in range(_board_cols):
+				if (x + y) % 2 != parity:
+					continue
+				_append_start_tile_if_unique(starts, Vector2i(x, y))
+				if starts.size() >= count:
+					return starts
+	return starts
+
+
+func _append_start_tile_if_unique(starts: Array[Vector2i], tile: Vector2i) -> void:
+	if tile.x < 0 or tile.y < 0 or tile.x >= _board_cols or tile.y >= _board_rows:
+		return
+	if starts.has(tile):
+		return
+	starts.append(tile)
 
 
 func _update_level_text() -> void:
@@ -508,11 +571,19 @@ func _update_level_text() -> void:
 			var swaps_value: Variant = _sim_snapshot.get("swaps", [])
 			var swap_count := (swaps_value as Array).size() if swaps_value is Array else 0
 			var circuit_state: String = "alive" if _circuit_alive_now() else ("complete" if _solved else "forming")
-			_flow_label.text = str("Tick ", int(_sim_snapshot.get("tick", 0)), "  |  Recent swaps ", swap_count, "  |  Score ", int(_sim_snapshot.get("score", 0)), "  |  Circuit ", circuit_state)
+			_flow_label.text = str("Tick ", int(_sim_snapshot.get("tick", 0)), "  |  Recent swaps ", swap_count, "  |  Score/tick ", _score_per_tick_from_snapshot(), "  |  Circuit ", circuit_state)
 		else:
 			var met := _count_met_needs()
 			var total := _cells.size() * 3
 			_flow_label.text = str("Flow ", met, "/", total, " needs  |  Swaps ", _active_swap_pairs().size())
+
+
+func _score_per_tick_from_snapshot() -> int:
+	var tick_count := int(_sim_snapshot.get("tick", 0))
+	if tick_count <= 0:
+		return 0
+	var score_value := float(_sim_snapshot.get("score", 0))
+	return int(round(score_value / float(tick_count)))
 
 
 func _circuit_alive_now() -> bool:
@@ -522,9 +593,14 @@ func _circuit_alive_now() -> bool:
 
 
 func _draw() -> void:
+	_update_frame_blend()
 	var view_size := get_viewport_rect().size
 	draw_rect(Rect2(Vector2.ZERO, view_size), Color(0.025, 0.055, 0.065, 1.0))
 	_layout_board(view_size)
+	if _using_board_renderer and is_instance_valid(_board_renderer):
+		_sync_board_renderer()
+		_draw_next_level_pulse()
+		return
 	_draw_board()
 	_draw_circuit_flow_groups()
 	_draw_links()
@@ -536,6 +612,42 @@ func _draw() -> void:
 		_draw_cell(cell, _tile_center(_get_cell_tile(cell)), false)
 	if _drag_cell != "":
 		_draw_cell(_drag_cell, _drag_position, true)
+
+
+func _sync_board_renderer() -> void:
+	if not is_instance_valid(_board_renderer) or not _board_renderer.has_method("set_render_state"):
+		_using_board_renderer = false
+		return
+	if _drag_cell != "" and _board_renderer_has_state and not _board_renderer_full_sync_needed and _board_renderer.has_method("set_drag_state"):
+		_board_renderer.call("set_drag_state", _drag_cell, _drag_position, _original_drag_tile, true)
+		return
+	if _board_renderer_has_state and not _board_renderer_full_sync_needed:
+		if _board_renderer is CanvasItem:
+			(_board_renderer as CanvasItem).queue_redraw()
+		return
+	var state := {
+		"boardRect": _board_rect,
+		"tileSize": _tile_size,
+		"boardCols": _board_cols,
+		"boardRows": _board_rows,
+		"cells": _cells,
+		"positions": _positions,
+		"producedByCell": _produced_by_cell,
+		"needs": _needs,
+		"snapshot": _sim_snapshot,
+		"usingCsharpSim": _using_csharp_sim,
+		"solved": _solved,
+		"circuitOverlayEnabled": _circuit_overlay_enabled,
+		"fastDragMode": _drag_cell != "",
+		"dragCell": _drag_cell,
+		"dragPosition": _drag_position,
+		"originalDragTile": _original_drag_tile,
+		"hintPair": _hint_pair,
+		"resourceMarkMode": _resource_mark_mode
+	}
+	_board_renderer.call("set_render_state", state)
+	_board_renderer_full_sync_needed = false
+	_board_renderer_has_state = true
 
 
 func _has_live_visual_animation() -> bool:
@@ -980,8 +1092,8 @@ func _draw_hint() -> void:
 	var hint_color := Color(1.0, 0.92, 0.24, 0.86)
 	draw_line(a_center, b_center, Color(1.0, 0.92, 0.24, 0.34), 9.0, true)
 	draw_line(a_center, b_center, hint_color, 3.0, true)
-	draw_arc(a_center, _tile_size * 0.49, 0.0, TAU, 64, hint_color, 5.0, true)
-	draw_arc(b_center, _tile_size * 0.49, 0.0, TAU, 64, hint_color, 5.0, true)
+	draw_arc(a_center, _tile_size * 0.49, 0.0, TAU, _arc_segments(_tile_size * 0.49), hint_color, 5.0, true)
+	draw_arc(b_center, _tile_size * 0.49, 0.0, TAU, _arc_segments(_tile_size * 0.49), hint_color, 5.0, true)
 
 
 func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
@@ -1000,12 +1112,12 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18))
 	draw_circle(center, radius * (1.16 + (0.04 if live_complete else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72))
-	draw_arc(center, radius * 0.96, 0.0, TAU, 64, Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
+	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
 	if live_complete:
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
-		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, 64, Color(0.62, 1.0, 0.88, 0.28 + solved_pulse * 0.18), 3.0, true)
+		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, 0.28 + solved_pulse * 0.18), 3.0, true)
 	if _using_csharp_sim:
-		_draw_fullness_arc(center, radius * 1.07, _slot_fullness(cell, produced_resource), color, 6.0)
+		_draw_fullness_arc(center, radius * 1.07, _display_fullness(cell, produced_resource, _slot_fullness(cell, produced_resource)), color, 6.0)
 	var font := get_theme_default_font()
 	var needed: Array = _needs.get(cell, [])
 	var used_angles: Array[float] = []
@@ -1014,7 +1126,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		var pip_radius := _need_pip_radius(radius)
 		var visual := _need_visual_data(cell, need, index, needed.size(), center, radius, pip_radius, used_angles)
 		var angle := float(visual.get("angle", 0.0))
-		used_angles.append(angle)
+		used_angles.append(float(visual.get("targetAngle", angle)))
 		var pip_offset := float(visual.get("offset", radius * 1.18))
 		var pip_center := center + Vector2(cos(angle), sin(angle)) * pip_offset
 		var state := str(visual.get("state", NEED_STATE_MISSING))
@@ -1038,7 +1150,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		draw_circle(pip_center, pip_radius, pip_color)
 		draw_circle(pip_center, pip_radius, Color(0.01, 0.025, 0.03, 0.82), false, 2.2)
 		draw_circle(pip_center, pip_radius * 0.86, Color(1, 1, 1, 0.44 if met else 0.28), false, 1.4)
-		_draw_fullness_arc(pip_center, pip_radius * 1.12, fullness, pip_color, maxf(2.0, pip_radius * 0.20))
+		_draw_fullness_arc(pip_center, pip_radius * 1.12, _display_fullness(cell, need, fullness), pip_color, maxf(2.0, pip_radius * 0.20))
 		_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02), Color.WHITE)
 	_draw_resource_mark(font, center, radius, produced_resource, int(radius * 1.48), Color.WHITE)
 
@@ -1065,18 +1177,23 @@ func _need_visual_data(
 	center: Vector2,
 	cell_radius: float,
 	pip_radius: float,
-	used_angles: Array[float]) -> Dictionary:
+	used_angles: Array[float],
+	apply_smoothing: bool = true) -> Dictionary:
 	var state_data := _need_state_data(cell, need)
 	var partner := str(state_data.get("partner", ""))
 	var base_angle := _base_need_angle(cell, need, index, count, center, partner)
-	var angle := _separate_need_angle(base_angle, used_angles)
-	var offset := _need_pip_offset_for_state(center, partner, cell_radius, pip_radius, str(state_data.get("state", NEED_STATE_MISSING)))
+	var target_angle := _separate_need_angle(base_angle, used_angles)
+	var target_offset := _need_pip_offset_for_state(center, partner, cell_radius, pip_radius, str(state_data.get("state", NEED_STATE_MISSING)))
+	var angle := target_angle
+	var offset := target_offset
 	var pip_key := _pip_key(cell, need)
-	if cell != _drag_cell:
+	if apply_smoothing:
 		angle = _smooth_pip_angle(pip_key, angle)
 		offset = _smooth_pip_offset(pip_key, offset)
 	state_data["angle"] = angle
 	state_data["offset"] = offset
+	state_data["targetAngle"] = target_angle
+	state_data["targetOffset"] = target_offset
 	return state_data
 
 
@@ -1172,10 +1289,15 @@ func _need_pip_center_for_resource(cell: String, resource: String, center: Vecto
 	var used_angles: Array[float] = []
 	for index in range(needed.size()):
 		var need := str(needed[index])
-		var visual := _need_visual_data(cell, need, index, needed.size(), center, radius, pip_radius, used_angles)
+		var pip_key := _pip_key(cell, need)
+		var visual := _need_visual_data(cell, need, index, needed.size(), center, radius, pip_radius, used_angles, false)
 		var angle := float(visual.get("angle", 0.0))
-		used_angles.append(angle)
+		used_angles.append(float(visual.get("targetAngle", angle)))
 		if need == resource:
+			if _pip_angle_by_key.has(pip_key) and _pip_offset_by_key.has(pip_key):
+				var stored_angle := float(_pip_angle_by_key.get(pip_key, angle))
+				var stored_offset := float(_pip_offset_by_key.get(pip_key, radius * 1.18))
+				return center + Vector2(cos(stored_angle), sin(stored_angle)) * stored_offset
 			var offset := float(visual.get("offset", radius * 1.18))
 			return center + Vector2(cos(angle), sin(angle)) * offset
 	return center
@@ -1190,7 +1312,7 @@ func _smooth_pip_angle(key: String, target_angle: float) -> float:
 		_pip_angle_by_key[key] = target_angle
 		return target_angle
 	var current := float(_pip_angle_by_key.get(key, target_angle))
-	var smoothed := current + wrapf(target_angle - current, -PI, PI) * 0.18
+	var smoothed := current + wrapf(target_angle - current, -PI, PI) * PIP_ANGLE_SMOOTH
 	_pip_angle_by_key[key] = smoothed
 	return smoothed
 
@@ -1200,7 +1322,7 @@ func _smooth_pip_offset(key: String, target_offset: float) -> float:
 		_pip_offset_by_key[key] = target_offset
 		return target_offset
 	var current := float(_pip_offset_by_key.get(key, target_offset))
-	var smoothed := lerpf(current, target_offset, 0.18)
+	var smoothed := lerpf(current, target_offset, PIP_OFFSET_SMOOTH)
 	_pip_offset_by_key[key] = smoothed
 	return smoothed
 
@@ -1259,12 +1381,54 @@ func _draw_centered_bold_resource(font: Font, center: Vector2, radius: float, te
 
 func _draw_fullness_arc(center: Vector2, radius: float, fullness: float, color: Color, width: float) -> void:
 	var amount := clampf(fullness, 0.0, 1.0)
-	draw_arc(center, radius, -PI * 0.5, PI * 1.5, 48, Color(0.0, 0.0, 0.0, 0.34), width, true)
+	var segments := _fullness_arc_segments(radius)
+	draw_arc(center, radius, -PI * 0.5, PI * 1.5, segments, Color(0.0, 0.0, 0.0, 0.34), width, true)
 	if amount <= 0.0:
 		return
 	var arc_color := color.lightened(0.26)
 	arc_color.a = 0.92
-	draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * amount, 48, arc_color, width, true)
+	draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * amount, segments, arc_color, width, true)
+
+
+func _update_frame_blend() -> void:
+	var now := Time.get_ticks_msec()
+	if _last_draw_msec == 0:
+		_last_draw_msec = now
+		_frame_blend = 1.0
+		return
+	var delta_seconds := clampf(float(now - _last_draw_msec) / 1000.0, 0.0, 0.10)
+	_last_draw_msec = now
+	_frame_blend = 1.0 - exp(-delta_seconds * 18.0)
+
+
+func _display_fullness(cell: String, resource: String, target: float) -> float:
+	var key := str(cell, ":", resource)
+	var clamped_target := clampf(target, 0.0, 1.0)
+	if not _display_fullness_by_key.has(key):
+		_display_fullness_by_key[key] = clamped_target
+		return clamped_target
+	var current := float(_display_fullness_by_key.get(key, clamped_target))
+	var next := lerpf(current, clamped_target, _frame_blend)
+	if absf(next - clamped_target) < 0.0025:
+		next = clamped_target
+	_display_fullness_by_key[key] = next
+	return next
+
+
+func _arc_segments(radius: float) -> int:
+	if radius < 14.0:
+		return 16
+	if radius < 28.0:
+		return 24
+	return 36
+
+
+func _fullness_arc_segments(radius: float) -> int:
+	if radius < 14.0:
+		return 12
+	if radius < 28.0:
+		return 16
+	return 24
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -1321,8 +1485,10 @@ func _finish_drag(screen_pos: Vector2) -> void:
 					push_warning("Cellular C# sim bridge failed to reset moved layout: %s" % str(error_value))
 				_sim_tick_accum = 0.0
 				_refresh_sim_snapshot()
+				_board_renderer_full_sync_needed = true
 		else:
 			_positions[_drag_cell] = tile
+			_board_renderer_full_sync_needed = true
 	_drag_cell = ""
 	_check_solution()
 	accept_event()
@@ -1824,12 +1990,14 @@ func _visual_cell_center(cell: String) -> Vector2:
 func _clear_hint() -> void:
 	_hint_pair.clear()
 	_hint_text = ""
+	_board_renderer_full_sync_needed = true
 
 
 func _toggle_circuit_overlay() -> void:
 	_circuit_overlay_enabled = not _circuit_overlay_enabled
 	if is_instance_valid(_circuit_button):
 		_circuit_button.text = "Circuit" if _circuit_overlay_enabled else "Circuit Off"
+	_board_renderer_full_sync_needed = true
 	queue_redraw()
 
 
@@ -1894,6 +2062,7 @@ func _on_hint_pressed() -> void:
 	if pairs.is_empty():
 		_hint_pair.clear()
 		_hint_text = "No missing solution connection found"
+		_board_renderer_full_sync_needed = true
 		_update_level_text()
 		queue_redraw()
 		return
@@ -1901,6 +2070,7 @@ func _on_hint_pressed() -> void:
 	_hint_cursor += 1
 	_hint_pair = [str(pair[0]), str(pair[1])]
 	_hint_text = str("Hint: connect ", _cell_hint_mark(_hint_pair[0]), " with ", _cell_hint_mark(_hint_pair[1]))
+	_board_renderer_full_sync_needed = true
 	_update_level_text()
 	queue_redraw()
 

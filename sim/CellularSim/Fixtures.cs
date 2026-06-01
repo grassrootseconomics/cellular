@@ -197,6 +197,11 @@ public static class FixtureLoader
                 options.GlowTtlTicks = engine.GlowTtlTicks;
             }
 
+            if (engine.WinRecentFlowWindowTicks > 0)
+            {
+                options.WinRecentFlowWindowTicks = engine.WinRecentFlowWindowTicks;
+            }
+
             if (engine.SwapRoundsPerTick > 0)
             {
                 options.SwapRoundsPerTick = engine.SwapRoundsPerTick;
@@ -308,6 +313,7 @@ public static class FixtureLoader
     private sealed class EngineDto
     {
         public int GlowTtlTicks { get; set; }
+        public int WinRecentFlowWindowTicks { get; set; }
         public int SwapRoundsPerTick { get; set; }
         public int NeedDesiredQuantity { get; set; }
         public int NeedOfferReserve { get; set; }

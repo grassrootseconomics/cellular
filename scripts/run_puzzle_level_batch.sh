@@ -14,7 +14,10 @@ LAYOUT_CANDIDATES="${LAYOUT_CANDIDATES:-11}"
 SOLUTION_TICKS="${SOLUTION_TICKS:-900}"
 SIM_TICK_SECONDS="${SIM_TICK_SECONDS:-0.12}"
 STABLE_TICKS="${STABLE_TICKS:-200}"
+SOURCE_RATE="${SOURCE_RATE:-12}"
+SOURCE_RATE_STEPS="${SOURCE_RATE_STEPS:-$SOURCE_RATE}"
 WIN_DURATION_TICKS="${WIN_DURATION_TICKS:-$STABLE_TICKS}"
+WIN_RECENT_FLOW_WINDOW_TICKS="${WIN_RECENT_FLOW_WINDOW_TICKS:-200}"
 REQUIRED_ALIVE_TICKS_AT_END="${REQUIRED_ALIVE_TICKS_AT_END:-0}"
 EVENT_CAPACITY="${EVENT_CAPACITY:-1048576}"
 CONFIGURATION="${CONFIGURATION:-Release}"
@@ -47,7 +50,10 @@ LAYOUT_CANDIDATES=$LAYOUT_CANDIDATES
 SOLUTION_TICKS=$SOLUTION_TICKS
 SIM_TICK_SECONDS=$SIM_TICK_SECONDS
 STABLE_TICKS=$STABLE_TICKS
+SOURCE_RATE=$SOURCE_RATE
+SOURCE_RATE_STEPS=$SOURCE_RATE_STEPS
 WIN_DURATION_TICKS=$WIN_DURATION_TICKS
+WIN_RECENT_FLOW_WINDOW_TICKS=$WIN_RECENT_FLOW_WINDOW_TICKS
 REQUIRED_ALIVE_TICKS_AT_END=$REQUIRED_ALIVE_TICKS_AT_END
 EVENT_CAPACITY=$EVENT_CAPACITY
 CONFIGURATION=$CONFIGURATION
@@ -62,6 +68,7 @@ echo "[batch] log_dir=$OUTPUT_ROOT/logs"
 echo "[batch] status_dir=$OUTPUT_ROOT/status"
 echo "[batch] levels=$LEVEL_START..$LEVEL_END workers=$WORKERS"
 echo "[batch] stable_ticks=$STABLE_TICKS (~$(awk "BEGIN { printf \"%.2f\", $STABLE_TICKS * $SIM_TICK_SECONDS }") seconds at $SIM_TICK_SECONDS s/tick)"
+echo "[batch] source_rate=$SOURCE_RATE source_rate_steps=$SOURCE_RATE_STEPS win_recent_flow_window_ticks=$WIN_RECENT_FLOW_WINDOW_TICKS"
 echo "[batch] need_attempts=$NEED_ATTEMPTS layout_candidates=$LAYOUT_CANDIDATES solution_ticks=$SOLUTION_TICKS"
 echo "[batch] heartbeat_seconds=$HEARTBEAT_SECONDS"
 echo "[batch] progress_stride=$PROGRESS_STRIDE"
@@ -163,39 +170,56 @@ run_level() {
   local out_dir="$OUTPUT_ROOT/levels/level-$level_padded"
   local log_file="$OUTPUT_ROOT/logs/level-$level_padded.log"
   local status_file="$OUTPUT_ROOT/status/level-$level_padded.status"
+  local source_rate_values="${SOURCE_RATE_STEPS//,/ }"
 
   mkdir -p "$out_dir"
   {
     echo "status=running"
     echo "level=$level"
     echo "seed=$seed"
+    echo "source_rate_steps=$SOURCE_RATE_STEPS"
     echo "output=$out_dir"
     echo "log=$log_file"
     echo "started_at=$(date -Is)"
   } >"$status_file"
 
   local rc=0
+  local chosen_source_rate=""
   {
     echo "[level-$level_padded] start $(date -Is)"
     echo "[level-$level_padded] seed=$seed"
     echo "[level-$level_padded] out_dir=$out_dir"
-    if dotnet run --no-restore --no-build -c "$CONFIGURATION" --project sim/CellularSim.Examples -- \
-      --generate-puzzle-level \
-      --level "$level" \
-      --level-seed "$seed" \
-      --need-attempts "$NEED_ATTEMPTS" \
-      --layout-candidates "$LAYOUT_CANDIDATES" \
-      --solution-ticks "$SOLUTION_TICKS" \
-      --win-duration-ticks "$WIN_DURATION_TICKS" \
-      --required-alive-ticks-at-end "$REQUIRED_ALIVE_TICKS_AT_END" \
-      --event-capacity "$EVENT_CAPACITY" \
-      --progress-stride "$PROGRESS_STRIDE" \
-      --save-dir "$out_dir"; then
-      echo "[level-$level_padded] complete $(date -Is)"
-      rc=0
+    echo "[level-$level_padded] source_rate_steps=$SOURCE_RATE_STEPS"
+    for source_rate in $source_rate_values; do
+      echo "[level-$level_padded] source_rate=$source_rate attempt start $(date -Is)"
+      if dotnet run --no-restore --no-build -c "$CONFIGURATION" --project sim/CellularSim.Examples -- \
+        --generate-puzzle-level \
+        --level "$level" \
+        --level-seed "$seed" \
+        --need-attempts "$NEED_ATTEMPTS" \
+        --layout-candidates "$LAYOUT_CANDIDATES" \
+        --solution-ticks "$SOLUTION_TICKS" \
+        --source-rate "$source_rate" \
+        --win-recent-flow-window-ticks "$WIN_RECENT_FLOW_WINDOW_TICKS" \
+        --win-duration-ticks "$WIN_DURATION_TICKS" \
+        --required-alive-ticks-at-end "$REQUIRED_ALIVE_TICKS_AT_END" \
+        --event-capacity "$EVENT_CAPACITY" \
+        --progress-stride "$PROGRESS_STRIDE" \
+        --save-dir "$out_dir"; then
+        echo "[level-$level_padded] source_rate=$source_rate complete $(date -Is)"
+        chosen_source_rate="$source_rate"
+        rc=0
+        break
+      else
+        rc=$?
+        echo "[level-$level_padded] source_rate=$source_rate failed rc=$rc $(date -Is)"
+      fi
+    done
+
+    if [[ -n "$chosen_source_rate" ]]; then
+      echo "[level-$level_padded] complete source_rate=$chosen_source_rate $(date -Is)"
     else
-      rc=$?
-      echo "[level-$level_padded] failed rc=$rc $(date -Is)"
+      echo "[level-$level_padded] failed all source rates rc=$rc $(date -Is)"
     fi
   } >"$log_file" 2>&1
 
@@ -207,6 +231,8 @@ run_level() {
     fi
     echo "level=$level"
     echo "seed=$seed"
+    echo "source_rate=${chosen_source_rate:-}"
+    echo "source_rate_steps=$SOURCE_RATE_STEPS"
     echo "output=$out_dir"
     echo "log=$log_file"
     echo "finished_at=$(date -Is)"
@@ -237,18 +263,19 @@ for pid in "${pids[@]}"; do
 done
 
 {
-  echo "level,status,seed,output,log"
+  echo "level,status,seed,source_rate,output,log"
   for level in $(seq "$LEVEL_START" "$LEVEL_END"); do
     printf -v level_padded "%03d" "$level"
     status_file="$OUTPUT_ROOT/status/level-$level_padded.status"
     if [[ -f "$status_file" ]]; then
       status_value="$(read_status_value "$status_file")"
       seed="$(awk -F= '$1 == "seed" { print $2 }' "$status_file")"
+      source_rate="$(awk -F= '$1 == "source_rate" { print $2 }' "$status_file")"
       output="$(awk -F= '$1 == "output" { print $2 }' "$status_file")"
       log="$(awk -F= '$1 == "log" { print $2 }' "$status_file")"
-      echo "$level,$status_value,$seed,$output,$log"
+      echo "$level,$status_value,$seed,$source_rate,$output,$log"
     else
-      echo "$level,fail,,,${OUTPUT_ROOT}/logs/level-$level_padded.log"
+      echo "$level,fail,,,,${OUTPUT_ROOT}/logs/level-$level_padded.log"
     fi
   done
 } > "$OUTPUT_ROOT/summary.csv"

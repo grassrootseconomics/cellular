@@ -1,0 +1,379 @@
+{
+  "levelNumber": 10,
+  "mode": "Puzzle",
+  "difficulty": "Level 10: 15 cells, duplicate producers, red myco, rocks",
+  "generationSeed": 1010,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K"
+  ],
+  "cells": [
+    {
+      "id": "cell-a-001",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "J",
+        "F",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-f-001",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "A",
+        "K",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-k-001",
+      "kind": "Standard",
+      "producedResource": "K",
+      "needs": [
+        "F",
+        "I",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-i-001",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "K",
+        "H",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-h-001",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "I",
+        "F",
+        "K"
+      ]
+    },
+    {
+      "id": "red-myco-001",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "E",
+        "J",
+        "I",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-e-001",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "I",
+        "G",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-g-001",
+      "kind": "Standard",
+      "producedResource": "G",
+      "needs": [
+        "E",
+        "B",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-b-001",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "G",
+        "D",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-d-001",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "B",
+        "E",
+        "G"
+      ]
+    },
+    {
+      "id": "cell-e-002",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "D",
+        "F",
+        "B"
+      ]
+    },
+    {
+      "id": "red-myco-002",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "F",
+        "E",
+        "G",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-c-001",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "F",
+        "B",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-b-002",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "C",
+        "J",
+        "G"
+      ]
+    },
+    {
+      "id": "cell-j-001",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "B",
+        "A",
+        "C"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 7,
+    "height": 6,
+    "cells": [
+      {
+        "cellId": "cell-j-001",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "cellId": "cell-e-002",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-b-002",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "cellId": "cell-h-001",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 2,
+        "y": 0
+      }
+    ],
+    "rocks": [
+      {
+        "x": 4,
+        "y": 1
+      },
+      {
+        "x": 1,
+        "y": 3
+      },
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      },
+      {
+        "x": 0,
+        "y": 1
+      }
+    ],
+    "ascii": "#BCB...\n##..#E*\nE...AF.\nI#...J.\n..K...*\nG...HD."
+  },
+  "solutionLayout": {
+    "width": 7,
+    "height": 3,
+    "cells": [
+      {
+        "cellId": "cell-a-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-h-001",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "cellId": "cell-e-002",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-b-002",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "cellId": "cell-j-001",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "A......\nFKIH*EG\nJBC*EDB"
+  },
+  "solverSummary": {
+    "won": false,
+    "acceptedNearWin": false,
+    "needAttempt": 0,
+    "candidateIndex": -1,
+    "candidateCount": 0,
+    "ticksPerCandidate": 0,
+    "glowingCells": 0,
+    "totalSwaps": 0,
+    "totalReactions": 0,
+    "activeCellsInLastWindow": 0,
+    "strainPenalty": 0,
+    "finalScore": 0,
+    "adjacentPairs": 20,
+    "winDurationTicks": 3,
+    "requiredAliveTicksAtEnd": 0,
+    "finalSustainedTicks": 0,
+    "stableAtEnd": false
+  }
+}

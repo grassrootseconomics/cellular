@@ -1,0 +1,21 @@
+Puzzle solution search
+  level: 12
+  status: fail
+  fixture: levels/puzzle/level-012.json
+  candidates evaluated: 4813/10000
+  first win tick: -1
+  best 10-tick flow: 18.70
+  best 10-tick swaps: 187
+  total swaps: 13905
+  total reactions: 6450
+  sustained ticks: 0
+  active cells: 18
+  glowing cells: 10
+  final score: 35513
+  best connected cells: 18
+  open tiles: 43
+  largest open-tile component: 43
+  useful graph edges: 60
+  reciprocal graph edges: 14
+  failure category: insufficient source/engine settings
+  diagnostics: alive=False;won=False;sustained=0;nonGlowing=cell-c-001,cell-d-001,cell-g-001,cell-i-001,cell-j-001,cell-l-001,cell-m-001,red-myco-001;missingResources=none;strong=[cell-a-001,cell-e-001,cell-f-001,cell-f-002,cell-g-001,cell-i-001,cell-j-001,cell-j-002,cell-k-001,cell-m-001,red-myco-002,red-myco-003]|[cell-b-001,cell-c-001,cell-d-001,cell-h-001,cell-l-001]|[red-myco-001];weak=[cell-a-001,cell-e-001,cell-f-001,cell-f-002,cell-g-001,cell-i-001,cell-j-001,cell-j-002,cell-k-001,cell-m-001,red-myco-002,red-myco-003]|[cell-b-001,cell-c-001,cell-d-001,cell-h-001,cell-l-001]|[red-myco-001]

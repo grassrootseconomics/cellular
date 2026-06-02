@@ -1,0 +1,2 @@
+level,status,static_proof,sim_win,stable_at_end,sustained_ticks,total_swaps,total_reactions,flow,repair_edits,producer_edits,failure_category,generated_dir,shipped
+20,passed,yes,yes,yes,240,7485,5040,30.802,0,0,passed,sim/generated/playable-19-200-v2/level-020,yes

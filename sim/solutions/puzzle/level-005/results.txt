@@ -1,0 +1,20 @@
+Puzzle solution search
+  level: 5
+  status: pass
+  fixture: levels/puzzle/level-005.json
+  candidates evaluated: 1/10000
+  first win tick: 7
+  best 10-tick flow: 7.60
+  best 10-tick swaps: 76
+  total swaps: 76
+  total reactions: 39
+  sustained ticks: 3
+  active cells: 9
+  glowing cells: 9
+  final score: 426
+  best connected cells: 9
+  open tiles: 27
+  largest open-tile component: 27
+  useful graph edges: 25
+  reciprocal graph edges: 12
+  diagnostics: alive=True;won=True;sustained=3;nonGlowing=none;missingResources=none;strong=[cell-a-001,cell-b-001,cell-c-001,cell-d-001,cell-e-001,cell-f-001,cell-f-002,cell-g-001,red-myco-001];weak=[cell-a-001,cell-b-001,cell-c-001,cell-d-001,cell-e-001,cell-f-001,cell-f-002,cell-g-001,red-myco-001]

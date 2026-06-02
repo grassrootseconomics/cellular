@@ -1,0 +1,21 @@
+Puzzle solution search
+  level: 22
+  status: fail
+  fixture: levels/puzzle/level-022.json
+  candidates evaluated: 325/10000
+  first win tick: -1
+  best 10-tick flow: 21.40
+  best 10-tick swaps: 214
+  total swaps: 4530
+  total reactions: 1594
+  sustained ticks: 0
+  active cells: 28
+  glowing cells: 13
+  final score: 139
+  best connected cells: 30
+  open tiles: 62
+  largest open-tile component: 62
+  useful graph edges: 118
+  reciprocal graph edges: 20
+  failure category: duplicate producer deadlock
+  diagnostics: alive=False;won=False;sustained=0;nonGlowing=cell-a-001,cell-c-001,cell-c-002,cell-d-001,cell-f-001,cell-g-001,cell-i-001,cell-j-001,cell-m-001,cell-n-001,cell-n-002,cell-o-003,cell-p-001,cell-s-001,cell-t-001,cell-u-001,red-myco-005;missingResources=F,J;strong=[cell-b-001,cell-c-001,cell-c-002,cell-e-001,cell-g-001,cell-h-001,cell-k-001,cell-l-001,cell-m-001,cell-n-002,cell-o-001,cell-r-001,red-myco-001,red-myco-002,red-myco-003]|[cell-a-001,cell-n-001,cell-o-002,cell-u-001,red-myco-004]|[cell-d-001,cell-p-001,cell-q-001,cell-s-001]|[cell-f-001]|[cell-i-001]|[cell-j-001]|[cell-o-003]|[cell-t-001]|[red-myco-005];weak=[cell-b-001,cell-c-001,cell-c-002,cell-e-001,cell-g-001,cell-h-001,cell-k-001,cell-l-001,cell-m-001,cell-n-002,cell-o-001,cell-r-001,red-myco-001,red-myco-002,red-myco-003]|[cell-a-001,cell-n-001,cell-o-002,cell-u-001,red-myco-004]|[cell-d-001,cell-p-001,cell-q-001,cell-s-001]|[cell-f-001]|[cell-i-001]|[cell-j-001]|[cell-o-003]|[cell-t-001]|[red-myco-005]

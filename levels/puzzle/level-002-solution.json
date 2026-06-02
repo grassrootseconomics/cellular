@@ -41,7 +41,7 @@
       "sources": [
         {
           "resource": "B",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -75,7 +75,7 @@
       "sources": [
         {
           "resource": "C",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -109,7 +109,7 @@
       "sources": [
         {
           "resource": "E",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -143,7 +143,7 @@
       "sources": [
         {
           "resource": "D",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -177,7 +177,7 @@
       "sources": [
         {
           "resource": "A",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]

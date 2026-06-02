@@ -10,15 +10,25 @@ public enum LevelMode
     Arcade
 }
 
+public enum PuzzleGenerationStrategy
+{
+    Search,
+    ShapeFirstExact
+}
+
 public sealed class PuzzleLevelOptions
 {
+    public int StartLevel { get; set; }
+    public int EndLevel { get; set; }
     public int LevelNumber { get; set; } = 1;
     public int GenerationSeed { get; set; } = 1;
+    public int GenerationSeedBase { get; set; } = 1000;
+    public PuzzleGenerationStrategy GenerationStrategy { get; set; } = PuzzleGenerationStrategy.Search;
     public int NeedAttemptLimit { get; set; } = 64;
     public int LayoutCandidateLimit { get; set; } = 512;
     public int TicksPerCandidate { get; set; } = 100;
     public bool AllowNearWin { get; set; }
-    public int SourceQuantityPerTick { get; set; } = 12;
+    public int SourceQuantityPerTick { get; set; } = 32;
     public int SourceIntervalTicks { get; set; } = 1;
     public int EventCapacity { get; set; } = 262_144;
     public int GlowTtlTicks { get; set; } = 200;
@@ -27,9 +37,13 @@ public sealed class PuzzleLevelOptions
     public int NeedDesiredQuantity { get; set; } = 16;
     public int NeedOfferReserve { get; set; } = 4;
     public bool AllowNeedOverflowPayments { get; set; } = true;
+    public int MaxSwapQuantityPerEdge { get; set; } = 8;
     public int WinDurationTicks { get; set; } = 3;
     public int RequiredAliveTicksAtEnd { get; set; }
+    public int ShapeFirstSustainedTicks { get; set; }
     public int ProgressStride { get; set; }
+    public bool PlayableOnly { get; set; }
+    public string ShipDirectory { get; set; } = Path.Combine("levels", "puzzle");
     public Action<string>? ProgressLogger { get; set; }
 }
 
@@ -41,7 +55,9 @@ public sealed record GeneratedPuzzleLevel(
     string SolutionFixtureJson,
     FixtureLoadResult StartingLoaded,
     FixtureLoadResult SolutionLoaded,
-    PuzzleSolverSummary SolverSummary);
+    PuzzleSolverSummary SolverSummary,
+    int RepairEditCount = 0,
+    int ProducerEditCount = 0);
 
 public sealed record PuzzleLevelDefinition(
     int LevelNumber,
@@ -56,6 +72,7 @@ public sealed record PuzzleLevelDefinition(
 
 public sealed record LevelCellDefinition(
     string Id,
+    CellKind Kind,
     string ProducedResource,
     IReadOnlyList<string> Needs);
 
@@ -91,6 +108,13 @@ public static class PuzzleLevelGenerator
 {
     private const int MatchAwareCandidateCount = 10;
     private const int MaxSolutionCandidateCount = 1 + MatchAwareCandidateCount;
+    private const int MaxLetterResourceCount = 26;
+    private const int DuplicateProducerInterval = 6;
+    private const int RedMycoInterval = 5;
+    private const int RockInterval = 3;
+    private const int MycoNeedCount = 4;
+    private const int MycoStartingQuantity = 250;
+    private const int MycoCapacity = 500;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -102,15 +126,26 @@ public static class PuzzleLevelGenerator
 
     public static GeneratedPuzzleLevel Generate(PuzzleLevelOptions options)
     {
+        if (options.GenerationStrategy == PuzzleGenerationStrategy.ShapeFirstExact)
+        {
+            return ShapeFirstExactPuzzleLevelGenerator.Generate(options);
+        }
+
         Validate(options);
 
-        var resourceCount = options.LevelNumber + 3;
+        if (options.PlayableOnly)
+        {
+            return GeneratePlayableOnly(options);
+        }
+
+        var normalCellCount = ComputeNormalCellCount(options);
+        var resourceCount = ComputeUniqueProducerResourceCount(normalCellCount);
         var resources = BuildResourceNames(resourceCount);
         var random = new Random(options.GenerationSeed);
         SearchResult? bestOverall = null;
         ReportProgress(
             options,
-            $"search start level={options.LevelNumber} resources={resourceCount} "
+            $"search start level={options.LevelNumber} normalCells={normalCellCount} resources={resourceCount} "
             + $"needAttempts={options.NeedAttemptLimit} layoutCandidates={GetEffectiveLayoutCandidateLimit(options)} "
             + $"ticksPerCandidate={options.TicksPerCandidate} winDuration={options.WinDurationTicks} "
             + $"requiredAliveAtEnd={options.RequiredAliveTicksAtEnd}");
@@ -118,7 +153,7 @@ public static class PuzzleLevelGenerator
         for (var needAttempt = 1; needAttempt <= options.NeedAttemptLimit; needAttempt++)
         {
             ReportProgress(options, $"needAttempt={needAttempt}/{options.NeedAttemptLimit} start");
-            var cells = BuildPuzzleCells(resources, random);
+            var cells = BuildPuzzleCells(normalCellCount, resources, random);
             var result = SearchBestLayout(cells, resources, options, random, needAttempt);
             if (bestOverall is null || IsBetter(result, bestOverall))
             {
@@ -156,12 +191,68 @@ public static class PuzzleLevelGenerator
             + $"with winDurationTicks={options.WinDurationTicks} and requiredAliveTicksAtEnd={options.RequiredAliveTicksAtEnd}.");
     }
 
+    private static GeneratedPuzzleLevel GeneratePlayableOnly(PuzzleLevelOptions options)
+    {
+        var normalCellCount = ComputeNormalCellCount(options);
+        var resourceCount = ComputeUniqueProducerResourceCount(normalCellCount);
+        var resources = BuildResourceNames(resourceCount);
+        var cells = BuildPuzzleCells(normalCellCount, resources, new Random(options.GenerationSeed));
+        var candidateLayout = BuildCanonicalSolutionLayout(cells);
+        var startingLayout = BuildStartingLayout(cells, candidateLayout, options);
+        var startingFixtureJson = BuildFixtureJson(resources, cells, startingLayout, options);
+        var startingLoaded = FixtureLoader.LoadFromJson(startingFixtureJson);
+        startingLoaded.Options.EventCapacity = options.EventCapacity;
+
+        var candidateFixtureJson = BuildFixtureJson(resources, cells, candidateLayout, options);
+        var candidateLoaded = FixtureLoader.LoadFromJson(candidateFixtureJson);
+        candidateLoaded.Options.EventCapacity = options.EventCapacity;
+
+        var summary = new PuzzleSolverSummary(
+            false,
+            false,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            CountAdjacentPairs(cells, candidateLayout),
+            options.WinDurationTicks,
+            options.RequiredAliveTicksAtEnd,
+            0,
+            false);
+        var definition = new PuzzleLevelDefinition(
+            options.LevelNumber,
+            LevelMode.Puzzle,
+            BuildDifficultyLabel(options.LevelNumber, cells.Count),
+            options.GenerationSeed,
+            resources.ToArray(),
+            cells.ToArray(),
+            startingLayout,
+            candidateLayout,
+            summary);
+        var levelJson = JsonSerializer.Serialize(definition, JsonOptions);
+        return new GeneratedPuzzleLevel(
+            options,
+            definition,
+            levelJson,
+            startingFixtureJson,
+            candidateFixtureJson,
+            startingLoaded,
+            candidateLoaded,
+            summary);
+    }
+
     public static IReadOnlyList<LevelCellDefinition> GenerateCellDefinitions(PuzzleLevelOptions options)
     {
         Validate(options);
 
-        var resources = BuildResourceNames(options.LevelNumber + 3);
-        return BuildPuzzleCells(resources, new Random(options.GenerationSeed));
+        var resources = BuildResourceNames(ComputeUniqueProducerResourceCount(ComputeNormalCellCount(options)));
+        return BuildPuzzleCells(ComputeNormalCellCount(options), resources, new Random(options.GenerationSeed));
     }
 
     private static void Validate(PuzzleLevelOptions options)
@@ -232,30 +323,300 @@ public static class PuzzleLevelGenerator
         }
     }
 
-    private static IReadOnlyList<LevelCellDefinition> BuildPuzzleCells(IReadOnlyList<string> resources, Random random)
+    private static int ComputeNormalCellCount(PuzzleLevelOptions options) => options.LevelNumber + 3;
+
+    private static int ComputeRedMycoCount(int normalCellCount) => normalCellCount / RedMycoInterval;
+
+    private static int ComputeRockCount(int normalCellCount) => normalCellCount / RockInterval;
+
+    private static int ComputeUniqueProducerResourceCount(int normalCellCount)
     {
-        if (resources.Count == 4)
+        var duplicateProducerCount = normalCellCount / DuplicateProducerInterval;
+        return Math.Min(MaxLetterResourceCount, Math.Max(1, normalCellCount - duplicateProducerCount));
+    }
+
+    private static IReadOnlyList<LevelCellDefinition> BuildPuzzleCells(
+        int normalCellCount,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        if (normalCellCount <= 0)
         {
-            return resources.Select((resource, index) =>
-                new LevelCellDefinition(
-                    $"cell-{resource.ToLowerInvariant()}",
-                    resource,
-                    resources.Where((_, resourceIndex) => resourceIndex != index).ToArray()))
-                .ToArray();
+            throw new ArgumentOutOfRangeException(nameof(normalCellCount), "Puzzle levels need at least one normal cell.");
         }
 
-        var order = resources.ToArray();
-        Shuffle(order, random);
-        var needsByResource = TryBuildOddCycleWithLeafPositions(order.Length, out _)
-            ? BuildOddCycleWithLeafNeeds(order, random)
-            : BuildBackboneGridNeeds(order, BuildCompactSolutionPositions(order.Length).ToArray(), random);
+        if (resources.Count == 0)
+        {
+            throw new ArgumentException("Puzzle levels need at least one resource.", nameof(resources));
+        }
 
-        return order.Select(resource =>
-            new LevelCellDefinition(
-                $"cell-{resource.ToLowerInvariant()}",
+        var producerResources = BuildProducerResources(normalCellCount, resources, random);
+        var normalCells = new List<LevelCellDefinition>(normalCellCount);
+        var resourceInstanceCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < producerResources.Count; i++)
+        {
+            var resource = producerResources[i];
+            resourceInstanceCounts.TryGetValue(resource, out var instance);
+            instance++;
+            resourceInstanceCounts[resource] = instance;
+            normalCells.Add(new LevelCellDefinition(
+                $"cell-{resource.ToLowerInvariant()}-{instance:000}",
+                CellKind.Standard,
                 resource,
-                needsByResource[resource]))
+                Array.Empty<string>()));
+        }
+
+        var orderedCells = InsertRedMycoCells(normalCells, resources, random);
+        var cellsWithNeeds = AssignGeneratedNeeds(orderedCells, resources, random);
+        return cellsWithNeeds;
+    }
+
+    private static IReadOnlyList<string> BuildProducerResources(
+        int normalCellCount,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        var producerResources = new List<string>(normalCellCount);
+        var uniqueProducerCount = Math.Min(resources.Count, normalCellCount);
+        for (var i = 0; i < uniqueProducerCount; i++)
+        {
+            producerResources.Add(resources[i]);
+        }
+
+        while (producerResources.Count < normalCellCount)
+        {
+            producerResources.Add(resources[random.Next(resources.Count)]);
+        }
+
+        Shuffle(producerResources, random);
+        return producerResources;
+    }
+
+    private static IReadOnlyList<LevelCellDefinition> InsertRedMycoCells(
+        IReadOnlyList<LevelCellDefinition> normalCells,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        var mycoCount = ComputeRedMycoCount(normalCells.Count);
+        var cells = new List<LevelCellDefinition>(normalCells.Count + mycoCount);
+        var nextNormal = 0;
+        var nextMyco = 1;
+        while (nextNormal < normalCells.Count)
+        {
+            var blockEnd = Math.Min(normalCells.Count, nextNormal + RedMycoInterval);
+            for (; nextNormal < blockEnd; nextNormal++)
+            {
+                cells.Add(normalCells[nextNormal]);
+            }
+
+            if (nextMyco <= mycoCount)
+            {
+                cells.Add(new LevelCellDefinition(
+                    $"red-myco-{nextMyco:000}",
+                    CellKind.RedMyco,
+                    "",
+                    ChooseRandomNeeds(resources, "", MycoNeedCount, random)));
+                nextMyco++;
+            }
+        }
+
+        return cells;
+    }
+
+    private static IReadOnlyList<LevelCellDefinition> AssignGeneratedNeeds(
+        IReadOnlyList<LevelCellDefinition> cells,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        var result = cells.ToArray();
+        for (var i = 0; i < result.Length; i++)
+        {
+            var cell = result[i];
+            if (cell.Kind == CellKind.RedMyco)
+            {
+                var mycoNeeds = new List<string>(cell.Needs);
+                AddNeighborOfferNeeds(mycoNeeds, cell, result, i, random);
+                FillNeeds(mycoNeeds, resources, "", MycoNeedCount, random);
+                result[i] = cell with { Needs = mycoNeeds.Take(MycoNeedCount).ToArray() };
+                continue;
+            }
+
+            var needs = new List<string>(3);
+            AddNeighborOfferNeeds(needs, cell, result, i, random);
+            FillNeeds(needs, resources, cell.ProducedResource, 3, random);
+            result[i] = cell with { Needs = needs.Take(3).ToArray() };
+        }
+
+        EnsureEveryResourceIsNeeded(result, resources, random);
+        EnsureDuplicateProducerNeedsDiffer(result, resources, random);
+        return result;
+    }
+
+    private static void AddNeighborOfferNeeds(
+        List<string> needs,
+        LevelCellDefinition cell,
+        IReadOnlyList<LevelCellDefinition> cells,
+        int index,
+        Random random)
+    {
+        var offsets = new[] { -1, 1, -2, 2 };
+        foreach (var offset in offsets)
+        {
+            if (needs.Count >= (cell.Kind == CellKind.RedMyco ? MycoNeedCount : 3))
+            {
+                return;
+            }
+
+            var neighbor = cells[WrapIndex(index + offset, cells.Count)];
+            var offered = GetOfferResources(neighbor)
+                .Where(resource => cell.Kind == CellKind.RedMyco || resource != cell.ProducedResource)
+                .ToArray();
+            if (offered.Length == 0)
+            {
+                continue;
+            }
+
+            Shuffle(offered, random);
+            AddUniqueNeed(needs, offered[0]);
+        }
+    }
+
+    private static int WrapIndex(int index, int count)
+    {
+        var wrapped = index % count;
+        return wrapped < 0 ? wrapped + count : wrapped;
+    }
+
+    private static string[] ChooseRandomNeeds(
+        IReadOnlyList<string> resources,
+        string excludedResource,
+        int count,
+        Random random)
+    {
+        var needs = new List<string>(count);
+        FillNeeds(needs, resources, excludedResource, count, random);
+        return needs.ToArray();
+    }
+
+    private static void FillNeeds(
+        List<string> needs,
+        IReadOnlyList<string> resources,
+        string excludedResource,
+        int count,
+        Random random)
+    {
+        var candidates = resources
+            .Where(resource => !string.Equals(resource, excludedResource, StringComparison.Ordinal))
             .ToArray();
+        Shuffle(candidates, random);
+        foreach (var candidate in candidates)
+        {
+            AddUniqueNeed(needs, candidate);
+            if (needs.Count >= count)
+            {
+                return;
+            }
+        }
+
+        foreach (var resource in resources)
+        {
+            AddUniqueNeed(needs, resource);
+            if (needs.Count >= count)
+            {
+                return;
+            }
+        }
+    }
+
+    private static void AddUniqueNeed(List<string> needs, string resource)
+    {
+        if (!string.IsNullOrEmpty(resource) && !needs.Contains(resource, StringComparer.Ordinal))
+        {
+            needs.Add(resource);
+        }
+    }
+
+    private static void EnsureEveryResourceIsNeeded(
+        LevelCellDefinition[] cells,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        var needed = new HashSet<string>(cells.SelectMany(cell => cell.Needs), StringComparer.Ordinal);
+        foreach (var resource in resources)
+        {
+            if (needed.Contains(resource))
+            {
+                continue;
+            }
+
+            var candidates = cells
+                .Select((cell, index) => (Cell: cell, Index: index, TieBreak: random.Next()))
+                .Where(item => item.Cell.Kind != CellKind.Standard
+                    || !string.Equals(item.Cell.ProducedResource, resource, StringComparison.Ordinal))
+                .OrderBy(item => item.TieBreak)
+                .ToArray();
+            foreach (var candidate in candidates)
+            {
+                var targetCount = candidate.Cell.Kind == CellKind.RedMyco ? MycoNeedCount : 3;
+                var needs = candidate.Cell.Needs.ToList();
+                if (needs.Contains(resource, StringComparer.Ordinal))
+                {
+                    needed.Add(resource);
+                    break;
+                }
+
+                if (needs.Count < targetCount)
+                {
+                    needs.Add(resource);
+                }
+                else
+                {
+                    needs[^1] = resource;
+                }
+
+                cells[candidate.Index] = candidate.Cell with { Needs = needs.ToArray() };
+                needed.Add(resource);
+                break;
+            }
+        }
+    }
+
+    private static void EnsureDuplicateProducerNeedsDiffer(
+        LevelCellDefinition[] cells,
+        IReadOnlyList<string> resources,
+        Random random)
+    {
+        var groups = cells
+            .Select((cell, index) => (Cell: cell, Index: index))
+            .Where(item => item.Cell.Kind == CellKind.Standard)
+            .GroupBy(item => item.Cell.ProducedResource, StringComparer.Ordinal);
+        foreach (var group in groups)
+        {
+            var seenNeeds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in group)
+            {
+                var key = string.Join("|", item.Cell.Needs.OrderBy(resource => resource, StringComparer.Ordinal));
+                if (seenNeeds.Add(key))
+                {
+                    continue;
+                }
+
+                var needs = item.Cell.Needs.ToList();
+                var candidates = resources
+                    .Where(resource => !string.Equals(resource, item.Cell.ProducedResource, StringComparison.Ordinal)
+                        && !needs.Contains(resource, StringComparer.Ordinal))
+                    .ToArray();
+                if (candidates.Length == 0)
+                {
+                    continue;
+                }
+
+                Shuffle(candidates, random);
+                needs[^1] = candidates[0];
+                cells[item.Index] = item.Cell with { Needs = needs.ToArray() };
+                seenNeeds.Add(string.Join("|", needs.OrderBy(resource => resource, StringComparer.Ordinal)));
+            }
+        }
     }
 
     private static SearchResult SearchBestLayout(
@@ -440,9 +801,22 @@ public static class PuzzleLevelGenerator
         LevelLayout solutionLayout,
         PuzzleLevelOptions options)
     {
-        var (width, height) = ComputeStartingLayoutDimensions(cells.Count);
+        var rockCount = ComputeRockCount(cells.Count);
+        var (width, height) = ComputeStartingLayoutDimensions(cells.Count + rockCount);
         var random = new Random(ComputeStartingLayoutSeed(options));
-        var positions = BuildSeparatedStartingPositions(width, height, cells.Count, random);
+        var allPositions = BuildAllPositions(width, height);
+        Shuffle(allPositions, random);
+        var rocks = allPositions.Take(rockCount).ToArray();
+        var rockSet = rocks.ToHashSet();
+        var positions = allPositions
+            .Where(position => !rockSet.Contains(position))
+            .Take(cells.Count)
+            .ToArray();
+        if (positions.Length < cells.Count)
+        {
+            throw new InvalidOperationException("Generated starting layout does not have enough open positions.");
+        }
+
         var cellOrder = cells.ToArray();
         Shuffle(cellOrder, random);
 
@@ -452,7 +826,7 @@ public static class PuzzleLevelGenerator
             placements.Add(new LevelCellPlacement(cellOrder[i].Id, positions[i].X, positions[i].Y));
         }
 
-        return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements));
+        return new LevelLayout(width, height, placements, rocks, RenderAscii(width, height, cells, placements, rocks));
     }
 
     private static int ComputeStartingLayoutSeed(PuzzleLevelOptions options)
@@ -469,8 +843,9 @@ public static class PuzzleLevelGenerator
 
     private static (int Width, int Height) ComputeStartingLayoutDimensions(int cellCount)
     {
-        var (compactWidth, compactHeight) = ComputeCompactDimensions(cellCount);
-        return (compactWidth + 2, compactHeight + 2);
+        var width = Math.Max(2, (int)Math.Ceiling(Math.Sqrt(cellCount)));
+        var height = Math.Max(2, (int)Math.Ceiling((double)cellCount / width));
+        return (width + 2, height + 2);
     }
 
     private static GridPosition[] BuildSeparatedStartingPositions(
@@ -510,6 +885,20 @@ public static class PuzzleLevelGenerator
         return allPositions.Take(cellCount).ToArray();
     }
 
+    private static List<GridPosition> BuildAllPositions(int width, int height)
+    {
+        var positions = new List<GridPosition>(width * height);
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                positions.Add(new GridPosition(x, y));
+            }
+        }
+
+        return positions;
+    }
+
     private static LevelLayout BuildCanonicalSolutionLayout(IReadOnlyList<LevelCellDefinition> cells)
     {
         var positions = BuildCompactSolutionPositions(cells.Count).ToArray();
@@ -518,7 +907,7 @@ public static class PuzzleLevelGenerator
         var placements = cells
             .Select((cell, index) => new LevelCellPlacement(cell.Id, positions[index].X, positions[index].Y))
             .ToArray();
-        return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements));
+        return new LevelLayout(width, height, placements, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, placements, Array.Empty<GridPosition>()));
     }
 
     private static LevelLayout BuildSolutionLayoutCandidate(
@@ -701,8 +1090,8 @@ public static class PuzzleLevelGenerator
 
     private static int GetCellMatchScore(LevelCellDefinition a, LevelCellDefinition b)
     {
-        var aNeedsB = a.Needs.Contains(b.ProducedResource, StringComparer.Ordinal);
-        var bNeedsA = b.Needs.Contains(a.ProducedResource, StringComparer.Ordinal);
+        var aNeedsB = a.Needs.Intersect(GetOfferResources(b), StringComparer.Ordinal).Any();
+        var bNeedsA = b.Needs.Intersect(GetOfferResources(a), StringComparer.Ordinal).Any();
         return (aNeedsB, bNeedsA) switch
         {
             (true, true) => 6,
@@ -743,7 +1132,7 @@ public static class PuzzleLevelGenerator
             .ToArray();
         var width = normalized.Max(placement => placement.X) + 1;
         var height = normalized.Max(placement => placement.Y) + 1;
-        return new LevelLayout(width, height, normalized, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, normalized));
+        return new LevelLayout(width, height, normalized, Array.Empty<GridPosition>(), RenderAscii(width, height, cells, normalized, Array.Empty<GridPosition>()));
     }
 
     private static (int Width, int Height) ComputeCompactDimensions(int cellCount)
@@ -929,6 +1318,7 @@ public static class PuzzleLevelGenerator
                 GlowTtlTicks = options.GlowTtlTicks,
                 WinRecentFlowWindowTicks = options.WinRecentFlowWindowTicks,
                 SwapRoundsPerTick = options.SwapRoundsPerTick,
+                MaxSwapQuantityPerEdge = options.MaxSwapQuantityPerEdge,
                 NeedDesiredQuantity = options.NeedDesiredQuantity,
                 NeedOfferReserve = options.NeedOfferReserve,
                 AllowNeedOverflowPayments = options.AllowNeedOverflowPayments
@@ -949,30 +1339,41 @@ public static class PuzzleLevelGenerator
             {
                 Id = cell.Id,
                 X = placement.X,
-                Y = placement.Y
+                Y = placement.Y,
+                Kind = cell.Kind == CellKind.Standard ? null : cell.Kind.ToString()
             };
-            cellDocument.Slots.Add(new LevelSlotDocument
+
+            if (cell.Kind == CellKind.Standard)
             {
-                Resource = cell.ProducedResource,
-                Role = nameof(PoolSlotRole.SourceOutput),
-                Quantity = 0
-            });
+                cellDocument.Slots.Add(new LevelSlotDocument
+                {
+                    Resource = cell.ProducedResource,
+                    Role = nameof(PoolSlotRole.SourceOutput),
+                    Quantity = 0
+                });
+            }
+
             foreach (var need in cell.Needs)
             {
                 cellDocument.Slots.Add(new LevelSlotDocument
                 {
                     Resource = need,
                     Role = nameof(PoolSlotRole.Need),
-                    Quantity = 0
+                    Quantity = cell.Kind == CellKind.RedMyco ? MycoStartingQuantity : 0,
+                    Capacity = cell.Kind == CellKind.RedMyco ? MycoCapacity : null
                 });
             }
 
-            cellDocument.Sources.Add(new LevelSourceDocument
+            if (cell.Kind == CellKind.Standard)
             {
-                Resource = cell.ProducedResource,
-                QuantityPerTick = options.SourceQuantityPerTick,
-                IntervalTicks = options.SourceIntervalTicks
-            });
+                cellDocument.Sources.Add(new LevelSourceDocument
+                {
+                    Resource = cell.ProducedResource,
+                    QuantityPerTick = options.SourceQuantityPerTick,
+                    IntervalTicks = options.SourceIntervalTicks
+                });
+            }
+
             fixture.Cells.Add(cellDocument);
         }
 
@@ -983,13 +1384,19 @@ public static class PuzzleLevelGenerator
         int width,
         int height,
         IReadOnlyList<LevelCellDefinition> cells,
-        IReadOnlyList<LevelCellPlacement> placements)
+        IReadOnlyList<LevelCellPlacement> placements,
+        IReadOnlyList<GridPosition> rocks)
     {
-        var producedByCell = cells.ToDictionary(cell => cell.Id, cell => cell.ProducedResource, StringComparer.Ordinal);
+        var symbolByCell = cells.ToDictionary(cell => cell.Id, GetSetupMapSymbol, StringComparer.Ordinal);
         var symbols = new Dictionary<GridPosition, char>();
+        foreach (var rock in rocks)
+        {
+            symbols[rock] = '#';
+        }
+
         foreach (var placement in placements)
         {
-            symbols[new GridPosition(placement.X, placement.Y)] = producedByCell[placement.CellId][0];
+            symbols[new GridPosition(placement.X, placement.Y)] = symbolByCell[placement.CellId];
         }
 
         var builder = new StringBuilder();
@@ -1011,10 +1418,15 @@ public static class PuzzleLevelGenerator
 
     private static List<string> BuildResourceNames(int count)
     {
+        if (count <= 0 || count > MaxLetterResourceCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), $"Puzzle resources must be between 1 and {MaxLetterResourceCount}.");
+        }
+
         var resources = new List<string>(count);
         for (var i = 0; i < count; i++)
         {
-            resources.Add(i < 26 ? ((char)('A' + i)).ToString() : $"R{i:00}");
+            resources.Add(((char)('A' + i)).ToString());
         }
 
         return resources;
@@ -1448,6 +1860,19 @@ public static class PuzzleLevelGenerator
         return count;
     }
 
+    private static int CountAdjacentPairs(
+        IReadOnlyList<LevelCellDefinition> cells,
+        LevelLayout layout)
+    {
+        var count = 0;
+        foreach (var _ in EnumerateAdjacentCellPairs(cells, layout))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     private static int CountReciprocalAdjacentPairs(
         IReadOnlyList<LevelCellDefinition> cells,
         LevelLayout layout)
@@ -1484,15 +1909,32 @@ public static class PuzzleLevelGenerator
     }
 
     private static bool CellsHaveUsefulEdge(LevelCellDefinition a, LevelCellDefinition b) =>
-        a.Needs.Contains(b.ProducedResource, StringComparer.Ordinal)
-        || b.Needs.Contains(a.ProducedResource, StringComparer.Ordinal);
+        a.Needs.Intersect(GetOfferResources(b), StringComparer.Ordinal).Any()
+        || b.Needs.Intersect(GetOfferResources(a), StringComparer.Ordinal).Any();
 
     private static bool CellsHaveReciprocalEdge(LevelCellDefinition a, LevelCellDefinition b) =>
-        a.Needs.Contains(b.ProducedResource, StringComparer.Ordinal)
-        && b.Needs.Contains(a.ProducedResource, StringComparer.Ordinal);
+        a.Needs.Intersect(GetOfferResources(b), StringComparer.Ordinal).Any()
+        && b.Needs.Intersect(GetOfferResources(a), StringComparer.Ordinal).Any();
 
     private static string BuildDifficultyLabel(int levelNumber, int cellCount) =>
-        $"Level {levelNumber}: {cellCount} producer cells, open board, no rocks";
+        $"Level {levelNumber}: {cellCount} cells, duplicate producers, red myco, rocks";
+
+    private static IEnumerable<string> GetOfferResources(LevelCellDefinition cell)
+    {
+        if (cell.Kind == CellKind.Standard)
+        {
+            return string.IsNullOrEmpty(cell.ProducedResource)
+                ? Array.Empty<string>()
+                : new[] { cell.ProducedResource };
+        }
+
+        return cell.Needs;
+    }
+
+    private static char GetSetupMapSymbol(LevelCellDefinition cell) =>
+        cell.Kind == CellKind.RedMyco
+            ? '*'
+            : string.IsNullOrEmpty(cell.ProducedResource) ? '?' : cell.ProducedResource[0];
 
     private static void Shuffle<T>(IList<T> values, Random random)
     {
@@ -1539,6 +1981,9 @@ public static class PuzzleLevelGenerator
         [JsonPropertyName("swapRoundsPerTick")]
         public int SwapRoundsPerTick { get; set; }
 
+        [JsonPropertyName("maxSwapQuantityPerEdge")]
+        public int MaxSwapQuantityPerEdge { get; set; }
+
         [JsonPropertyName("needDesiredQuantity")]
         public int NeedDesiredQuantity { get; set; }
 
@@ -1575,6 +2020,9 @@ public static class PuzzleLevelGenerator
         [JsonPropertyName("id")]
         public string Id { get; set; } = "";
 
+        [JsonPropertyName("kind")]
+        public string? Kind { get; set; }
+
         [JsonPropertyName("x")]
         public int X { get; set; }
 
@@ -1598,6 +2046,9 @@ public static class PuzzleLevelGenerator
 
         [JsonPropertyName("quantity")]
         public int Quantity { get; set; }
+
+        [JsonPropertyName("capacity")]
+        public int? Capacity { get; set; }
     }
 
     private sealed class LevelSourceDocument

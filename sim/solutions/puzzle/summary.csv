@@ -1,0 +1,2 @@
+level,status,uses_needs_repair,candidates_evaluated,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,failure_category,output
+18,fail,false,62,-1,28.90,22600,16940,0,duplicate producer deadlock,sim/solutions/puzzle/level-018

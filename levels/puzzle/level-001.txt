@@ -1,0 +1,10 @@
+.. .. .. .. A1
+.. B1 .. .. ..
+.. ## C1 .. ..
+.. .. .. D1 ..
+
+Legend:
+A1: cell-a-001; produces A; needs D,B,C
+B1: cell-b-001; produces B; needs A,C,D
+C1: cell-c-001; produces C; needs B,D,A
+D1: cell-d-001; produces D; needs C,A,B

@@ -3,6 +3,49 @@ using System.Text;
 using CellularSim;
 
 var run = ParseRun(args);
+if (run.PuzzleSolutionSearchOptions is not null)
+{
+    if (run.PuzzleSolutionSearchOptions.ProgressStride > 0)
+    {
+        run.PuzzleSolutionSearchOptions.ProgressLogger = Console.WriteLine;
+    }
+
+    var solutionBatch = PuzzleSolutionSearcher.SearchRange(run.PuzzleSolutionSearchOptions);
+    var failures = solutionBatch.Results.Count(result => !result.Won);
+    Console.WriteLine($"Puzzle solution search complete: pass={solutionBatch.Results.Count - failures} fail={failures} summary={Path.Combine(run.PuzzleSolutionSearchOptions.OutputDirectory, "summary.csv")}");
+    if (failures > 0)
+    {
+        Environment.ExitCode = 1;
+    }
+
+    return;
+}
+
+if (run.PlayablePuzzleBatchOptions is not null)
+{
+    SavePlayablePuzzleBatch(run.PlayablePuzzleBatchOptions);
+    return;
+}
+
+if (run.PuzzleLevelOptions is not null
+    && run.PuzzleLevelOptions.GenerationStrategy == PuzzleGenerationStrategy.ShapeFirstExact
+    && (run.PuzzleLevelOptions.StartLevel > 0 || run.PuzzleLevelOptions.EndLevel > 0))
+{
+    if (run.PuzzleLevelOptions.ProgressStride > 0)
+    {
+        run.PuzzleLevelOptions.ProgressLogger = Console.WriteLine;
+    }
+
+    var outputDirectory = run.SaveDirectory ?? Path.Combine("sim", "generated", "playable-19-200-v2");
+    var failures = SaveShapeFirstExactPuzzleBatch(run.PuzzleLevelOptions, outputDirectory);
+    if (failures > 0)
+    {
+        Environment.ExitCode = 1;
+    }
+
+    return;
+}
+
 GeneratedScenario? generated = null;
 GeneratedPuzzleLevel? puzzleLevel = null;
 FixtureLoadResult loaded;
@@ -65,10 +108,24 @@ static RunOptions ParseRun(string[] args)
     string? saveDirectory = null;
     RandomScenarioOptions? generateOptions = null;
     PuzzleLevelOptions? puzzleLevelOptions = null;
+    PlayablePuzzleBatchOptions? playablePuzzleBatchOptions = null;
+    PuzzleSolutionSearchOptions? puzzleSolutionSearchOptions = null;
 
     for (var i = 0; i < args.Length; i++)
     {
         var arg = args[i];
+        if (arg == "--solve-puzzle-levels")
+        {
+            puzzleSolutionSearchOptions ??= new PuzzleSolutionSearchOptions();
+            continue;
+        }
+
+        if (arg == "--generate-playable-puzzle-levels")
+        {
+            playablePuzzleBatchOptions ??= new PlayablePuzzleBatchOptions();
+            continue;
+        }
+
         if (arg == "--generate-puzzle-level")
         {
             puzzleLevelOptions ??= new PuzzleLevelOptions();
@@ -112,6 +169,16 @@ static RunOptions ParseRun(string[] args)
             continue;
         }
 
+        if (TryParsePlayablePuzzleBatchOption(args, ref i, arg, ref playablePuzzleBatchOptions))
+        {
+            continue;
+        }
+
+        if (TryParsePuzzleSolutionSearchOption(args, ref i, arg, ref puzzleSolutionSearchOptions))
+        {
+            continue;
+        }
+
         if (TryParseGeneratedOption(args, ref i, arg, ref generateOptions))
         {
             continue;
@@ -132,9 +199,40 @@ static RunOptions ParseRun(string[] args)
         }
     }
 
+    if (puzzleSolutionSearchOptions is not null
+        && (playablePuzzleBatchOptions is not null || generateOptions is not null || puzzleLevelOptions is not null))
+    {
+        throw new ArgumentException("Use --solve-puzzle-levels by itself.");
+    }
+
+    if (playablePuzzleBatchOptions is not null && (generateOptions is not null || puzzleLevelOptions is not null))
+    {
+        throw new ArgumentException("Use --generate-playable-puzzle-levels by itself.");
+    }
+
     if (generateOptions is not null && puzzleLevelOptions is not null)
     {
         throw new ArgumentException("Use either --generate or --generate-puzzle-level, not both.");
+    }
+
+    if (puzzleSolutionSearchOptions is not null)
+    {
+        if (saveDirectory is not null)
+        {
+            puzzleSolutionSearchOptions.OutputDirectory = saveDirectory;
+        }
+
+        return new RunOptions("", ticks, debug, verbose, commands, null, null, null, puzzleSolutionSearchOptions, saveDirectory);
+    }
+
+    if (playablePuzzleBatchOptions is not null)
+    {
+        if (saveDirectory is not null)
+        {
+            playablePuzzleBatchOptions.GeneratedRoot = saveDirectory;
+        }
+
+        return new RunOptions("", ticks, debug, verbose, commands, null, null, playablePuzzleBatchOptions, null, saveDirectory);
     }
 
     if (generateOptions is not null)
@@ -144,7 +242,7 @@ static RunOptions ParseRun(string[] args)
             ticks = 100;
         }
 
-        return new RunOptions("", ticks, debug, verbose, commands, generateOptions, puzzleLevelOptions, saveDirectory);
+        return new RunOptions("", ticks, debug, verbose, commands, generateOptions, puzzleLevelOptions, null, null, saveDirectory);
     }
 
     if (puzzleLevelOptions is not null)
@@ -154,7 +252,7 @@ static RunOptions ParseRun(string[] args)
             ticks = puzzleLevelOptions.TicksPerCandidate;
         }
 
-        return new RunOptions("", ticks, debug, verbose, commands, null, puzzleLevelOptions, saveDirectory);
+        return new RunOptions("", ticks, debug, verbose, commands, null, puzzleLevelOptions, null, null, saveDirectory);
     }
 
     if (fixturePath.Length == 0)
@@ -162,7 +260,141 @@ static RunOptions ParseRun(string[] args)
         fixturePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../fixtures/routing.json"));
     }
 
-    return new RunOptions(fixturePath, ticks, debug, verbose, commands, null, null, saveDirectory);
+    return new RunOptions(fixturePath, ticks, debug, verbose, commands, null, null, null, null, saveDirectory);
+}
+
+static bool TryParsePlayablePuzzleBatchOption(string[] args, ref int index, string arg, ref PlayablePuzzleBatchOptions? options)
+{
+    static int ParseInt(string value, string name)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+        {
+            return result;
+        }
+
+        throw new ArgumentException($"Invalid integer for {name}: {value}");
+    }
+
+    if (arg == "--overwrite")
+    {
+        if (options is null)
+        {
+            return false;
+        }
+
+        options.SkipExisting = false;
+        return true;
+    }
+
+    if (arg is not ("--from-level" or "--to-level" or "--level-seed-base" or "--source-rate" or "--ship-dir"))
+    {
+        return false;
+    }
+
+    if (options is null)
+    {
+        return false;
+    }
+
+    if (index + 1 >= args.Length)
+    {
+        throw new ArgumentException($"{arg} requires a value.");
+    }
+
+    var value = args[++index];
+    switch (arg)
+    {
+        case "--from-level":
+            options.StartLevel = ParseInt(value, arg);
+            break;
+        case "--to-level":
+            options.EndLevel = ParseInt(value, arg);
+            break;
+        case "--level-seed-base":
+            options.GenerationSeedBase = ParseInt(value, arg);
+            break;
+        case "--source-rate":
+            options.SourceQuantityPerTick = ParseInt(value, arg);
+            break;
+        case "--ship-dir":
+            options.ShipDirectory = value;
+            break;
+    }
+
+    return true;
+}
+
+static bool TryParsePuzzleSolutionSearchOption(string[] args, ref int index, string arg, ref PuzzleSolutionSearchOptions? options)
+{
+    static int ParseInt(string value, string name)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+        {
+            return result;
+        }
+
+        throw new ArgumentException($"Invalid integer for {name}: {value}");
+    }
+
+    if (arg == "--stop-on-failure")
+    {
+        if (options is null)
+        {
+            return false;
+        }
+
+        options.StopOnFailure = true;
+        return true;
+    }
+
+    if (arg is not ("--from-level" or "--to-level" or "--levels-dir" or "--solution-ticks" or "--candidate-limit" or "--beam-size" or "--source-rate" or "--event-capacity" or "--progress-stride"))
+    {
+        return false;
+    }
+
+    if (options is null)
+    {
+        return false;
+    }
+
+    if (index + 1 >= args.Length)
+    {
+        throw new ArgumentException($"{arg} requires a value.");
+    }
+
+    var value = args[++index];
+    switch (arg)
+    {
+        case "--from-level":
+            options.StartLevel = ParseInt(value, arg);
+            break;
+        case "--to-level":
+            options.EndLevel = ParseInt(value, arg);
+            break;
+        case "--levels-dir":
+            options.LevelsDirectory = value;
+            break;
+        case "--solution-ticks":
+            options.TicksPerCandidate = ParseInt(value, arg);
+            break;
+        case "--candidate-limit":
+            options.CandidateLimit = ParseInt(value, arg);
+            break;
+        case "--beam-size":
+            options.BeamSize = ParseInt(value, arg);
+            break;
+        case "--source-rate":
+            options.SourceQuantityPerTick = ParseInt(value, arg);
+            break;
+        case "--event-capacity":
+            options.EventCapacity = ParseInt(value, arg);
+            break;
+        case "--progress-stride":
+            options.ProgressStride = ParseInt(value, arg);
+            break;
+    }
+
+    return true;
 }
 
 static bool TryParseGeneratedOption(string[] args, ref int index, string arg, ref RandomScenarioOptions? options)
@@ -260,7 +492,45 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
         return true;
     }
 
-    if (arg is not ("--level" or "--level-seed" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity" or "--win-recent-flow-window-ticks" or "--win-duration-ticks" or "--required-alive-ticks-at-end" or "--progress-stride"))
+    if (arg == "--generation-strategy")
+    {
+        if (options is null)
+        {
+            return false;
+        }
+
+        if (index + 1 >= args.Length)
+        {
+            throw new ArgumentException($"{arg} requires a value.");
+        }
+
+        var strategy = args[++index];
+        options.GenerationStrategy = strategy switch
+        {
+            "search" => PuzzleGenerationStrategy.Search,
+            "shape-first-exact" => PuzzleGenerationStrategy.ShapeFirstExact,
+            _ => throw new ArgumentException($"Invalid puzzle generation strategy: {strategy}")
+        };
+        return true;
+    }
+
+    if (arg == "--ship-dir")
+    {
+        if (options is null)
+        {
+            return false;
+        }
+
+        if (index + 1 >= args.Length)
+        {
+            throw new ArgumentException($"{arg} requires a value.");
+        }
+
+        options.ShipDirectory = args[++index];
+        return true;
+    }
+
+    if (arg is not ("--level" or "--from-level" or "--to-level" or "--level-seed" or "--level-seed-base" or "--need-attempts" or "--layout-candidates" or "--solution-ticks" or "--source-rate" or "--source-interval" or "--event-capacity" or "--win-recent-flow-window-ticks" or "--win-duration-ticks" or "--required-alive-ticks-at-end" or "--shape-first-sustained-ticks" or "--max-swap-quantity-per-edge" or "--progress-stride"))
     {
         return false;
     }
@@ -281,8 +551,17 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
         case "--level":
             options.LevelNumber = value;
             break;
+        case "--from-level":
+            options.StartLevel = value;
+            break;
+        case "--to-level":
+            options.EndLevel = value;
+            break;
         case "--level-seed":
             options.GenerationSeed = value;
+            break;
+        case "--level-seed-base":
+            options.GenerationSeedBase = value;
             break;
         case "--need-attempts":
             options.NeedAttemptLimit = value;
@@ -310,6 +589,12 @@ static bool TryParsePuzzleLevelOption(string[] args, ref int index, string arg, 
             break;
         case "--required-alive-ticks-at-end":
             options.RequiredAliveTicksAtEnd = value;
+            break;
+        case "--shape-first-sustained-ticks":
+            options.ShapeFirstSustainedTicks = value;
+            break;
+        case "--max-swap-quantity-per-edge":
+            options.MaxSwapQuantityPerEdge = value;
             break;
         case "--progress-stride":
             options.ProgressStride = value;
@@ -964,6 +1249,7 @@ static string RenderPuzzleSummaryText(GeneratedPuzzleLevel level)
     var summary = level.SolverSummary;
     var builder = new StringBuilder();
     builder.AppendLine("Puzzle solver summary");
+    builder.AppendLine($"  playable only: {level.Options.PlayableOnly}");
     builder.AppendLine($"  won: {summary.Won}");
     builder.AppendLine($"  accepted near win: {summary.AcceptedNearWin}");
     builder.AppendLine($"  need attempt: {summary.NeedAttempt}");
@@ -974,6 +1260,8 @@ static string RenderPuzzleSummaryText(GeneratedPuzzleLevel level)
     builder.AppendLine($"  required alive ticks at end: {summary.RequiredAliveTicksAtEnd}");
     builder.AppendLine($"  final sustained ticks: {summary.FinalSustainedTicks}");
     builder.AppendLine($"  stable at end: {summary.StableAtEnd}");
+    builder.AppendLine($"  repair edits: {level.RepairEditCount}");
+    builder.AppendLine($"  producer edits: {level.ProducerEditCount}");
     builder.AppendLine($"  glowing cells: {summary.GlowingCells}/{level.Definition.Cells.Count}");
     builder.AppendLine($"  swaps: {summary.TotalSwaps}");
     builder.AppendLine($"  reactions: {summary.TotalReactions}");
@@ -985,7 +1273,14 @@ static string RenderPuzzleSummaryText(GeneratedPuzzleLevel level)
     builder.AppendLine("Cells");
     foreach (var cell in level.Definition.Cells)
     {
-        builder.AppendLine($"  {cell.Id}: produces {cell.ProducedResource}; needs {string.Join(", ", cell.Needs)}");
+        if (cell.Kind == CellKind.RedMyco)
+        {
+            builder.AppendLine($"  {cell.Id}: red myco; needs {string.Join(", ", cell.Needs)}");
+        }
+        else
+        {
+            builder.AppendLine($"  {cell.Id}: produces {cell.ProducedResource}; needs {string.Join(", ", cell.Needs)}");
+        }
     }
 
     builder.AppendLine();
@@ -1009,10 +1304,226 @@ static void SavePuzzleLevel(GeneratedPuzzleLevel level, string directory)
     Directory.CreateDirectory(directory);
     File.WriteAllText(Path.Combine(directory, "level.json"), level.LevelJson);
     File.WriteAllText(Path.Combine(directory, "starting-fixture.json"), level.StartingFixtureJson);
-    File.WriteAllText(Path.Combine(directory, "solution-fixture.json"), level.SolutionFixtureJson);
     File.WriteAllText(Path.Combine(directory, "starting-map.txt"), level.Definition.StartingLayout.Ascii + Environment.NewLine);
-    File.WriteAllText(Path.Combine(directory, "solution-map.txt"), level.Definition.SolutionLayout.Ascii + Environment.NewLine);
+    if (!level.Options.PlayableOnly)
+    {
+        File.WriteAllText(Path.Combine(directory, "solution-fixture.json"), level.SolutionFixtureJson);
+        File.WriteAllText(Path.Combine(directory, "solution-map.txt"), level.Definition.SolutionLayout.Ascii + Environment.NewLine);
+    }
+
     File.WriteAllText(Path.Combine(directory, "results.txt"), RenderPuzzleSummaryText(level));
+    if (level.Options.GenerationStrategy == PuzzleGenerationStrategy.ShapeFirstExact)
+    {
+        File.WriteAllText(Path.Combine(directory, "construction-proof.txt"), ShapeFirstExactPuzzleLevelGenerator.RenderConstructionProof(level));
+    }
+}
+
+static int SaveShapeFirstExactPuzzleBatch(PuzzleLevelOptions batch, string generatedRoot)
+{
+    var startLevel = batch.StartLevel > 0 ? batch.StartLevel : batch.LevelNumber;
+    var endLevel = batch.EndLevel > 0 ? batch.EndLevel : startLevel;
+    if (startLevel <= 0 || endLevel < startLevel)
+    {
+        throw new ArgumentOutOfRangeException(nameof(batch), "Level range must be positive and ordered.");
+    }
+
+    Directory.CreateDirectory(generatedRoot);
+    Directory.CreateDirectory(batch.ShipDirectory);
+    var summaryPath = Path.Combine(generatedRoot, "summary.csv");
+    var summary = new StringBuilder();
+    summary.AppendLine("level,status,static_proof,sim_win,stable_at_end,sustained_ticks,total_swaps,total_reactions,flow,repair_edits,producer_edits,failure_category,generated_dir,shipped");
+
+    var passed = 0;
+    var failed = 0;
+    for (var levelNumber = startLevel; levelNumber <= endLevel; levelNumber++)
+    {
+        var levelName = $"level-{levelNumber:000}";
+        var generatedDirectory = Path.Combine(generatedRoot, levelName);
+        try
+        {
+            var options = new PuzzleLevelOptions
+            {
+                StartLevel = batch.StartLevel,
+                EndLevel = batch.EndLevel,
+                LevelNumber = levelNumber,
+                GenerationSeed = batch.GenerationSeedBase + levelNumber,
+                GenerationSeedBase = batch.GenerationSeedBase,
+                GenerationStrategy = PuzzleGenerationStrategy.ShapeFirstExact,
+                NeedAttemptLimit = batch.NeedAttemptLimit,
+                LayoutCandidateLimit = batch.LayoutCandidateLimit,
+                TicksPerCandidate = batch.TicksPerCandidate,
+                AllowNearWin = batch.AllowNearWin,
+                SourceQuantityPerTick = batch.SourceQuantityPerTick,
+                SourceIntervalTicks = batch.SourceIntervalTicks,
+                EventCapacity = batch.EventCapacity,
+                GlowTtlTicks = batch.GlowTtlTicks,
+                WinRecentFlowWindowTicks = batch.WinRecentFlowWindowTicks,
+                SwapRoundsPerTick = batch.SwapRoundsPerTick,
+                NeedDesiredQuantity = batch.NeedDesiredQuantity,
+                NeedOfferReserve = batch.NeedOfferReserve,
+                AllowNeedOverflowPayments = batch.AllowNeedOverflowPayments,
+                MaxSwapQuantityPerEdge = batch.MaxSwapQuantityPerEdge,
+                WinDurationTicks = batch.WinDurationTicks,
+                RequiredAliveTicksAtEnd = batch.RequiredAliveTicksAtEnd,
+                ShapeFirstSustainedTicks = batch.ShapeFirstSustainedTicks,
+                ProgressStride = batch.ProgressStride,
+                ShipDirectory = batch.ShipDirectory,
+                ProgressLogger = batch.ProgressLogger
+            };
+            var level = PuzzleLevelGenerator.Generate(options);
+            SavePuzzleLevel(level, generatedDirectory);
+
+            var proof = ShapeFirstExactPuzzleLevelGenerator.BuildConstructionProof(level);
+            var shipped = options.ShapeFirstSustainedTicks > 0
+                ? level.SolverSummary.Won
+                    && level.SolverSummary.StableAtEnd
+                    && level.SolverSummary.FinalSustainedTicks >= options.ShapeFirstSustainedTicks
+                : level.SolverSummary.Won;
+            if (shipped)
+            {
+                ShipPuzzleLevel(level, batch.ShipDirectory, levelName);
+                passed++;
+            }
+            else
+            {
+                failed++;
+            }
+
+            var flow = level.SolverSummary.TicksPerCandidate == 0
+                ? 0
+                : (double)level.SolverSummary.TotalSwaps / level.SolverSummary.TicksPerCandidate;
+            summary.AppendLine(string.Join(
+                ',',
+                levelNumber.ToString(CultureInfo.InvariantCulture),
+                Csv(shipped ? "passed" : "failed"),
+                Csv(proof.StaticProofPassed ? "yes" : "no"),
+                Csv(level.SolverSummary.Won ? "yes" : "no"),
+                Csv(level.SolverSummary.StableAtEnd ? "yes" : "no"),
+                level.SolverSummary.FinalSustainedTicks.ToString(CultureInfo.InvariantCulture),
+                level.SolverSummary.TotalSwaps.ToString(CultureInfo.InvariantCulture),
+                level.SolverSummary.TotalReactions.ToString(CultureInfo.InvariantCulture),
+                flow.ToString("F3", CultureInfo.InvariantCulture),
+                level.RepairEditCount.ToString(CultureInfo.InvariantCulture),
+                level.ProducerEditCount.ToString(CultureInfo.InvariantCulture),
+                Csv(proof.FailureCategory),
+                Csv(generatedDirectory),
+                Csv(shipped ? "yes" : "no")));
+            Console.WriteLine($"{levelName}: {(shipped ? "shipped" : "failed")} static={proof.StaticProofPassed} {RenderCompactPuzzleSummary(level.SolverSummary)}");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or InvalidFixtureException)
+        {
+            failed++;
+            Directory.CreateDirectory(generatedDirectory);
+            File.WriteAllText(Path.Combine(generatedDirectory, "results.txt"), ex.ToString());
+            summary.AppendLine(string.Join(
+                ',',
+                levelNumber.ToString(CultureInfo.InvariantCulture),
+                Csv("failed"),
+                Csv("no"),
+                Csv("no"),
+                Csv("no"),
+                "0",
+                "0",
+                "0",
+                "0.000",
+                "0",
+                "0",
+                Csv(ex.GetType().Name),
+                Csv(generatedDirectory),
+                Csv("no")));
+            Console.WriteLine($"{levelName}: failed {ex.Message}");
+        }
+
+        File.WriteAllText(summaryPath, summary.ToString());
+    }
+
+    Console.WriteLine($"Shape-first exact batch complete: pass={passed} fail={failed} summary={summaryPath}");
+    return failed;
+}
+
+static void ShipPuzzleLevel(GeneratedPuzzleLevel level, string shipDirectory, string levelName)
+{
+    Directory.CreateDirectory(shipDirectory);
+    File.WriteAllText(Path.Combine(shipDirectory, $"{levelName}.json"), level.StartingFixtureJson);
+    File.WriteAllText(Path.Combine(shipDirectory, $"{levelName}.txt"), level.Definition.StartingLayout.Ascii + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shipDirectory, $"{levelName}-solution.txt"), level.Definition.SolutionLayout.Ascii + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shipDirectory, $"{levelName}-solution.json"), level.SolutionFixtureJson);
+    File.WriteAllText(Path.Combine(shipDirectory, $"{levelName}-definition.json"), level.LevelJson);
+}
+
+static string RenderCompactPuzzleSummary(PuzzleSolverSummary summary) =>
+    $"won={summary.Won} sustained={summary.FinalSustainedTicks} stableAtEnd={summary.StableAtEnd} swaps={summary.TotalSwaps} reactions={summary.TotalReactions}";
+
+static string Csv(string value)
+{
+    if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
+    {
+        return value;
+    }
+
+    return "\"" + value.Replace("\"", "\"\"") + "\"";
+}
+
+static void SavePlayablePuzzleBatch(PlayablePuzzleBatchOptions batch)
+{
+    if (batch.StartLevel <= 0 || batch.EndLevel < batch.StartLevel)
+    {
+        throw new ArgumentOutOfRangeException(nameof(batch), "Level range must be positive and ordered.");
+    }
+
+    Directory.CreateDirectory(batch.GeneratedRoot);
+    Directory.CreateDirectory(batch.ShipDirectory);
+
+    var generated = 0;
+    var skipped = 0;
+    for (var levelNumber = batch.StartLevel; levelNumber <= batch.EndLevel; levelNumber++)
+    {
+        var levelName = $"level-{levelNumber:000}";
+        var shippedFixturePath = Path.Combine(batch.ShipDirectory, $"{levelName}.json");
+        if (batch.SkipExisting && File.Exists(shippedFixturePath))
+        {
+            skipped++;
+            continue;
+        }
+
+        var levelOptions = new PuzzleLevelOptions
+        {
+            LevelNumber = levelNumber,
+            GenerationSeed = batch.GenerationSeedBase + levelNumber,
+            NeedAttemptLimit = 1,
+            LayoutCandidateLimit = 1,
+            TicksPerCandidate = 1,
+            SourceQuantityPerTick = batch.SourceQuantityPerTick,
+            PlayableOnly = true
+        };
+        var level = PuzzleLevelGenerator.Generate(levelOptions);
+        var generatedDirectory = Path.Combine(batch.GeneratedRoot, levelName);
+        SavePuzzleLevel(level, generatedDirectory);
+        File.WriteAllText(shippedFixturePath, level.StartingFixtureJson);
+        generated++;
+        var normalCells = level.Definition.Cells.Count(cell => cell.Kind == CellKind.Standard);
+        var redMycoCells = level.Definition.Cells.Count(cell => cell.Kind == CellKind.RedMyco);
+        Console.WriteLine(
+            $"{levelName}: generated playable start cells={level.Definition.Cells.Count} "
+            + $"normal={normalCells} redMyco={redMycoCells} rocks={level.Definition.StartingLayout.Rocks.Count} "
+            + $"grid={level.Definition.StartingLayout.Width}x{level.Definition.StartingLayout.Height} "
+            + $"sourceRate={levelOptions.SourceQuantityPerTick}");
+    }
+
+    var missing = new List<int>();
+    for (var levelNumber = batch.StartLevel; levelNumber <= batch.EndLevel; levelNumber++)
+    {
+        if (!File.Exists(Path.Combine(batch.ShipDirectory, $"level-{levelNumber:000}.json")))
+        {
+            missing.Add(levelNumber);
+        }
+    }
+
+    Console.WriteLine($"Generated playable levels: {generated}; skipped existing: {skipped}.");
+    if (missing.Count > 0)
+    {
+        throw new InvalidOperationException($"Missing shipped puzzle levels after generation: {string.Join(", ", missing)}");
+    }
 }
 
 static string NamesFor(CellState cell, FixtureLoadResult loaded, PoolSlotRole role)
@@ -1119,4 +1630,17 @@ internal sealed record RunOptions(
     string? Commands,
     RandomScenarioOptions? GenerateOptions,
     PuzzleLevelOptions? PuzzleLevelOptions,
+    PlayablePuzzleBatchOptions? PlayablePuzzleBatchOptions,
+    PuzzleSolutionSearchOptions? PuzzleSolutionSearchOptions,
     string? SaveDirectory);
+
+internal sealed class PlayablePuzzleBatchOptions
+{
+    public int StartLevel { get; set; } = 1;
+    public int EndLevel { get; set; } = 200;
+    public int GenerationSeedBase { get; set; } = 1000;
+    public int SourceQuantityPerTick { get; set; } = 32;
+    public string GeneratedRoot { get; set; } = Path.Combine("sim", "generated");
+    public string ShipDirectory { get; set; } = Path.Combine("levels", "puzzle");
+    public bool SkipExisting { get; set; } = true;
+}

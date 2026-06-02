@@ -107,6 +107,9 @@ Milestone 2: Godot visual MVP shell on top of the deterministic C# simulation wo
 - [x] Prefer exact compact solution rectangles when possible and ship Puzzle level 21.
 - [x] Expose generated puzzle recent-flow window settings and ship Puzzle level 22.
 - [x] Add adaptive source-rate remote batch wrapper for Puzzle levels 23-100.
+- [x] Ship playable rsynced remote Puzzle levels 23-47, 49-55, 57-58, 60, 77, 81, 87, and 97.
+- [x] Add playable-only Puzzle level generation for unsolved starts and fill shipped levels 1-200.
+- [x] Add experimental WhiteMyco and RedMyco sim behavior, visuals, Puzzle hotkeys, and win-condition participation.
 
 ## In Progress
 

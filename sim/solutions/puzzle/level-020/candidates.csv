@@ -1,0 +1,2 @@
+candidate,source,won,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,active_cells,glowing_cells,final_score,repair_edits,producer_edits,diagnostics
+9,shape-first-exact,true,,30.802,7485,5040,240,26,27,43954,0,0,"static proof passed; target connected; 42 target edges; 35 reciprocal edges; 42 useful edges; shipped to levels/puzzle"

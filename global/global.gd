@@ -8,11 +8,13 @@ var last_score := 0
 var last_rank_key := 0
 const HIGH_SCORE_SAVE_PATH := "user://high_score.cfg"
 const CELLULAR_PROGRESS_SAVE_PATH := "user://cellular_progress.cfg"
+const CELLULAR_PUZZLE_STATE_SAVE_PATH := "user://cellular_puzzle_state.cfg"
 const GAMEPLAY_SPEED_NORMAL := 0
 const GAMEPLAY_SPEED_FAST := 1
 const GAMEPLAY_SPEED_SLOW := 2
 var cellular_puzzle_highest_level := 1
 var cellular_puzzle_current_level := 1
+var cellular_puzzle_level_high_velocities: Dictionary = {}
 
 var move_rate = 1 #4 #6
 var movement_speed = 50 #100 #200
@@ -498,32 +500,71 @@ func load_cellular_progress() -> void:
 	var err := cfg.load(CELLULAR_PROGRESS_SAVE_PATH)
 	if err == OK:
 		cellular_puzzle_highest_level = maxi(1, int(cfg.get_value("puzzle", "highest_level", 1)))
+		cellular_puzzle_current_level = clampi(maxi(1, int(cfg.get_value("puzzle", "current_level", cellular_puzzle_highest_level))), 1, cellular_puzzle_highest_level)
+		cellular_puzzle_level_high_velocities.clear()
+		if cfg.has_section("puzzle_velocities"):
+			for key in cfg.get_section_keys("puzzle_velocities"):
+				cellular_puzzle_level_high_velocities[str(key)] = maxi(0, int(cfg.get_value("puzzle_velocities", str(key), 0)))
 	else:
 		cellular_puzzle_highest_level = 1
-	cellular_puzzle_current_level = cellular_puzzle_highest_level
+		cellular_puzzle_current_level = 1
+		cellular_puzzle_level_high_velocities.clear()
 
 
 func save_cellular_progress() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("puzzle", "highest_level", maxi(1, cellular_puzzle_highest_level))
+	cfg.set_value("puzzle", "current_level", clampi(maxi(1, cellular_puzzle_current_level), 1, maxi(1, cellular_puzzle_highest_level)))
+	for key in cellular_puzzle_level_high_velocities.keys():
+		cfg.set_value("puzzle_velocities", str(key), maxi(0, int(cellular_puzzle_level_high_velocities.get(key, 0))))
 	cfg.save(CELLULAR_PROGRESS_SAVE_PATH)
 
 
 func reset_cellular_puzzle_progress() -> void:
 	cellular_puzzle_highest_level = 1
 	cellular_puzzle_current_level = 1
+	cellular_puzzle_level_high_velocities.clear()
 	save_cellular_progress()
+	if FileAccess.file_exists(CELLULAR_PUZZLE_STATE_SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(CELLULAR_PUZZLE_STATE_SAVE_PATH))
 
 
 func record_cellular_puzzle_level_complete(level_number: int) -> bool:
 	var completed_level := maxi(1, level_number)
 	var next_level := completed_level + 1
 	if next_level <= cellular_puzzle_highest_level:
+		save_cellular_progress()
 		return false
 	cellular_puzzle_highest_level = next_level
 	cellular_puzzle_current_level = next_level
 	save_cellular_progress()
 	return true
+
+
+func cellular_puzzle_level_velocity_key(level_number: int) -> String:
+	return "level_%03d" % maxi(1, level_number)
+
+
+func get_cellular_puzzle_level_high_velocity(level_number: int) -> int:
+	return maxi(0, int(cellular_puzzle_level_high_velocities.get(cellular_puzzle_level_velocity_key(level_number), 0)))
+
+
+func record_cellular_puzzle_level_high_velocity(level_number: int, velocity_value: int) -> bool:
+	var checked_velocity := maxi(0, velocity_value)
+	var key := cellular_puzzle_level_velocity_key(level_number)
+	if checked_velocity <= int(cellular_puzzle_level_high_velocities.get(key, 0)):
+		return false
+	cellular_puzzle_level_high_velocities[key] = checked_velocity
+	save_cellular_progress()
+	return true
+
+
+func get_cellular_puzzle_level_high_score(level_number: int) -> int:
+	return get_cellular_puzzle_level_high_velocity(level_number)
+
+
+func record_cellular_puzzle_level_high_score(level_number: int, score_value: int) -> bool:
+	return record_cellular_puzzle_level_high_velocity(level_number, score_value)
 
 
 func update_high_score(score_value: int = -1) -> bool:

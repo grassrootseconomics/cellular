@@ -55,7 +55,7 @@
       "sources": [
         {
           "resource": "R",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -89,7 +89,7 @@
       "sources": [
         {
           "resource": "P",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -123,7 +123,7 @@
       "sources": [
         {
           "resource": "Q",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -157,7 +157,7 @@
       "sources": [
         {
           "resource": "E",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -191,7 +191,7 @@
       "sources": [
         {
           "resource": "O",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -225,7 +225,7 @@
       "sources": [
         {
           "resource": "B",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -259,7 +259,7 @@
       "sources": [
         {
           "resource": "A",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -293,7 +293,7 @@
       "sources": [
         {
           "resource": "G",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -327,7 +327,7 @@
       "sources": [
         {
           "resource": "D",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -361,7 +361,7 @@
       "sources": [
         {
           "resource": "F",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -395,7 +395,7 @@
       "sources": [
         {
           "resource": "C",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -429,7 +429,7 @@
       "sources": [
         {
           "resource": "K",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -463,7 +463,7 @@
       "sources": [
         {
           "resource": "J",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -497,7 +497,7 @@
       "sources": [
         {
           "resource": "N",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -531,7 +531,7 @@
       "sources": [
         {
           "resource": "H",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -565,7 +565,7 @@
       "sources": [
         {
           "resource": "I",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -599,7 +599,7 @@
       "sources": [
         {
           "resource": "S",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -633,7 +633,7 @@
       "sources": [
         {
           "resource": "M",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]
@@ -667,7 +667,7 @@
       "sources": [
         {
           "resource": "L",
-          "quantityPerTick": 8,
+          "quantityPerTick": 32,
           "intervalTicks": 1
         }
       ]

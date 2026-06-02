@@ -1,0 +1,14 @@
+B1 .. .. .. ..
+.. A1 .. .. ..
+.. ## .. .. ..
+.. .. *1 D1 D2
+.. C1 E1 .. ##
+
+Legend:
+*1: red-myco-001; red-myco; needs E,D,A,C
+A1: cell-a-001; produces A; needs E,B,D
+B1: cell-b-001; produces B; needs A,D,E
+C1: cell-c-001; produces C; needs D,E,A
+D1: cell-d-001; produces D; needs B,A,C
+D2: cell-d-002; produces D; needs C,B,E
+E1: cell-e-001; produces E; needs C,D,A

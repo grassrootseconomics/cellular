@@ -1,0 +1,201 @@
+Puzzle solver summary
+  playable only: True
+  won: False
+  accepted near win: False
+  need attempt: 0
+  candidate index: -1
+  candidates evaluated in winning attempt: 0
+  ticks per candidate: 0
+  win duration ticks: 3
+  required alive ticks at end: 0
+  final sustained ticks: 0
+  stable at end: False
+  glowing cells: 0/179
+  swaps: 0
+  reactions: 0
+  active cells in last window: 0
+  touching pairs: 266
+  strain penalty: -0
+  final score: 0
+
+Cells
+  cell-r142: produces R142; needs R, R113, R132
+  cell-r132: produces R132; needs R113, R142, R
+  cell-r113: produces R113; needs R96, R77, R132
+  cell-r96: produces R96; needs R77, R113, R94
+  cell-r77: produces R77; needs R102, R94, R96
+  cell-r94: produces R94; needs R77, R159, R102
+  cell-r102: produces R102; needs R94, R47, R159
+  cell-r159: produces R159; needs R47, R102, R90
+  cell-r47: produces R47; needs R81, R90, R159
+  cell-r90: produces R90; needs R71, R47, R81
+  cell-r81: produces R81; needs R90, R71, R49
+  cell-r71: produces R71; needs R81, R49, R79
+  cell-r49: produces R49; needs R71, R85, R79
+  cell-r79: produces R79; needs D, R49, R85
+  cell-r85: produces R85; needs R35, D, R79
+  cell-d: produces D; needs R54, R35, R85
+  cell-r35: produces R35; needs R54, D, R129
+  cell-r54: produces R54; needs R63, R129, R35
+  cell-r129: produces R129; needs R122, R54, R63
+  cell-r63: produces R63; needs R122, R160, R129
+  cell-r122: produces R122; needs R63, A, R160
+  cell-r160: produces R160; needs R64, R122, A
+  cell-a: produces A; needs R145, R64, R160
+  cell-r64: produces R64; needs A, R61, R145
+  cell-r145: produces R145; needs R64, R143, R61
+  cell-r61: produces R61; needs R145, R110, R143
+  cell-r143: produces R143; needs R61, R110, R101
+  cell-r110: produces R110; needs R170, R101, R143
+  cell-r101: produces R101; needs R170, R112, R110
+  cell-r170: produces R170; needs R101, R128, R112
+  cell-r112: produces R112; needs R170, R88, R128
+  cell-r128: produces R128; needs R88, R138, R112
+  cell-r88: produces R88; needs R128, R138, H
+  cell-r138: produces R138; needs R88, H, R149
+  cell-h: produces H; needs R149, R138, O
+  cell-r149: produces R149; needs H, R178, O
+  cell-o: produces O; needs J, R149, R178
+  cell-r178: produces R178; needs J, O, T
+  cell-j: produces J; needs T, R133, R178
+  cell-t: produces T; needs J, R133, R124
+  cell-r133: produces R133; needs R123, R124, T
+  cell-r124: produces R124; needs R146, R133, R123
+  cell-r123: produces R123; needs R146, R87, R124
+  cell-r146: produces R146; needs R87, V, R123
+  cell-r87: produces R87; needs V, R146, R118
+  cell-v: produces V; needs R34, R87, R118
+  cell-r118: produces R118; needs V, R34, R166
+  cell-r34: produces R34; needs R118, Z, R166
+  cell-r166: produces R166; needs R92, R34, Z
+  cell-z: produces Z; needs R75, R166, R92
+  cell-r92: produces R92; needs R176, R75, Z
+  cell-r75: produces R75; needs R176, R127, R92
+  cell-r176: produces R176; needs R100, R75, R127
+  cell-r127: produces R127; needs R171, R176, R100
+  cell-r100: produces R100; needs R127, R171, R173
+  cell-r171: produces R171; needs R100, P, R173
+  cell-r173: produces R173; needs R31, P, R171
+  cell-p: produces P; needs R173, R59, R31
+  cell-r31: produces R31; needs P, R59, R125
+  cell-r59: produces R59; needs U, R125, R31
+  cell-r125: produces R125; needs R59, K, U
+  cell-u: produces U; needs G, R125, K
+  cell-k: produces K; needs R121, U, G
+  cell-g: produces G; needs K, R136, R121
+  cell-r121: produces R121; needs R136, G, R163
+  cell-r136: produces R136; needs R163, R121, R148
+  cell-r163: produces R163; needs R148, R136, X
+  cell-r148: produces R148; needs R78, R163, X
+  cell-x: produces X; needs R78, R51, R148
+  cell-r78: produces R78; needs R51, X, R162
+  cell-r51: produces R51; needs R78, R120, R162
+  cell-r162: produces R162; needs R89, R51, R120
+  cell-r120: produces R120; needs R162, R89, R174
+  cell-r89: produces R89; needs R174, R167, R120
+  cell-r174: produces R174; needs R153, R167, R89
+  cell-r167: produces R167; needs R174, R153, R65
+  cell-r153: produces R153; needs R152, R65, R167
+  cell-r65: produces R65; needs R152, R153, R37
+  cell-r152: produces R152; needs R65, R62, R37
+  cell-r37: produces R37; needs R62, R152, R117
+  cell-r62: produces R62; needs R37, R108, R117
+  cell-r117: produces R117; needs R62, R70, R108
+  cell-r108: produces R108; needs R70, R117, R38
+  cell-r70: produces R70; needs R108, R38, R42
+  cell-r38: produces R38; needs R42, R161, R70
+  cell-r42: produces R42; needs R38, R161, W
+  cell-r161: produces R161; needs R175, W, R42
+  cell-w: produces W; needs R135, R175, R161
+  cell-r175: produces R175; needs R135, R73, W
+  cell-r135: produces R135; needs R158, R73, R175
+  cell-r73: produces R73; needs R135, R158, R105
+  cell-r158: produces R158; needs R150, R73, R105
+  cell-r105: produces R105; needs R150, R139, R158
+  cell-r150: produces R150; needs R139, R105, R69
+  cell-r139: produces R139; needs R30, R150, R69
+  cell-r69: produces R69; needs R30, R139, N
+  cell-r30: produces R30; needs R109, R69, N
+  cell-n: produces N; needs R30, R109, R151
+  cell-r109: produces R109; needs R93, R151, N
+  cell-r151: produces R151; needs R93, R109, R39
+  cell-r93: produces R93; needs R39, R151, R107
+  cell-r39: produces R39; needs R93, R107, R66
+  cell-r107: produces R107; needs R66, R39, R155
+  cell-r66: produces R66; needs R86, R107, R155
+  cell-r155: produces R155; needs R144, R66, R86
+  cell-r86: produces R86; needs R144, R41, R155
+  cell-r144: produces R144; needs R86, R115, R41
+  cell-r41: produces R41; needs R144, R46, R115
+  cell-r115: produces R115; needs R46, B, R41
+  cell-r46: produces R46; needs R114, R115, B
+  cell-b: produces B; needs R46, R44, R114
+  cell-r114: produces R114; needs R53, B, R44
+  cell-r44: produces R44; needs R53, R114, R67
+  cell-r53: produces R53; needs R44, R154, R67
+  cell-r67: produces R67; needs F, R154, R53
+  cell-r154: produces R154; needs R67, R55, F
+  cell-f: produces F; needs R154, R119, R55
+  cell-r55: produces R55; needs R29, R119, F
+  cell-r119: produces R119; needs R55, R29, R74
+  cell-r29: produces R29; needs R74, R111, R119
+  cell-r74: produces R74; needs R29, R111, Q
+  cell-r111: produces R111; needs Q, R74, R91
+  cell-q: produces Q; needs R111, R91, R83
+  cell-r91: produces R91; needs R83, Q, I
+  cell-r83: produces R83; needs R91, I, R36
+  cell-i: produces I; needs R83, R95, R36
+  cell-r36: produces R36; needs R95, R130, I
+  cell-r95: produces R95; needs R130, R36, R84
+  cell-r130: produces R130; needs R95, R84, E
+  cell-r84: produces R84; needs R172, E, R130
+  cell-e: produces E; needs R84, R172, R58
+  cell-r172: produces R172; needs R169, R58, E
+  cell-r58: produces R58; needs R172, R126, R169
+  cell-r169: produces R169; needs R58, R165, R126
+  cell-r126: produces R126; needs R169, R165, R131
+  cell-r165: produces R165; needs R60, R131, R126
+  cell-r131: produces R131; needs R60, R43, R165
+  cell-r60: produces R60; needs R131, R97, R43
+  cell-r43: produces R43; needs R60, R97, R103
+  cell-r97: produces R97; needs R103, R177, R43
+  cell-r103: produces R103; needs R97, R164, R177
+  cell-r177: produces R177; needs R164, R103, R104
+  cell-r164: produces R164; needs R104, R40, R177
+  cell-r104: produces R104; needs R68, R164, R40
+  cell-r40: produces R40; needs R68, R104, R28
+  cell-r68: produces R68; needs R40, R28, R32
+  cell-r28: produces R28; needs R68, R50, R32
+  cell-r32: produces R32; needs R27, R28, R50
+  cell-r50: produces R50; needs R32, R56, R27
+  cell-r27: produces R27; needs R56, R50, R52
+  cell-r56: produces R56; needs R27, R52, C
+  cell-r52: produces R52; needs R56, R140, C
+  cell-c: produces C; needs R52, R147, R140
+  cell-r140: produces R140; needs C, R134, R147
+  cell-r147: produces R147; needs R140, R134, R168
+  cell-r134: produces R134; needs R57, R168, R147
+  cell-r168: produces R168; needs R57, R134, L
+  cell-r57: produces R57; needs R168, L, R106
+  cell-l: produces L; needs R82, R106, R57
+  cell-r106: produces R106; needs S, L, R82
+  cell-r82: produces R82; needs S, R33, R106
+  cell-s: produces S; needs R82, R33, R76
+  cell-r33: produces R33; needs R76, Y, S
+  cell-r76: produces R76; needs Y, R33, R48
+  cell-y: produces Y; needs R48, R76, M
+  cell-r48: produces R48; needs Y, R98, M
+  cell-m: produces M; needs R116, R98, R48
+  cell-r98: produces R98; needs R157, R116, M
+  cell-r116: produces R116; needs R98, R80, R157
+  cell-r157: produces R157; needs R80, R116, R72
+  cell-r80: produces R80; needs R157, R141, R72
+  cell-r72: produces R72; needs R80, R45, R141
+  cell-r141: produces R141; needs R72, R45, R26
+  cell-r45: produces R45; needs R99, R26, R141
+  cell-r26: produces R26; needs R45, R99, R137
+  cell-r99: produces R99; needs R156, R137, R26
+  cell-r137: produces R137; needs R99, R, R156
+  cell-r156: produces R156; needs R132, R, R137
+  cell-r: produces R; needs R156, R132, R113
+

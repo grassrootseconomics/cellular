@@ -1,0 +1,180 @@
+{
+  "levelNumber": 2,
+  "mode": "Puzzle",
+  "difficulty": "Level 2: 6 cells, duplicate producers, red myco, rocks",
+  "generationSeed": 1002,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "cells": [
+    {
+      "id": "cell-b-001",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "D",
+        "C",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-c-001",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "B",
+        "E",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-e-001",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "C",
+        "D",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-d-001",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "E",
+        "A",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-a-001",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "D",
+        "E",
+        "B"
+      ]
+    },
+    {
+      "id": "red-myco-001",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "B",
+        "D",
+        "E",
+        "A"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 5,
+    "height": 5,
+    "cells": [
+      {
+        "cellId": "cell-e-001",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 3,
+        "y": 3
+      }
+    ],
+    "rocks": [
+      {
+        "x": 1,
+        "y": 3
+      },
+      {
+        "x": 1,
+        "y": 4
+      }
+    ],
+    "ascii": ".C...\nDA.E.\n....B\n.#.*.\n.#..."
+  },
+  "solutionLayout": {
+    "width": 3,
+    "height": 2,
+    "cells": [
+      {
+        "cellId": "cell-b-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 0,
+        "y": 1
+      }
+    ],
+    "rocks": [],
+    "ascii": "BCE\n*AD"
+  },
+  "solverSummary": {
+    "won": false,
+    "acceptedNearWin": false,
+    "needAttempt": 0,
+    "candidateIndex": -1,
+    "candidateCount": 0,
+    "ticksPerCandidate": 0,
+    "glowingCells": 0,
+    "totalSwaps": 0,
+    "totalReactions": 0,
+    "activeCellsInLastWindow": 0,
+    "strainPenalty": 0,
+    "finalScore": 0,
+    "adjacentPairs": 7,
+    "winDurationTicks": 3,
+    "requiredAliveTicksAtEnd": 0,
+    "finalSustainedTicks": 0,
+    "stableAtEnd": false
+  }
+}

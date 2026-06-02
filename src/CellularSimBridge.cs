@@ -9,6 +9,11 @@ public partial class CellularSimBridge : Node
 {
     private const long RecentEventWindowTicks = 12;
     private const int PossibleSwapSnapshotLimit = 4096;
+    private const int MycoStartingQuantity = 250;
+    private const int MycoCapacity = 500;
+    private const int StandardMinimumGrossSwapQuantity = 1;
+    private const int RedMycoOutwardFeeQuantity = 1;
+    private const int RedMycoMinimumGrossSwapQuantity = RedMycoOutwardFeeQuantity + 1;
 
     private FixtureLoadResult? _loaded;
     private CellularEngine? _engine;
@@ -31,6 +36,9 @@ public partial class CellularSimBridge : Node
     public bool move_cell(string cellId, int x, int y) => MoveCell(cellId, x, y);
 
     public bool reset_with_current_layout() => ResetWithCurrentLayout();
+
+    public bool add_myco_cell(string kind, string id, int x, int y, GdArray needs) =>
+        AddMycoCell(kind, id, x, y, needs);
 
     public void tick_many(int count) => TickMany(count);
 
@@ -103,6 +111,130 @@ public partial class CellularSimBridge : Node
         }
     }
 
+    public bool AddMycoCell(string kind, string id, int x, int y, GdArray needs)
+    {
+        if (_engine is null || _loaded is null)
+        {
+            _lastError = "No loaded Cellular fixture to add a myco cell to.";
+            return false;
+        }
+
+        if (!Enum.TryParse<CellKind>(kind, true, out var cellKind)
+            || cellKind is not (CellKind.WhiteMyco or CellKind.RedMyco))
+        {
+            _lastError = $"Unknown myco kind '{kind}'.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            _lastError = "Myco cell id cannot be blank.";
+            return false;
+        }
+
+        if (_engine.World.TryGetCell(id, out _))
+        {
+            _lastError = $"Cell id '{id}' already exists.";
+            return false;
+        }
+
+        var position = new GridPosition(x, y);
+        if (!_engine.World.InBounds(position))
+        {
+            _lastError = $"Myco position ({x}, {y}) is outside the grid.";
+            return false;
+        }
+
+        if (_engine.World.HasRockAt(position) || _engine.World.TryGetCellAt(position, out _))
+        {
+            _lastError = $"Myco position ({x}, {y}) is not empty.";
+            return false;
+        }
+
+        var uniqueNeeds = new List<ResourceId>(SwapPoolState.MaxSlots);
+        var seen = new HashSet<ResourceId>();
+        foreach (var needValue in needs)
+        {
+            if (uniqueNeeds.Count >= SwapPoolState.MaxSlots)
+            {
+                break;
+            }
+
+            var resourceName = needValue.AsString();
+            if (string.IsNullOrWhiteSpace(resourceName))
+            {
+                continue;
+            }
+
+            if (!_loaded.Catalog.TryGetId(resourceName, out var resource))
+            {
+                _lastError = $"Unknown myco resource '{resourceName}'.";
+                return false;
+            }
+
+            if (seen.Add(resource))
+            {
+                uniqueNeeds.Add(resource);
+            }
+        }
+
+        if (uniqueNeeds.Count == 0)
+        {
+            _lastError = "Myco needs at least one valid resource.";
+            return false;
+        }
+
+        try
+        {
+            var pool = new SwapPoolState();
+            foreach (var resource in uniqueNeeds)
+            {
+                pool.AddSlot(resource, PoolSlotRole.Need, MycoStartingQuantity, MycoCapacity);
+            }
+
+            _engine.World.AddCell(new CellState(id, position, pool, cellKind));
+            AddRequiredCell(_engine.Options, id);
+            foreach (var resource in uniqueNeeds)
+            {
+                AddRequiredResource(_engine.Options, resource);
+            }
+
+            var fixtureJson = BuildCleanFixtureJson(_loaded, _engine);
+            return LoadFixtureJson(fixtureJson);
+        }
+        catch (Exception ex)
+        {
+            _lastError = ex.Message;
+            return false;
+        }
+    }
+
+    private static void AddRequiredCell(EngineOptions options, string cellId)
+    {
+        foreach (var existing in options.RequiredCellIds)
+        {
+            if (string.Equals(existing, cellId, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        options.RequiredCellIds.Add(cellId);
+    }
+
+    private static void AddRequiredResource(EngineOptions options, ResourceId resource)
+    {
+        foreach (var existing in options.RequiredResources)
+        {
+            if (existing == resource)
+            {
+                return;
+            }
+        }
+
+        options.RequiredResources.Add(resource);
+    }
+
     public void TickMany(int count)
     {
         if (_engine is null || count <= 0)
@@ -131,6 +263,7 @@ public partial class CellularSimBridge : Node
         snapshot["score"] = _engine.Score.TotalScore;
         snapshot["width"] = _engine.World.Width;
         snapshot["height"] = _engine.World.Height;
+        snapshot["rocks"] = BuildRocksSnapshot(_engine);
         snapshot["cells"] = BuildCellsSnapshot(_loaded, _engine);
         snapshot["swaps"] = BuildRecentSwapsSnapshot(_loaded, _engine);
         snapshot["flows"] = BuildRecentFlowsSnapshot(_loaded, _engine);
@@ -150,6 +283,7 @@ public partial class CellularSimBridge : Node
                 ["id"] = cell.Id,
                 ["x"] = cell.Position.X,
                 ["y"] = cell.Position.Y,
+                ["kind"] = cell.Kind.ToString(),
                 ["glowing"] = cell.IsGlowing,
                 ["glowTicks"] = cell.GlowTicksRemaining,
                 ["strain"] = cell.Strain.Total,
@@ -201,6 +335,8 @@ public partial class CellularSimBridge : Node
                 ["counterpartyPaidResource"] = loaded.Catalog.GetName(swap.CounterpartyPaidResource),
                 ["initiatorPaidQuantity"] = swap.InitiatorPaidQuantity,
                 ["counterpartyPaidQuantity"] = swap.CounterpartyPaidQuantity,
+                ["initiatorReceivedQuantity"] = swap.InitiatorReceivedQuantity,
+                ["counterpartyReceivedQuantity"] = swap.CounterpartyReceivedQuantity,
                 ["initiatorReceivedBalance"] = swap.InitiatorReceivedBalanceAfterSwap,
                 ["initiatorReceivedCapacity"] = swap.InitiatorReceivedCapacity,
                 ["counterpartyReceivedBalance"] = swap.CounterpartyReceivedBalanceAfterSwap,
@@ -313,6 +449,21 @@ public partial class CellularSimBridge : Node
         return array;
     }
 
+    private static GdArray BuildRocksSnapshot(CellularEngine engine)
+    {
+        var rocks = new GdArray();
+        foreach (var rock in engine.World.Rocks)
+        {
+            rocks.Add(new GdDictionary
+            {
+                ["x"] = rock.X,
+                ["y"] = rock.Y
+            });
+        }
+
+        return rocks;
+    }
+
     private static GdArray BuildResourceArray(FixtureLoadResult loaded, IReadOnlyList<ResourceId> resources)
     {
         var array = new GdArray();
@@ -369,8 +520,8 @@ public partial class CellularSimBridge : Node
             }
 
             var requestedResource = requestedSlot.Resource;
-            var requestedOfferable = GetVisualOfferableQuantity(counterparty.Pool, requestedResource);
-            var requestedReceivable = GetVisualReceivableQuantity(initiator.Pool, requestedResource);
+            var requestedOfferable = GetVisualOfferableQuantity(engine, counterparty, requestedResource);
+            var requestedReceivable = GetVisualRequestedReceivableQuantity(engine, initiator, requestedResource);
             if (requestedOfferable <= 0 || requestedReceivable <= 0)
             {
                 continue;
@@ -384,12 +535,17 @@ public partial class CellularSimBridge : Node
                 }
 
                 var offeredResource = offeredSlot.Resource;
-                var offeredQuantity = GetVisualOfferableQuantity(initiator.Pool, offeredResource);
-                var counterpartyReceivable = GetVisualReceivableQuantity(counterparty.Pool, offeredResource);
-                var quantity = Math.Min(
-                    engine.Options.MaxSwapQuantityPerEdge,
-                    Math.Min(Math.Min(requestedOfferable, requestedReceivable), Math.Min(offeredQuantity, counterpartyReceivable)));
-                if (quantity <= 0)
+                var offeredQuantity = GetVisualOfferableQuantity(engine, initiator, offeredResource);
+                var counterpartyReceivable = GetVisualReceivableQuantity(engine, counterparty, offeredResource);
+                var quantities = GetVisualSwapQuantities(
+                    engine,
+                    initiator,
+                    counterparty,
+                    offeredQuantity,
+                    requestedOfferable,
+                    requestedReceivable,
+                    counterpartyReceivable);
+                if (quantities is null)
                 {
                     continue;
                 }
@@ -400,7 +556,11 @@ public partial class CellularSimBridge : Node
                     ["counterparty"] = counterparty.Id,
                     ["initiatorPaidResource"] = loaded.Catalog.GetName(offeredResource),
                     ["counterpartyPaidResource"] = loaded.Catalog.GetName(requestedResource),
-                    ["quantity"] = quantity
+                    ["quantity"] = Math.Max(quantities.Value.InitiatorPaidQuantity, quantities.Value.CounterpartyPaidQuantity),
+                    ["initiatorPaidQuantity"] = quantities.Value.InitiatorPaidQuantity,
+                    ["counterpartyPaidQuantity"] = quantities.Value.CounterpartyPaidQuantity,
+                    ["initiatorReceivedQuantity"] = quantities.Value.InitiatorReceivedQuantity,
+                    ["counterpartyReceivedQuantity"] = quantities.Value.CounterpartyReceivedQuantity
                 });
 
                 if (possibleSwaps.Count >= PossibleSwapSnapshotLimit)
@@ -411,21 +571,83 @@ public partial class CellularSimBridge : Node
         }
     }
 
-    private static int GetVisualReceivableQuantity(SwapPoolState pool, ResourceId resource)
+    private static VisualSwapQuantities? GetVisualSwapQuantities(
+        CellularEngine engine,
+        CellState initiator,
+        CellState counterparty,
+        int initiatorPaidOfferable,
+        int counterpartyPaidOfferable,
+        int initiatorReceivable,
+        int counterpartyReceivable)
     {
+        var initiatorOutwardFee = GetRedMycoOutwardFee(initiator);
+        var counterpartyOutwardFee = GetRedMycoOutwardFee(counterparty);
+        // Keep visual possible-swaps aligned with the engine: red myco requires
+        // a gross exchange envelope of at least two, otherwise it is not a swap.
+        var minimumGrossQuantity = GetMinimumGrossSwapQuantity(initiatorOutwardFee, counterpartyOutwardFee);
+        var grossQuantity = Math.Min(
+            engine.Options.MaxSwapQuantityPerEdge,
+            Math.Min(
+                Math.Min(
+                    initiatorPaidOfferable,
+                    counterpartyPaidOfferable),
+                Math.Min(
+                    IncreaseLimit(initiatorReceivable, counterpartyOutwardFee),
+                    IncreaseLimit(counterpartyReceivable, initiatorOutwardFee))));
+        return grossQuantity >= minimumGrossQuantity
+            ? new VisualSwapQuantities(
+                grossQuantity,
+                grossQuantity,
+                grossQuantity - counterpartyOutwardFee,
+                grossQuantity - initiatorOutwardFee)
+            : null;
+    }
+
+    private static int GetVisualRequestedReceivableQuantity(CellularEngine engine, CellState cell, ResourceId resource)
+    {
+        var slot = cell.Pool.GetSlot(resource);
+        if (slot is null)
+        {
+            return 0;
+        }
+
+        if (cell.IsMyco)
+        {
+            return Math.Max(0, slot.Capacity - slot.Quantity);
+        }
+
+        if (slot.Role == PoolSlotRole.Need)
+        {
+            var target = Math.Min(slot.Capacity, engine.Options.NeedDesiredQuantity);
+            return Math.Max(0, target - slot.Quantity);
+        }
+
+        return GetVisualReceivableQuantity(engine, cell, resource);
+    }
+
+    private static int GetVisualReceivableQuantity(CellularEngine engine, CellState cell, ResourceId resource)
+    {
+        var pool = cell.Pool;
         var slot = pool.GetSlot(resource);
         if (slot is null)
         {
             return 0;
         }
 
+        if (cell.IsMyco)
+        {
+            return Math.Max(0, slot.Capacity - slot.Quantity);
+        }
+
         return slot.Role == PoolSlotRole.SourceOutput
+            || slot.Role == PoolSlotRole.Need && engine.Options.AllowNeedOverflowPayments
             ? int.MaxValue
             : Math.Max(0, slot.Capacity - slot.Quantity);
     }
 
-    private static int GetVisualOfferableQuantity(SwapPoolState pool, ResourceId resource)
+    private static int GetVisualOfferableQuantity(CellularEngine engine, CellState cell, ResourceId resource)
     {
+        var pool = cell.Pool;
         var slot = pool.GetSlot(resource);
         if (slot is null)
         {
@@ -433,7 +655,16 @@ public partial class CellularSimBridge : Node
         }
 
         var available = slot.Quantity;
-        if (slot.Role == PoolSlotRole.Need || slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
+        if (cell.IsMyco)
+        {
+            return Math.Max(0, available);
+        }
+
+        if (slot.Role == PoolSlotRole.Need)
+        {
+            available -= engine.Options.NeedOfferReserve;
+        }
+        else if (slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
         {
             available--;
         }
@@ -454,8 +685,30 @@ public partial class CellularSimBridge : Node
         return false;
     }
 
+    private static int IncreaseLimit(int value, int increase)
+    {
+        if (increase <= 0 || value == int.MaxValue)
+        {
+            return value;
+        }
+
+        return value > int.MaxValue - increase ? int.MaxValue : value + increase;
+    }
+
+    private static int GetRedMycoOutwardFee(CellState cell) => cell.IsRedMyco ? RedMycoOutwardFeeQuantity : 0;
+
+    private static int GetMinimumGrossSwapQuantity(int initiatorOutwardFee, int counterpartyOutwardFee) =>
+        initiatorOutwardFee > 0 || counterpartyOutwardFee > 0
+            ? RedMycoMinimumGrossSwapQuantity
+            : StandardMinimumGrossSwapQuantity;
+
     private static string ProducedResourceName(FixtureLoadResult loaded, CellState cell)
     {
+        if (cell.IsMyco)
+        {
+            return "";
+        }
+
         foreach (var source in cell.Sources)
         {
             return loaded.Catalog.GetName(source.Resource);
@@ -500,7 +753,7 @@ public partial class CellularSimBridge : Node
                 {
                     ["resource"] = loaded.Catalog.GetName(slot.Resource),
                     ["role"] = slot.Role.ToString(),
-                    ["quantity"] = 0,
+                    ["quantity"] = cell.IsMyco ? Math.Min(MycoStartingQuantity, slot.Capacity) : 0,
                     ["capacity"] = slot.Capacity
                 });
             }
@@ -516,14 +769,20 @@ public partial class CellularSimBridge : Node
                 });
             }
 
-            cells.Add(new Dictionary<string, object>
+            var cellDoc = new Dictionary<string, object>
             {
                 ["id"] = cell.Id,
                 ["x"] = cell.Position.X,
                 ["y"] = cell.Position.Y,
                 ["slots"] = slots,
                 ["sources"] = sources
-            });
+            };
+            if (cell.Kind != CellKind.Standard)
+            {
+                cellDoc["kind"] = cell.Kind.ToString();
+            }
+
+            cells.Add(cellDoc);
         }
 
         var requiredResources = new List<string>(engine.Options.RequiredResources.Count);
@@ -561,4 +820,10 @@ public partial class CellularSimBridge : Node
 
         return JsonSerializer.Serialize(fixture);
     }
+
+    private readonly record struct VisualSwapQuantities(
+        int InitiatorPaidQuantity,
+        int CounterpartyPaidQuantity,
+        int InitiatorReceivedQuantity,
+        int CounterpartyReceivedQuantity);
 }

@@ -79,6 +79,13 @@ public enum PoolSlotRole
     Catalyst
 }
 
+public enum CellKind
+{
+    Standard,
+    WhiteMyco,
+    RedMyco
+}
+
 public sealed class PoolSlot
 {
     public PoolSlot(ResourceId resource, PoolSlotRole role, int quantity = 0, int capacity = SwapPoolState.DefaultSlotCapacity)
@@ -364,7 +371,7 @@ public sealed class CellState
 {
     private readonly List<CellSource> _sources = new();
 
-    public CellState(string id, GridPosition position, SwapPoolState? pool = null)
+    public CellState(string id, GridPosition position, SwapPoolState? pool = null, CellKind kind = CellKind.Standard)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -374,16 +381,20 @@ public sealed class CellState
         Id = id;
         Position = position;
         Pool = pool ?? new SwapPoolState();
+        Kind = kind;
     }
 
     public int Index { get; internal set; } = -1;
     public string Id { get; }
+    public CellKind Kind { get; }
     public GridPosition Position { get; internal set; }
     public SwapPoolState Pool { get; }
     public IReadOnlyList<CellSource> Sources => _sources;
     public StrainState Strain { get; } = new();
     public int GlowTicksRemaining { get; internal set; }
-    public bool IsGlowing => GlowTicksRemaining > 0;
+    public bool IsMyco => Kind is CellKind.WhiteMyco or CellKind.RedMyco;
+    public bool IsRedMyco => Kind == CellKind.RedMyco;
+    public bool IsGlowing => Kind == CellKind.WhiteMyco || GlowTicksRemaining > 0;
 
     public void AddSource(CellSource source) => _sources.Add(source);
 }

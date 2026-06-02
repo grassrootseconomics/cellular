@@ -1,0 +1,3555 @@
+{
+  "levelNumber": 132,
+  "mode": "Puzzle",
+  "difficulty": "Level 132: 162 cells, duplicate producers, red myco, rocks",
+  "generationSeed": 1132,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z"
+  ],
+  "cells": [
+    {
+      "id": "cell-t-001",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "Z",
+        "C",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-c-001",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "T",
+        "Q",
+        "P"
+      ]
+    },
+    {
+      "id": "cell-q-001",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "C",
+        "Y",
+        "T"
+      ]
+    },
+    {
+      "id": "cell-y-001",
+      "kind": "Standard",
+      "producedResource": "Y",
+      "needs": [
+        "Q",
+        "U",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-u-001",
+      "kind": "Standard",
+      "producedResource": "U",
+      "needs": [
+        "Y",
+        "S",
+        "Q"
+      ]
+    },
+    {
+      "id": "red-myco-001",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "D",
+        "S",
+        "R",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-e-001",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "D",
+        "H",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-h-001",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "E",
+        "G",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-g-001",
+      "kind": "Standard",
+      "producedResource": "G",
+      "needs": [
+        "H",
+        "U",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-u-002",
+      "kind": "Standard",
+      "producedResource": "U",
+      "needs": [
+        "G",
+        "E",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-e-002",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "U",
+        "W",
+        "G"
+      ]
+    },
+    {
+      "id": "red-myco-002",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "T",
+        "Q",
+        "P",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-f-001",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "P",
+        "N",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-n-001",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "F",
+        "A",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-a-001",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "N",
+        "P",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-p-001",
+      "kind": "Standard",
+      "producedResource": "P",
+      "needs": [
+        "A",
+        "N",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-a-002",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "P",
+        "O",
+        "W"
+      ]
+    },
+    {
+      "id": "red-myco-003",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "G",
+        "O",
+        "F",
+        "P"
+      ]
+    },
+    {
+      "id": "cell-a-003",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "P",
+        "K",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-k-001",
+      "kind": "Standard",
+      "producedResource": "K",
+      "needs": [
+        "A",
+        "E",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-e-003",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "K",
+        "V",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-v-001",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "E",
+        "N",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-n-002",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "V",
+        "Q",
+        "E"
+      ]
+    },
+    {
+      "id": "red-myco-004",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Q",
+        "S",
+        "P",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-t-002",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "S",
+        "C",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-c-002",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "T",
+        "E",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-e-004",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "C",
+        "G",
+        "T"
+      ]
+    },
+    {
+      "id": "cell-g-002",
+      "kind": "Standard",
+      "producedResource": "G",
+      "needs": [
+        "E",
+        "V",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-v-002",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "G",
+        "X",
+        "E"
+      ]
+    },
+    {
+      "id": "red-myco-005",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Z",
+        "Y",
+        "G",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-n-003",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "Y",
+        "D",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-d-001",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "N",
+        "B",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-b-001",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "D",
+        "T",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-t-003",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "B",
+        "Z",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-z-001",
+      "kind": "Standard",
+      "producedResource": "Z",
+      "needs": [
+        "T",
+        "E",
+        "B"
+      ]
+    },
+    {
+      "id": "red-myco-006",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "N",
+        "O",
+        "U",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-z-002",
+      "kind": "Standard",
+      "producedResource": "Z",
+      "needs": [
+        "E",
+        "N",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-n-004",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "Z",
+        "C",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-c-003",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "N",
+        "O",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-o-001",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "C",
+        "J",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-j-001",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "O",
+        "H",
+        "C"
+      ]
+    },
+    {
+      "id": "red-myco-007",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "F",
+        "A",
+        "W",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-o-002",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "F",
+        "R",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-r-001",
+      "kind": "Standard",
+      "producedResource": "R",
+      "needs": [
+        "O",
+        "Z",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-z-003",
+      "kind": "Standard",
+      "producedResource": "Z",
+      "needs": [
+        "R",
+        "L",
+        "O"
+      ]
+    },
+    {
+      "id": "cell-l-001",
+      "kind": "Standard",
+      "producedResource": "L",
+      "needs": [
+        "Z",
+        "F",
+        "R"
+      ]
+    },
+    {
+      "id": "cell-f-002",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "L",
+        "N",
+        "Z"
+      ]
+    },
+    {
+      "id": "red-myco-008",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "N",
+        "T",
+        "H",
+        "O"
+      ]
+    },
+    {
+      "id": "cell-x-001",
+      "kind": "Standard",
+      "producedResource": "X",
+      "needs": [
+        "H",
+        "B",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-b-002",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "X",
+        "C",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-c-004",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "B",
+        "S",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-s-001",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "C",
+        "A",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-a-004",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "S",
+        "H",
+        "C"
+      ]
+    },
+    {
+      "id": "red-myco-009",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "W",
+        "L",
+        "H",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-h-002",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "L",
+        "J",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-j-002",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "H",
+        "V",
+        "L"
+      ]
+    },
+    {
+      "id": "cell-v-003",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "J",
+        "H",
+        "O"
+      ]
+    },
+    {
+      "id": "cell-h-003",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "V",
+        "O",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-o-003",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "H",
+        "X",
+        "V"
+      ]
+    },
+    {
+      "id": "red-myco-010",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "T",
+        "X",
+        "C",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-q-002",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "X",
+        "A",
+        "O"
+      ]
+    },
+    {
+      "id": "cell-a-005",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "Q",
+        "G",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-g-003",
+      "kind": "Standard",
+      "producedResource": "G",
+      "needs": [
+        "A",
+        "P",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-p-002",
+      "kind": "Standard",
+      "producedResource": "P",
+      "needs": [
+        "G",
+        "W",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-w-001",
+      "kind": "Standard",
+      "producedResource": "W",
+      "needs": [
+        "P",
+        "L",
+        "G"
+      ]
+    },
+    {
+      "id": "red-myco-011",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "O",
+        "L",
+        "V",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-m-001",
+      "kind": "Standard",
+      "producedResource": "M",
+      "needs": [
+        "V",
+        "Q",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-q-003",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "M",
+        "V",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-m-002",
+      "kind": "Standard",
+      "producedResource": "M",
+      "needs": [
+        "Q",
+        "A",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-a-006",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "M",
+        "X",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-x-002",
+      "kind": "Standard",
+      "producedResource": "X",
+      "needs": [
+        "A",
+        "W",
+        "M"
+      ]
+    },
+    {
+      "id": "red-myco-012",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "W",
+        "F",
+        "O",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-d-002",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "B",
+        "H",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-h-004",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "D",
+        "U",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-u-003",
+      "kind": "Standard",
+      "producedResource": "U",
+      "needs": [
+        "H",
+        "N",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-n-005",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "U",
+        "V",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-v-004",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "N",
+        "S",
+        "U"
+      ]
+    },
+    {
+      "id": "red-myco-013",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "I",
+        "F",
+        "S",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-j-003",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "I",
+        "S",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-s-002",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "J",
+        "F",
+        "T"
+      ]
+    },
+    {
+      "id": "cell-s-003",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "T",
+        "J",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-t-004",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "S",
+        "O",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-t-005",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "P",
+        "S",
+        "H"
+      ]
+    },
+    {
+      "id": "red-myco-014",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "P",
+        "O",
+        "U",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-h-005",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "P",
+        "C",
+        "T"
+      ]
+    },
+    {
+      "id": "cell-c-005",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "H",
+        "L",
+        "O"
+      ]
+    },
+    {
+      "id": "cell-l-002",
+      "kind": "Standard",
+      "producedResource": "L",
+      "needs": [
+        "C",
+        "Y",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-y-002",
+      "kind": "Standard",
+      "producedResource": "Y",
+      "needs": [
+        "L",
+        "I",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-i-001",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "Y",
+        "X",
+        "L"
+      ]
+    },
+    {
+      "id": "red-myco-015",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "B",
+        "T",
+        "U",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-c-006",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "X",
+        "J",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-j-004",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "C",
+        "N",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-n-006",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "J",
+        "C",
+        "R"
+      ]
+    },
+    {
+      "id": "cell-n-007",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "R",
+        "J",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-r-002",
+      "kind": "Standard",
+      "producedResource": "R",
+      "needs": [
+        "N",
+        "X",
+        "S"
+      ]
+    },
+    {
+      "id": "red-myco-016",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "V",
+        "X",
+        "O",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-s-004",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "O",
+        "J",
+        "R"
+      ]
+    },
+    {
+      "id": "cell-j-005",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "S",
+        "E",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-e-005",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "J",
+        "H",
+        "S"
+      ]
+    },
+    {
+      "id": "cell-h-006",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "E",
+        "Q",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-q-004",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "H",
+        "N",
+        "E"
+      ]
+    },
+    {
+      "id": "red-myco-017",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "C",
+        "D",
+        "N",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-v-005",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "N",
+        "P",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-p-003",
+      "kind": "Standard",
+      "producedResource": "P",
+      "needs": [
+        "V",
+        "Q",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-q-005",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "P",
+        "C",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-c-007",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "Q",
+        "F",
+        "P"
+      ]
+    },
+    {
+      "id": "cell-f-003",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "C",
+        "Q",
+        "M"
+      ]
+    },
+    {
+      "id": "red-myco-018",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "C",
+        "G",
+        "Q",
+        "Y"
+      ]
+    },
+    {
+      "id": "cell-c-008",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "G",
+        "F",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-f-004",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "C",
+        "Z",
+        "Q"
+      ]
+    },
+    {
+      "id": "cell-z-004",
+      "kind": "Standard",
+      "producedResource": "Z",
+      "needs": [
+        "F",
+        "I",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-i-002",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "Z",
+        "V",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-v-006",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "I",
+        "M",
+        "Z"
+      ]
+    },
+    {
+      "id": "red-myco-019",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Z",
+        "G",
+        "M",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-y-003",
+      "kind": "Standard",
+      "producedResource": "Y",
+      "needs": [
+        "X",
+        "R",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-r-003",
+      "kind": "Standard",
+      "producedResource": "R",
+      "needs": [
+        "Y",
+        "J",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-j-006",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "R",
+        "S",
+        "Y"
+      ]
+    },
+    {
+      "id": "cell-s-005",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "J",
+        "N",
+        "R"
+      ]
+    },
+    {
+      "id": "cell-n-008",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "S",
+        "K",
+        "J"
+      ]
+    },
+    {
+      "id": "red-myco-020",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Y",
+        "K",
+        "W",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-f-005",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "C",
+        "V",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-v-007",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "F",
+        "C",
+        "Y"
+      ]
+    },
+    {
+      "id": "cell-f-006",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "V",
+        "Y",
+        "S"
+      ]
+    },
+    {
+      "id": "cell-y-004",
+      "kind": "Standard",
+      "producedResource": "Y",
+      "needs": [
+        "F",
+        "S",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-s-006",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "Y",
+        "I",
+        "F"
+      ]
+    },
+    {
+      "id": "red-myco-021",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "E",
+        "I",
+        "S",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-a-007",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "U",
+        "P",
+        "S"
+      ]
+    },
+    {
+      "id": "cell-p-004",
+      "kind": "Standard",
+      "producedResource": "P",
+      "needs": [
+        "A",
+        "V",
+        "U"
+      ]
+    },
+    {
+      "id": "cell-v-008",
+      "kind": "Standard",
+      "producedResource": "V",
+      "needs": [
+        "P",
+        "O",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-o-004",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "V",
+        "C",
+        "P"
+      ]
+    },
+    {
+      "id": "cell-c-009",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "O",
+        "N",
+        "V"
+      ]
+    },
+    {
+      "id": "red-myco-022",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "R",
+        "X",
+        "N",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-m-003",
+      "kind": "Standard",
+      "producedResource": "M",
+      "needs": [
+        "H",
+        "R",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-r-004",
+      "kind": "Standard",
+      "producedResource": "R",
+      "needs": [
+        "M",
+        "H",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-h-007",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "R",
+        "D",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-d-003",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "H",
+        "E",
+        "R"
+      ]
+    },
+    {
+      "id": "cell-e-006",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "D",
+        "G",
+        "H"
+      ]
+    },
+    {
+      "id": "red-myco-023",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "G",
+        "Q",
+        "A",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-x-003",
+      "kind": "Standard",
+      "producedResource": "X",
+      "needs": [
+        "A",
+        "C",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-c-010",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "X",
+        "N",
+        "Z"
+      ]
+    },
+    {
+      "id": "cell-n-009",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "C",
+        "I",
+        "X"
+      ]
+    },
+    {
+      "id": "cell-i-003",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "N",
+        "C",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-i-004",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "N",
+        "V",
+        "T"
+      ]
+    },
+    {
+      "id": "red-myco-024",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "N",
+        "Z",
+        "Y",
+        "V"
+      ]
+    },
+    {
+      "id": "cell-n-010",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "V",
+        "J",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-j-007",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "N",
+        "Z",
+        "Y"
+      ]
+    },
+    {
+      "id": "cell-z-005",
+      "kind": "Standard",
+      "producedResource": "Z",
+      "needs": [
+        "J",
+        "K",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-k-002",
+      "kind": "Standard",
+      "producedResource": "K",
+      "needs": [
+        "Z",
+        "E",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-e-007",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "K",
+        "Y",
+        "Z"
+      ]
+    },
+    {
+      "id": "red-myco-025",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "O",
+        "N",
+        "Y",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-q-006",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "N",
+        "M",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-m-004",
+      "kind": "Standard",
+      "producedResource": "M",
+      "needs": [
+        "Q",
+        "N",
+        "W"
+      ]
+    },
+    {
+      "id": "cell-q-007",
+      "kind": "Standard",
+      "producedResource": "Q",
+      "needs": [
+        "M",
+        "W",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-w-002",
+      "kind": "Standard",
+      "producedResource": "W",
+      "needs": [
+        "Q",
+        "J",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-j-008",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "W",
+        "Y",
+        "Q"
+      ]
+    },
+    {
+      "id": "red-myco-026",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Y",
+        "G",
+        "W",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-t-006",
+      "kind": "Standard",
+      "producedResource": "T",
+      "needs": [
+        "H",
+        "S",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-s-007",
+      "kind": "Standard",
+      "producedResource": "S",
+      "needs": [
+        "T",
+        "W",
+        "G"
+      ]
+    },
+    {
+      "id": "cell-w-003",
+      "kind": "Standard",
+      "producedResource": "W",
+      "needs": [
+        "S",
+        "U",
+        "T"
+      ]
+    },
+    {
+      "id": "cell-u-004",
+      "kind": "Standard",
+      "producedResource": "U",
+      "needs": [
+        "W",
+        "K",
+        "S"
+      ]
+    },
+    {
+      "id": "cell-k-003",
+      "kind": "Standard",
+      "producedResource": "K",
+      "needs": [
+        "U",
+        "P",
+        "W"
+      ]
+    },
+    {
+      "id": "red-myco-027",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "Z",
+        "Q",
+        "P",
+        "G"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 17,
+    "height": 17,
+    "cells": [
+      {
+        "cellId": "cell-h-001",
+        "x": 8,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-017",
+        "x": 10,
+        "y": 11
+      },
+      {
+        "cellId": "red-myco-008",
+        "x": 13,
+        "y": 10
+      },
+      {
+        "cellId": "cell-a-003",
+        "x": 14,
+        "y": 11
+      },
+      {
+        "cellId": "cell-a-005",
+        "x": 11,
+        "y": 7
+      },
+      {
+        "cellId": "red-myco-011",
+        "x": 13,
+        "y": 4
+      },
+      {
+        "cellId": "cell-t-001",
+        "x": 16,
+        "y": 14
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "cellId": "cell-v-007",
+        "x": 11,
+        "y": 10
+      },
+      {
+        "cellId": "red-myco-012",
+        "x": 13,
+        "y": 6
+      },
+      {
+        "cellId": "cell-q-007",
+        "x": 14,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-009",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "cellId": "cell-l-002",
+        "x": 16,
+        "y": 8
+      },
+      {
+        "cellId": "cell-m-001",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-027",
+        "x": 9,
+        "y": 15
+      },
+      {
+        "cellId": "cell-r-004",
+        "x": 13,
+        "y": 11
+      },
+      {
+        "cellId": "cell-t-002",
+        "x": 15,
+        "y": 5
+      },
+      {
+        "cellId": "cell-s-002",
+        "x": 15,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-005",
+        "x": 14,
+        "y": 15
+      },
+      {
+        "cellId": "cell-m-002",
+        "x": 2,
+        "y": 8
+      },
+      {
+        "cellId": "cell-o-002",
+        "x": 0,
+        "y": 16
+      },
+      {
+        "cellId": "cell-w-002",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "cellId": "cell-u-004",
+        "x": 14,
+        "y": 10
+      },
+      {
+        "cellId": "cell-n-009",
+        "x": 8,
+        "y": 14
+      },
+      {
+        "cellId": "cell-s-004",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "cellId": "cell-p-003",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "cellId": "cell-h-005",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "cellId": "cell-z-003",
+        "x": 3,
+        "y": 10
+      },
+      {
+        "cellId": "cell-s-003",
+        "x": 16,
+        "y": 16
+      },
+      {
+        "cellId": "cell-h-007",
+        "x": 9,
+        "y": 8
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 15,
+        "y": 6
+      },
+      {
+        "cellId": "cell-f-003",
+        "x": 16,
+        "y": 10
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 3,
+        "y": 12
+      },
+      {
+        "cellId": "cell-v-008",
+        "x": 13,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d-003",
+        "x": 5,
+        "y": 12
+      },
+      {
+        "cellId": "cell-v-002",
+        "x": 1,
+        "y": 15
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 15,
+        "y": 15
+      },
+      {
+        "cellId": "cell-j-002",
+        "x": 3,
+        "y": 9
+      },
+      {
+        "cellId": "cell-n-007",
+        "x": 12,
+        "y": 3
+      },
+      {
+        "cellId": "cell-i-003",
+        "x": 8,
+        "y": 12
+      },
+      {
+        "cellId": "cell-z-001",
+        "x": 11,
+        "y": 4
+      },
+      {
+        "cellId": "cell-w-001",
+        "x": 8,
+        "y": 15
+      },
+      {
+        "cellId": "cell-v-006",
+        "x": 13,
+        "y": 16
+      },
+      {
+        "cellId": "red-myco-018",
+        "x": 0,
+        "y": 13
+      },
+      {
+        "cellId": "cell-g-003",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "cellId": "cell-e-004",
+        "x": 4,
+        "y": 13
+      },
+      {
+        "cellId": "cell-n-003",
+        "x": 12,
+        "y": 15
+      },
+      {
+        "cellId": "cell-u-002",
+        "x": 8,
+        "y": 16
+      },
+      {
+        "cellId": "red-myco-016",
+        "x": 13,
+        "y": 7
+      },
+      {
+        "cellId": "cell-x-002",
+        "x": 11,
+        "y": 11
+      },
+      {
+        "cellId": "cell-k-002",
+        "x": 9,
+        "y": 4
+      },
+      {
+        "cellId": "cell-h-003",
+        "x": 9,
+        "y": 7
+      },
+      {
+        "cellId": "red-myco-023",
+        "x": 1,
+        "y": 7
+      },
+      {
+        "cellId": "cell-n-010",
+        "x": 12,
+        "y": 4
+      },
+      {
+        "cellId": "cell-r-003",
+        "x": 11,
+        "y": 1
+      },
+      {
+        "cellId": "cell-p-004",
+        "x": 6,
+        "y": 15
+      },
+      {
+        "cellId": "cell-f-005",
+        "x": 11,
+        "y": 2
+      },
+      {
+        "cellId": "cell-w-003",
+        "x": 7,
+        "y": 10
+      },
+      {
+        "cellId": "cell-a-004",
+        "x": 1,
+        "y": 8
+      },
+      {
+        "cellId": "cell-q-005",
+        "x": 0,
+        "y": 11
+      },
+      {
+        "cellId": "cell-q-002",
+        "x": 8,
+        "y": 2
+      },
+      {
+        "cellId": "cell-j-008",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-025",
+        "x": 2,
+        "y": 10
+      },
+      {
+        "cellId": "cell-u-001",
+        "x": 10,
+        "y": 16
+      },
+      {
+        "cellId": "red-myco-019",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "cellId": "cell-j-004",
+        "x": 14,
+        "y": 2
+      },
+      {
+        "cellId": "cell-j-005",
+        "x": 5,
+        "y": 10
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "cellId": "cell-h-006",
+        "x": 3,
+        "y": 13
+      },
+      {
+        "cellId": "cell-q-001",
+        "x": 6,
+        "y": 14
+      },
+      {
+        "cellId": "cell-z-004",
+        "x": 6,
+        "y": 10
+      },
+      {
+        "cellId": "red-myco-026",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "cellId": "cell-t-003",
+        "x": 14,
+        "y": 6
+      },
+      {
+        "cellId": "cell-c-003",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "cellId": "cell-h-004",
+        "x": 9,
+        "y": 5
+      },
+      {
+        "cellId": "cell-t-005",
+        "x": 16,
+        "y": 3
+      },
+      {
+        "cellId": "cell-c-004",
+        "x": 4,
+        "y": 14
+      },
+      {
+        "cellId": "cell-y-003",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "cell-i-002",
+        "x": 0,
+        "y": 7
+      },
+      {
+        "cellId": "cell-z-002",
+        "x": 6,
+        "y": 6
+      },
+      {
+        "cellId": "cell-r-001",
+        "x": 13,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 12,
+        "y": 6
+      },
+      {
+        "cellId": "cell-p-001",
+        "x": 13,
+        "y": 9
+      },
+      {
+        "cellId": "cell-v-001",
+        "x": 15,
+        "y": 8
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "cellId": "cell-n-005",
+        "x": 1,
+        "y": 11
+      },
+      {
+        "cellId": "red-myco-021",
+        "x": 3,
+        "y": 7
+      },
+      {
+        "cellId": "cell-e-003",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "cellId": "cell-f-002",
+        "x": 8,
+        "y": 9
+      },
+      {
+        "cellId": "red-myco-004",
+        "x": 9,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-020",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-q-004",
+        "x": 4,
+        "y": 16
+      },
+      {
+        "cellId": "cell-c-005",
+        "x": 12,
+        "y": 8
+      },
+      {
+        "cellId": "cell-f-006",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "cellId": "cell-j-006",
+        "x": 7,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-013",
+        "x": 16,
+        "y": 4
+      },
+      {
+        "cellId": "cell-v-003",
+        "x": 15,
+        "y": 7
+      },
+      {
+        "cellId": "cell-j-007",
+        "x": 12,
+        "y": 5
+      },
+      {
+        "cellId": "cell-o-001",
+        "x": 15,
+        "y": 13
+      },
+      {
+        "cellId": "cell-j-001",
+        "x": 9,
+        "y": 9
+      },
+      {
+        "cellId": "cell-y-001",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "cellId": "red-myco-003",
+        "x": 16,
+        "y": 7
+      },
+      {
+        "cellId": "cell-g-002",
+        "x": 4,
+        "y": 8
+      },
+      {
+        "cellId": "cell-a-006",
+        "x": 11,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c-002",
+        "x": 16,
+        "y": 11
+      },
+      {
+        "cellId": "cell-t-006",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "cellId": "cell-o-004",
+        "x": 16,
+        "y": 12
+      },
+      {
+        "cellId": "cell-p-002",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "cellId": "cell-o-003",
+        "x": 3,
+        "y": 15
+      },
+      {
+        "cellId": "red-myco-009",
+        "x": 10,
+        "y": 8
+      },
+      {
+        "cellId": "cell-q-006",
+        "x": 4,
+        "y": 7
+      },
+      {
+        "cellId": "cell-s-006",
+        "x": 5,
+        "y": 13
+      },
+      {
+        "cellId": "cell-s-005",
+        "x": 14,
+        "y": 9
+      },
+      {
+        "cellId": "cell-n-006",
+        "x": 13,
+        "y": 14
+      },
+      {
+        "cellId": "cell-r-002",
+        "x": 10,
+        "y": 14
+      },
+      {
+        "cellId": "cell-k-003",
+        "x": 16,
+        "y": 9
+      },
+      {
+        "cellId": "red-myco-015",
+        "x": 0,
+        "y": 15
+      },
+      {
+        "cellId": "cell-i-004",
+        "x": 15,
+        "y": 0
+      },
+      {
+        "cellId": "cell-v-005",
+        "x": 14,
+        "y": 14
+      },
+      {
+        "cellId": "cell-v-004",
+        "x": 9,
+        "y": 10
+      },
+      {
+        "cellId": "cell-a-007",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "cellId": "cell-m-004",
+        "x": 11,
+        "y": 6
+      },
+      {
+        "cellId": "cell-n-004",
+        "x": 1,
+        "y": 12
+      },
+      {
+        "cellId": "cell-c-007",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "cellId": "cell-y-002",
+        "x": 13,
+        "y": 12
+      },
+      {
+        "cellId": "cell-z-005",
+        "x": 6,
+        "y": 8
+      },
+      {
+        "cellId": "cell-h-002",
+        "x": 2,
+        "y": 14
+      },
+      {
+        "cellId": "cell-e-002",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-n-001",
+        "x": 8,
+        "y": 6
+      },
+      {
+        "cellId": "cell-q-003",
+        "x": 8,
+        "y": 5
+      },
+      {
+        "cellId": "cell-c-006",
+        "x": 8,
+        "y": 4
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 4,
+        "y": 10
+      },
+      {
+        "cellId": "cell-x-003",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-006",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-x-001",
+        "x": 15,
+        "y": 9
+      },
+      {
+        "cellId": "cell-e-006",
+        "x": 6,
+        "y": 12
+      },
+      {
+        "cellId": "red-myco-022",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-m-003",
+        "x": 0,
+        "y": 9
+      },
+      {
+        "cellId": "cell-y-004",
+        "x": 8,
+        "y": 7
+      },
+      {
+        "cellId": "cell-e-007",
+        "x": 9,
+        "y": 2
+      },
+      {
+        "cellId": "cell-f-004",
+        "x": 11,
+        "y": 14
+      },
+      {
+        "cellId": "cell-t-004",
+        "x": 12,
+        "y": 14
+      },
+      {
+        "cellId": "cell-n-008",
+        "x": 3,
+        "y": 16
+      },
+      {
+        "cellId": "cell-a-002",
+        "x": 7,
+        "y": 8
+      },
+      {
+        "cellId": "cell-j-003",
+        "x": 0,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-024",
+        "x": 10,
+        "y": 9
+      },
+      {
+        "cellId": "cell-s-001",
+        "x": 7,
+        "y": 13
+      },
+      {
+        "cellId": "cell-d-002",
+        "x": 12,
+        "y": 9
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 9,
+        "y": 14
+      },
+      {
+        "cellId": "cell-b-002",
+        "x": 7,
+        "y": 14
+      },
+      {
+        "cellId": "cell-s-007",
+        "x": 11,
+        "y": 3
+      },
+      {
+        "cellId": "cell-c-010",
+        "x": 15,
+        "y": 1
+      },
+      {
+        "cellId": "cell-u-003",
+        "x": 11,
+        "y": 13
+      },
+      {
+        "cellId": "red-myco-010",
+        "x": 10,
+        "y": 2
+      },
+      {
+        "cellId": "cell-l-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-014",
+        "x": 6,
+        "y": 9
+      },
+      {
+        "cellId": "red-myco-007",
+        "x": 1,
+        "y": 9
+      },
+      {
+        "cellId": "cell-e-005",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-008",
+        "x": 9,
+        "y": 11
+      },
+      {
+        "cellId": "cell-n-002",
+        "x": 9,
+        "y": 6
+      }
+    ],
+    "rocks": [
+      {
+        "x": 1,
+        "y": 13
+      },
+      {
+        "x": 9,
+        "y": 13
+      },
+      {
+        "x": 2,
+        "y": 13
+      },
+      {
+        "x": 0,
+        "y": 14
+      },
+      {
+        "x": 5,
+        "y": 7
+      },
+      {
+        "x": 11,
+        "y": 15
+      },
+      {
+        "x": 15,
+        "y": 2
+      },
+      {
+        "x": 2,
+        "y": 5
+      },
+      {
+        "x": 5,
+        "y": 4
+      },
+      {
+        "x": 11,
+        "y": 16
+      },
+      {
+        "x": 5,
+        "y": 6
+      },
+      {
+        "x": 4,
+        "y": 9
+      },
+      {
+        "x": 14,
+        "y": 12
+      },
+      {
+        "x": 13,
+        "y": 3
+      },
+      {
+        "x": 10,
+        "y": 12
+      },
+      {
+        "x": 16,
+        "y": 1
+      },
+      {
+        "x": 0,
+        "y": 12
+      },
+      {
+        "x": 5,
+        "y": 9
+      },
+      {
+        "x": 11,
+        "y": 12
+      },
+      {
+        "x": 12,
+        "y": 1
+      },
+      {
+        "x": 6,
+        "y": 13
+      },
+      {
+        "x": 6,
+        "y": 2
+      },
+      {
+        "x": 9,
+        "y": 1
+      },
+      {
+        "x": 15,
+        "y": 3
+      },
+      {
+        "x": 10,
+        "y": 6
+      },
+      {
+        "x": 2,
+        "y": 15
+      },
+      {
+        "x": 13,
+        "y": 5
+      },
+      {
+        "x": 12,
+        "y": 13
+      },
+      {
+        "x": 12,
+        "y": 10
+      },
+      {
+        "x": 3,
+        "y": 1
+      },
+      {
+        "x": 13,
+        "y": 15
+      },
+      {
+        "x": 1,
+        "y": 14
+      },
+      {
+        "x": 2,
+        "y": 11
+      },
+      {
+        "x": 11,
+        "y": 5
+      },
+      {
+        "x": 4,
+        "y": 3
+      },
+      {
+        "x": 4,
+        "y": 1
+      },
+      {
+        "x": 1,
+        "y": 5
+      },
+      {
+        "x": 10,
+        "y": 7
+      },
+      {
+        "x": 4,
+        "y": 15
+      },
+      {
+        "x": 15,
+        "y": 14
+      },
+      {
+        "x": 12,
+        "y": 12
+      },
+      {
+        "x": 10,
+        "y": 4
+      },
+      {
+        "x": 13,
+        "y": 1
+      },
+      {
+        "x": 5,
+        "y": 1
+      },
+      {
+        "x": 11,
+        "y": 9
+      },
+      {
+        "x": 10,
+        "y": 10
+      },
+      {
+        "x": 10,
+        "y": 1
+      },
+      {
+        "x": 7,
+        "y": 16
+      },
+      {
+        "x": 3,
+        "y": 0
+      },
+      {
+        "x": 12,
+        "y": 7
+      },
+      {
+        "x": 15,
+        "y": 12
+      },
+      {
+        "x": 12,
+        "y": 0
+      },
+      {
+        "x": 5,
+        "y": 14
+      },
+      {
+        "x": 6,
+        "y": 0
+      }
+    ],
+    "ascii": "LJ.#EC#...*A#V.I.\n*.D###...##R##QC#\n*..HEA#TQE*F..J#.\nBYCE#*.G.*.SN#.#T\n..MCC#X.CK#ZN*.S*\n*##.FPGJQHA#J#.T.\n..PWS#ZYNN#M**TK.\nI*.*Q#..YH#A#*.V*\nJAM.G.ZAHH*.CR.VL\nM*.J##*.FJ*#DPSXK\n..*Z*JZW.V#V#*U.F\nQN#......C*X.RA.C\n#N.I.DE.I.###Y##O\n*##HES#S.#.U#..O.\n##H.C#QBNERFTNV#T\n*V#O#.P.W*.#N#*F.\nO..NQ..#U.U#.V..S"
+  },
+  "solutionLayout": {
+    "width": 18,
+    "height": 9,
+    "cells": [
+      {
+        "cellId": "cell-t-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-q-001",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "cellId": "cell-y-001",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "cellId": "cell-u-001",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 0,
+        "y": 6
+      },
+      {
+        "cellId": "cell-h-001",
+        "x": 0,
+        "y": 7
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 0,
+        "y": 8
+      },
+      {
+        "cellId": "cell-u-002",
+        "x": 1,
+        "y": 8
+      },
+      {
+        "cellId": "cell-e-002",
+        "x": 1,
+        "y": 7
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 1,
+        "y": 6
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "cellId": "cell-n-001",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "cell-p-001",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "cellId": "cell-a-002",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-003",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-a-003",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "cellId": "cell-e-003",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "cell-v-001",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "cellId": "cell-n-002",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "cellId": "red-myco-004",
+        "x": 2,
+        "y": 7
+      },
+      {
+        "cellId": "cell-t-002",
+        "x": 2,
+        "y": 8
+      },
+      {
+        "cellId": "cell-c-002",
+        "x": 3,
+        "y": 8
+      },
+      {
+        "cellId": "cell-e-004",
+        "x": 3,
+        "y": 7
+      },
+      {
+        "cellId": "cell-g-002",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "cellId": "cell-v-002",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-005",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "cellId": "cell-n-003",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "cell-t-003",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "cellId": "cell-z-001",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "red-myco-006",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "cellId": "cell-z-002",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "cellId": "cell-n-004",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "cellId": "cell-c-003",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "cellId": "cell-o-001",
+        "x": 4,
+        "y": 7
+      },
+      {
+        "cellId": "cell-j-001",
+        "x": 4,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-007",
+        "x": 5,
+        "y": 8
+      },
+      {
+        "cellId": "cell-o-002",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "cellId": "cell-r-001",
+        "x": 5,
+        "y": 6
+      },
+      {
+        "cellId": "cell-z-003",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "cellId": "cell-l-001",
+        "x": 5,
+        "y": 4
+      },
+      {
+        "cellId": "cell-f-002",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-008",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "cellId": "cell-x-001",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "cellId": "cell-b-002",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-004",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "cellId": "cell-s-001",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "cellId": "cell-a-004",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-009",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "cellId": "cell-h-002",
+        "x": 6,
+        "y": 6
+      },
+      {
+        "cellId": "cell-j-002",
+        "x": 6,
+        "y": 7
+      },
+      {
+        "cellId": "cell-v-003",
+        "x": 6,
+        "y": 8
+      },
+      {
+        "cellId": "cell-h-003",
+        "x": 7,
+        "y": 8
+      },
+      {
+        "cellId": "cell-o-003",
+        "x": 7,
+        "y": 7
+      },
+      {
+        "cellId": "red-myco-010",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "cellId": "cell-q-002",
+        "x": 7,
+        "y": 5
+      },
+      {
+        "cellId": "cell-a-005",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "cellId": "cell-g-003",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "cellId": "cell-p-002",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "cellId": "cell-w-001",
+        "x": 7,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-011",
+        "x": 8,
+        "y": 1
+      },
+      {
+        "cellId": "cell-m-001",
+        "x": 8,
+        "y": 2
+      },
+      {
+        "cellId": "cell-q-003",
+        "x": 8,
+        "y": 3
+      },
+      {
+        "cellId": "cell-m-002",
+        "x": 8,
+        "y": 4
+      },
+      {
+        "cellId": "cell-a-006",
+        "x": 8,
+        "y": 5
+      },
+      {
+        "cellId": "cell-x-002",
+        "x": 8,
+        "y": 6
+      },
+      {
+        "cellId": "red-myco-012",
+        "x": 8,
+        "y": 7
+      },
+      {
+        "cellId": "cell-d-002",
+        "x": 8,
+        "y": 8
+      },
+      {
+        "cellId": "cell-h-004",
+        "x": 9,
+        "y": 8
+      },
+      {
+        "cellId": "cell-u-003",
+        "x": 9,
+        "y": 7
+      },
+      {
+        "cellId": "cell-n-005",
+        "x": 9,
+        "y": 6
+      },
+      {
+        "cellId": "cell-v-004",
+        "x": 9,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-013",
+        "x": 9,
+        "y": 4
+      },
+      {
+        "cellId": "cell-j-003",
+        "x": 9,
+        "y": 3
+      },
+      {
+        "cellId": "cell-s-002",
+        "x": 9,
+        "y": 2
+      },
+      {
+        "cellId": "cell-s-003",
+        "x": 9,
+        "y": 1
+      },
+      {
+        "cellId": "cell-t-004",
+        "x": 10,
+        "y": 1
+      },
+      {
+        "cellId": "cell-t-005",
+        "x": 10,
+        "y": 2
+      },
+      {
+        "cellId": "red-myco-014",
+        "x": 10,
+        "y": 3
+      },
+      {
+        "cellId": "cell-h-005",
+        "x": 10,
+        "y": 4
+      },
+      {
+        "cellId": "cell-c-005",
+        "x": 10,
+        "y": 5
+      },
+      {
+        "cellId": "cell-l-002",
+        "x": 10,
+        "y": 6
+      },
+      {
+        "cellId": "cell-y-002",
+        "x": 10,
+        "y": 7
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 10,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-015",
+        "x": 11,
+        "y": 8
+      },
+      {
+        "cellId": "cell-c-006",
+        "x": 11,
+        "y": 7
+      },
+      {
+        "cellId": "cell-j-004",
+        "x": 11,
+        "y": 6
+      },
+      {
+        "cellId": "cell-n-006",
+        "x": 11,
+        "y": 5
+      },
+      {
+        "cellId": "cell-n-007",
+        "x": 11,
+        "y": 4
+      },
+      {
+        "cellId": "cell-r-002",
+        "x": 11,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-016",
+        "x": 11,
+        "y": 2
+      },
+      {
+        "cellId": "cell-s-004",
+        "x": 11,
+        "y": 1
+      },
+      {
+        "cellId": "cell-j-005",
+        "x": 12,
+        "y": 1
+      },
+      {
+        "cellId": "cell-e-005",
+        "x": 12,
+        "y": 2
+      },
+      {
+        "cellId": "cell-h-006",
+        "x": 12,
+        "y": 3
+      },
+      {
+        "cellId": "cell-q-004",
+        "x": 12,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-017",
+        "x": 12,
+        "y": 5
+      },
+      {
+        "cellId": "cell-v-005",
+        "x": 12,
+        "y": 6
+      },
+      {
+        "cellId": "cell-p-003",
+        "x": 12,
+        "y": 7
+      },
+      {
+        "cellId": "cell-q-005",
+        "x": 12,
+        "y": 8
+      },
+      {
+        "cellId": "cell-c-007",
+        "x": 13,
+        "y": 8
+      },
+      {
+        "cellId": "cell-f-003",
+        "x": 13,
+        "y": 7
+      },
+      {
+        "cellId": "red-myco-018",
+        "x": 13,
+        "y": 6
+      },
+      {
+        "cellId": "cell-c-008",
+        "x": 13,
+        "y": 5
+      },
+      {
+        "cellId": "cell-f-004",
+        "x": 13,
+        "y": 4
+      },
+      {
+        "cellId": "cell-z-004",
+        "x": 13,
+        "y": 3
+      },
+      {
+        "cellId": "cell-i-002",
+        "x": 13,
+        "y": 2
+      },
+      {
+        "cellId": "cell-v-006",
+        "x": 13,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-019",
+        "x": 14,
+        "y": 1
+      },
+      {
+        "cellId": "cell-y-003",
+        "x": 14,
+        "y": 2
+      },
+      {
+        "cellId": "cell-r-003",
+        "x": 14,
+        "y": 3
+      },
+      {
+        "cellId": "cell-j-006",
+        "x": 14,
+        "y": 4
+      },
+      {
+        "cellId": "cell-s-005",
+        "x": 14,
+        "y": 5
+      },
+      {
+        "cellId": "cell-n-008",
+        "x": 14,
+        "y": 6
+      },
+      {
+        "cellId": "red-myco-020",
+        "x": 14,
+        "y": 7
+      },
+      {
+        "cellId": "cell-f-005",
+        "x": 14,
+        "y": 8
+      },
+      {
+        "cellId": "cell-v-007",
+        "x": 15,
+        "y": 8
+      },
+      {
+        "cellId": "cell-f-006",
+        "x": 15,
+        "y": 7
+      },
+      {
+        "cellId": "cell-y-004",
+        "x": 15,
+        "y": 6
+      },
+      {
+        "cellId": "cell-s-006",
+        "x": 15,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-021",
+        "x": 15,
+        "y": 4
+      },
+      {
+        "cellId": "cell-a-007",
+        "x": 15,
+        "y": 3
+      },
+      {
+        "cellId": "cell-p-004",
+        "x": 15,
+        "y": 2
+      },
+      {
+        "cellId": "cell-v-008",
+        "x": 15,
+        "y": 1
+      },
+      {
+        "cellId": "cell-o-004",
+        "x": 16,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-009",
+        "x": 16,
+        "y": 2
+      },
+      {
+        "cellId": "red-myco-022",
+        "x": 16,
+        "y": 3
+      },
+      {
+        "cellId": "cell-m-003",
+        "x": 16,
+        "y": 4
+      },
+      {
+        "cellId": "cell-r-004",
+        "x": 16,
+        "y": 5
+      },
+      {
+        "cellId": "cell-h-007",
+        "x": 16,
+        "y": 6
+      },
+      {
+        "cellId": "cell-d-003",
+        "x": 16,
+        "y": 7
+      },
+      {
+        "cellId": "cell-e-006",
+        "x": 16,
+        "y": 8
+      },
+      {
+        "cellId": "red-myco-023",
+        "x": 17,
+        "y": 8
+      },
+      {
+        "cellId": "cell-x-003",
+        "x": 17,
+        "y": 7
+      },
+      {
+        "cellId": "cell-c-010",
+        "x": 17,
+        "y": 6
+      },
+      {
+        "cellId": "cell-n-009",
+        "x": 17,
+        "y": 5
+      },
+      {
+        "cellId": "cell-i-003",
+        "x": 17,
+        "y": 4
+      },
+      {
+        "cellId": "cell-i-004",
+        "x": 17,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-024",
+        "x": 17,
+        "y": 2
+      },
+      {
+        "cellId": "cell-n-010",
+        "x": 17,
+        "y": 1
+      },
+      {
+        "cellId": "cell-j-007",
+        "x": 17,
+        "y": 0
+      },
+      {
+        "cellId": "cell-z-005",
+        "x": 16,
+        "y": 0
+      },
+      {
+        "cellId": "cell-k-002",
+        "x": 15,
+        "y": 0
+      },
+      {
+        "cellId": "cell-e-007",
+        "x": 14,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-025",
+        "x": 13,
+        "y": 0
+      },
+      {
+        "cellId": "cell-q-006",
+        "x": 12,
+        "y": 0
+      },
+      {
+        "cellId": "cell-m-004",
+        "x": 11,
+        "y": 0
+      },
+      {
+        "cellId": "cell-q-007",
+        "x": 10,
+        "y": 0
+      },
+      {
+        "cellId": "cell-w-002",
+        "x": 9,
+        "y": 0
+      },
+      {
+        "cellId": "cell-j-008",
+        "x": 8,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-026",
+        "x": 7,
+        "y": 0
+      },
+      {
+        "cellId": "cell-t-006",
+        "x": 6,
+        "y": 0
+      },
+      {
+        "cellId": "cell-s-007",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "cellId": "cell-w-003",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "cellId": "cell-u-004",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "cellId": "cell-k-003",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "red-myco-027",
+        "x": 1,
+        "y": 0
+      }
+    ],
+    "rocks": [],
+    "ascii": "T*KUWST*JWQMQ*EKZJ\nCA*BTXBW*STSJV*VON\nQPADZ*CPMST*EIYPC*\nYAKN*FSGQJ*RHZRA*I\nUNE*ZLAAM*HNQFJ*MI\n*FVVNZ*QAVCN*CSSRN\nE*NGCRH*XNLJV*NYHC\nHE*EOOJO*UYCPF*FDX\nGUTCJ*VHDHI*QCFVE*"
+  },
+  "solverSummary": {
+    "won": false,
+    "acceptedNearWin": false,
+    "needAttempt": 0,
+    "candidateIndex": -1,
+    "candidateCount": 0,
+    "ticksPerCandidate": 0,
+    "glowingCells": 0,
+    "totalSwaps": 0,
+    "totalReactions": 0,
+    "activeCellsInLastWindow": 0,
+    "strainPenalty": 0,
+    "finalScore": 0,
+    "adjacentPairs": 297,
+    "winDurationTicks": 3,
+    "requiredAliveTicksAtEnd": 0,
+    "finalSustainedTicks": 0,
+    "stableAtEnd": false
+  }
+}

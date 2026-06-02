@@ -1,0 +1,30 @@
+Puzzle solver summary
+  playable only: True
+  won: False
+  accepted near win: False
+  need attempt: 0
+  candidate index: -1
+  candidates evaluated in winning attempt: 0
+  ticks per candidate: 0
+  win duration ticks: 3
+  required alive ticks at end: 0
+  final sustained ticks: 0
+  stable at end: False
+  glowing cells: 0/8
+  swaps: 0
+  reactions: 0
+  active cells in last window: 0
+  touching pairs: 10
+  strain penalty: -0
+  final score: 0
+
+Cells
+  cell-a-001: produces A; needs C, F, D
+  cell-f-001: produces F; needs A, B, C
+  cell-b-001: produces B; needs F, A, E
+  cell-b-002: produces B; needs E, F, C
+  cell-e-001: produces E; needs B, D, C
+  red-myco-001: red myco; needs D, E, C, B
+  cell-d-001: produces D; needs E, C, A
+  cell-c-001: produces C; needs D, A, E
+

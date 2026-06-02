@@ -1,0 +1,25 @@
+.. ## *2 A1 F2 H1 I1
+.. .. .. ## B1 .. ..
+.. .. .. K1 *1 .. ..
+.. J1 .. F1 ## .. ..
+C1 .. .. .. .. .. ..
+L1 .. .. D1 G1 E1 ..
+.. .. .. ## ## K2 ..
+
+Legend:
+*1: red-myco-001; red-myco; needs D,H,C,K
+*2: red-myco-002; red-myco; needs J,A,E,I
+A1: cell-a-001; produces A; needs J,H,I
+B1: cell-b-001; produces B; needs K,C,J
+C1: cell-c-001; produces C; needs B,D,K
+D1: cell-d-001; produces D; needs C,B,F
+E1: cell-e-001; produces E; needs H,G,I
+F1: cell-f-001; produces F; needs K,L,D
+F2: cell-f-002; produces F; needs K,I,L
+G1: cell-g-001; produces G; needs E,J,H
+H1: cell-h-001; produces H; needs A,E,J
+I1: cell-i-001; produces I; needs F,E,K
+J1: cell-j-001; produces J; needs G,K,E
+K1: cell-k-001; produces K; needs J,B,G
+K2: cell-k-002; produces K; needs L,F,I
+L1: cell-l-001; produces L; needs F,K,I

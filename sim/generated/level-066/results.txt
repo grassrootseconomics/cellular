@@ -1,0 +1,91 @@
+Puzzle solver summary
+  playable only: True
+  won: False
+  accepted near win: False
+  need attempt: 0
+  candidate index: -1
+  candidates evaluated in winning attempt: 0
+  ticks per candidate: 0
+  win duration ticks: 3
+  required alive ticks at end: 0
+  final sustained ticks: 0
+  stable at end: False
+  glowing cells: 0/69
+  swaps: 0
+  reactions: 0
+  active cells in last window: 0
+  touching pairs: 116
+  strain penalty: -0
+  final score: 0
+
+Cells
+  cell-r48: produces R48; needs R29, R43, R60
+  cell-r60: produces R60; needs R29, R48, R43
+  cell-r29: produces R29; needs L, R61, R60
+  cell-l: produces L; needs R54, R61, R29
+  cell-r61: produces R61; needs R62, L, R54
+  cell-r54: produces R54; needs R61, R, R62
+  cell-r62: produces R62; needs R, R45, R54
+  cell-r: produces R; needs R62, R45, R34
+  cell-r45: produces R45; needs R, P, R34
+  cell-r34: produces R34; needs P, R45, M
+  cell-p: produces P; needs Q, M, R34
+  cell-m: produces M; needs P, R66, Q
+  cell-q: produces Q; needs M, R66, R37
+  cell-r66: produces R66; needs Q, K, R37
+  cell-r37: produces R37; needs R66, R65, K
+  cell-k: produces K; needs R42, R65, R37
+  cell-r65: produces R65; needs R42, K, E
+  cell-r42: produces R42; needs E, R65, C
+  cell-e: produces E; needs G, R42, C
+  cell-c: produces C; needs G, R49, E
+  cell-g: produces G; needs R26, C, R49
+  cell-r49: produces R49; needs R26, G, N
+  cell-r26: produces R26; needs N, R49, R58
+  cell-n: produces N; needs R58, R39, R26
+  cell-r58: produces R58; needs A, N, R39
+  cell-r39: produces R39; needs A, R58, Y
+  cell-a: produces A; needs R36, R39, Y
+  cell-y: produces Y; needs A, R36, R53
+  cell-r36: produces R36; needs R53, Y, R64
+  cell-r53: produces R53; needs R64, R50, R36
+  cell-r64: produces R64; needs R53, R50, B
+  cell-r50: produces R50; needs R64, B, R32
+  cell-b: produces B; needs R50, R32, R30
+  cell-r32: produces R32; needs B, R30, R56
+  cell-r30: produces R30; needs R35, R56, R32
+  cell-r56: produces R56; needs J, R30, R35
+  cell-r35: produces R35; needs R56, R28, J
+  cell-j: produces J; needs R28, R35, X
+  cell-r28: produces R28; needs X, J, R67
+  cell-x: produces X; needs R28, R68, R67
+  cell-r67: produces R67; needs T, X, R68
+  cell-r68: produces R68; needs T, R44, R67
+  cell-t: produces T; needs R44, R68, R46
+  cell-r44: produces R44; needs R46, U, T
+  cell-r46: produces R46; needs H, R44, U
+  cell-u: produces U; needs S, R46, H
+  cell-h: produces H; needs U, S, W
+  cell-s: produces S; needs R55, W, H
+  cell-w: produces W; needs R55, R27, S
+  cell-r55: produces R55; needs R27, R47, W
+  cell-r27: produces R27; needs R51, R55, R47
+  cell-r47: produces R47; needs R57, R51, R27
+  cell-r51: produces R51; needs R47, R57, R63
+  cell-r57: produces R57; needs R51, D, R63
+  cell-r63: produces R63; needs R57, Z, D
+  cell-d: produces D; needs Z, R63, R41
+  cell-z: produces Z; needs D, R38, R41
+  cell-r41: produces R41; needs V, R38, Z
+  cell-r38: produces R38; needs R41, R52, V
+  cell-v: produces V; needs R38, R52, O
+  cell-r52: produces R52; needs O, V, R33
+  cell-o: produces O; needs I, R33, R52
+  cell-r33: produces R33; needs R31, O, I
+  cell-i: produces I; needs F, R31, R33
+  cell-r31: produces R31; needs R59, I, F
+  cell-f: produces F; needs R59, R31, R40
+  cell-r59: produces R59; needs R43, R40, F
+  cell-r40: produces R40; needs R43, R60, R59
+  cell-r43: produces R43; needs R60, R29, R40
+

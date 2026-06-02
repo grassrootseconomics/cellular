@@ -61,12 +61,14 @@ public sealed class CircuitDiagnosticsTests
     public void LevelSeventeenFailedLayout_DoesNotReportOneStrongCircuitGroup()
     {
         var loaded = LoadLevelSeventeenLayout(
-            "JHR.",
-            "MKS.",
-            "PCT.",
-            "BAQ",
-            "NEFO",
-            "DGIL");
+            "M1 B1 .. .. .. D2 .. ..",
+            "## .. .. ## G1 .. L1 ##",
+            "*4 .. .. F1 J1 .. C1 ..",
+            "K1 H1 O1 *1 ## .. .. ..",
+            ".. A1 K2 E1 ## .. .. ..",
+            "## .. Q1 D1 .. .. ## ..",
+            "N1 .. .. .. *2 .. I1 P1",
+            ".. A2 .. .. .. *3 ## ..");
         loaded.Options.EventCapacity = 65_536;
         var engine = new CellularEngine(loaded.World, loaded.Options);
 
@@ -81,10 +83,14 @@ public sealed class CircuitDiagnosticsTests
     public void LevelSeventeenWinningLayout_ReportsOneStrongCircuitGroup()
     {
         var loaded = LoadLevelSeventeenLayout(
-            "SKTCAE",
-            "GILOFQ",
-            "DNBPMJ",
-            "....RH");
+            ".. .. .. .. .. .. .. ..",
+            "## N1 Q1 ## .. .. .. ##",
+            ".. B1 D1 P1 .. .. .. ..",
+            "L1 C1 D2 A1 ## .. .. ..",
+            "E1 H1 A2 I1 ## .. .. ..",
+            "## K1 F1 G1 *1 .. ## ..",
+            ".. O1 J1 M1 *3 .. .. ..",
+            ".. *2 K2 *4 .. .. ## ..");
         loaded.Options.EventCapacity = 65_536;
         var engine = new CellularEngine(loaded.World, loaded.Options);
 
@@ -116,16 +122,15 @@ public sealed class CircuitDiagnosticsTests
         var root = JsonNode.Parse(File.ReadAllText(RepoFile("levels", "puzzle", "level-017.json")))!.AsObject();
         var positions = ParseLayout(rows);
         var cells = root["cells"]!.AsArray();
+        var labelsByCellId = BuildCellLabels(cells);
         foreach (var cellNode in cells)
         {
             var cell = cellNode!.AsObject();
             var id = cell["id"]!.GetValue<string>();
-            var letter = id.StartsWith("cell-", StringComparison.Ordinal)
-                ? id.Substring("cell-".Length).ToUpperInvariant()
-                : id.ToUpperInvariant();
-            if (!positions.TryGetValue(letter, out var position))
+            var label = labelsByCellId[id];
+            if (!positions.TryGetValue(label, out var position))
             {
-                throw new InvalidOperationException($"Layout does not include cell '{letter}'.");
+                throw new InvalidOperationException($"Layout does not include cell '{label}'.");
             }
 
             cell["x"] = position.X;
@@ -140,19 +145,61 @@ public sealed class CircuitDiagnosticsTests
         var positions = new Dictionary<string, GridPosition>(StringComparer.Ordinal);
         for (var y = 0; y < rows.Count; y++)
         {
-            for (var x = 0; x < rows[y].Length; x++)
+            var tokens = rows[y].Contains(' ', StringComparison.Ordinal)
+                ? rows[y].Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                : rows[y].Select(character => character.ToString()).ToArray();
+            for (var x = 0; x < tokens.Length; x++)
             {
-                var marker = rows[y][x];
-                if (marker == '.')
+                var marker = tokens[x];
+                if (marker is "." or ".." or "#" or "##")
                 {
                     continue;
                 }
 
-                positions[marker.ToString().ToUpperInvariant()] = new GridPosition(x, y);
+                positions[marker.ToUpperInvariant()] = new GridPosition(x, y);
             }
         }
 
         return positions;
+    }
+
+    private static Dictionary<string, string> BuildCellLabels(JsonArray cells)
+    {
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var group in cells
+            .Select(cellNode => cellNode!.AsObject())
+            .GroupBy(GetMapMarker, StringComparer.Ordinal)
+            .OrderBy(group => group.Key == "*" ? "ZZZ*" : group.Key, StringComparer.Ordinal))
+        {
+            var index = 1;
+            foreach (var cell in group.OrderBy(cell => cell["id"]!.GetValue<string>(), StringComparer.Ordinal))
+            {
+                labels[cell["id"]!.GetValue<string>()] = $"{group.Key}{index}";
+                index++;
+            }
+        }
+
+        return labels;
+    }
+
+    private static string GetMapMarker(JsonObject cell)
+    {
+        var kind = cell["kind"]?.GetValue<string>();
+        if (string.Equals(kind, nameof(CellKind.WhiteMyco), StringComparison.Ordinal))
+        {
+            return "0";
+        }
+
+        if (string.Equals(kind, nameof(CellKind.RedMyco), StringComparison.Ordinal)
+            || cell["id"]!.GetValue<string>().StartsWith("red-myco-", StringComparison.Ordinal))
+        {
+            return "*";
+        }
+
+        var sourceSlot = cell["slots"]!.AsArray()
+            .Select(slotNode => slotNode!.AsObject())
+            .First(slot => string.Equals(slot["role"]!.GetValue<string>(), nameof(PoolSlotRole.SourceOutput), StringComparison.Ordinal));
+        return sourceSlot["resource"]!.GetValue<string>();
     }
 
     private static string RepoFile(params string[] parts)

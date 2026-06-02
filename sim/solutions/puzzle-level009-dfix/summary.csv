@@ -1,0 +1,2 @@
+level,status,candidates_evaluated,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,failure_category,output
+9,fail,2000,-1,17.10,12627,5894,0,insufficient source/engine settings,sim/solutions/puzzle-level009-dfix/level-009

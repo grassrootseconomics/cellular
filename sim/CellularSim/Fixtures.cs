@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CellularSim;
 
@@ -18,7 +19,11 @@ public static class FixtureLoader
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
+        AllowTrailingCommas = true,
+        Converters =
+        {
+            new FlexibleIntJsonConverter()
+        }
     };
 
     public static FixtureLoadResult LoadFromFile(string path) => LoadFromJson(File.ReadAllText(path));
@@ -104,8 +109,25 @@ public static class FixtureLoader
                 throw new InvalidFixtureException($"Duplicate cell id '{cellDto.Id}'.");
             }
 
+            var kind = ParseCellKind(cellDto);
             var pool = BuildPool(cellDto, catalog);
-            var cell = new CellState(cellDto.Id, new GridPosition(cellDto.X, cellDto.Y), pool);
+            if (kind is CellKind.WhiteMyco or CellKind.RedMyco)
+            {
+                if (cellDto.Sources is { Count: > 0 })
+                {
+                    throw new InvalidFixtureException($"Myco cell '{cellDto.Id}' cannot define sources.");
+                }
+
+                foreach (var slot in pool.Slots)
+                {
+                    if (slot.Role == PoolSlotRole.SourceOutput)
+                    {
+                        throw new InvalidFixtureException($"Myco cell '{cellDto.Id}' cannot define SourceOutput slots.");
+                    }
+                }
+            }
+
+            var cell = new CellState(cellDto.Id, new GridPosition(cellDto.X, cellDto.Y), pool, kind);
 
             foreach (var sourceDto in cellDto.Sources ?? [])
             {
@@ -186,6 +208,21 @@ public static class FixtureLoader
         return pool;
     }
 
+    private static CellKind ParseCellKind(CellDto cellDto)
+    {
+        if (string.IsNullOrWhiteSpace(cellDto.Kind))
+        {
+            return CellKind.Standard;
+        }
+
+        if (!Enum.TryParse<CellKind>(cellDto.Kind, true, out var kind))
+        {
+            throw new InvalidFixtureException($"Cell '{cellDto.Id}' has invalid kind '{cellDto.Kind}'.");
+        }
+
+        return kind;
+    }
+
     private static EngineOptions BuildOptions(FixtureDto fixture, ResourceCatalog catalog, GridWorld world)
     {
         var options = new EngineOptions();
@@ -205,6 +242,11 @@ public static class FixtureLoader
             if (engine.SwapRoundsPerTick > 0)
             {
                 options.SwapRoundsPerTick = engine.SwapRoundsPerTick;
+            }
+
+            if (engine.MaxSwapQuantityPerEdge > 0)
+            {
+                options.MaxSwapQuantityPerEdge = engine.MaxSwapQuantityPerEdge;
             }
 
             if (engine.NeedDesiredQuantity > 0)
@@ -289,6 +331,7 @@ public static class FixtureLoader
     private sealed class CellDto
     {
         public string Id { get; set; } = "";
+        public string Kind { get; set; } = "";
         public int X { get; set; }
         public int Y { get; set; }
         public List<SlotDto>? Slots { get; set; }
@@ -315,6 +358,7 @@ public static class FixtureLoader
         public int GlowTtlTicks { get; set; }
         public int WinRecentFlowWindowTicks { get; set; }
         public int SwapRoundsPerTick { get; set; }
+        public int MaxSwapQuantityPerEdge { get; set; }
         public int NeedDesiredQuantity { get; set; }
         public int NeedOfferReserve { get; set; }
         public bool AllowNeedOverflowPayments { get; set; }
@@ -325,5 +369,48 @@ public static class FixtureLoader
         public List<string>? RequiredCells { get; set; }
         public List<string>? RequiredResources { get; set; }
         public int DurationTicks { get; set; }
+    }
+
+    private sealed class FlexibleIntJsonConverter : JsonConverter<int>
+    {
+        public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Number)
+            {
+                if (reader.TryGetInt32(out var value))
+                {
+                    return value;
+                }
+
+                var doubleValue = reader.GetDouble();
+                if (double.IsFinite(doubleValue) && doubleValue % 1 == 0
+                    && doubleValue >= int.MinValue && doubleValue <= int.MaxValue)
+                {
+                    return (int)doubleValue;
+                }
+            }
+            else if (reader.TokenType == JsonTokenType.String)
+            {
+                var text = reader.GetString();
+                if (int.TryParse(text, out var value))
+                {
+                    return value;
+                }
+
+                if (double.TryParse(text, out var doubleValue)
+                    && double.IsFinite(doubleValue) && doubleValue % 1 == 0
+                    && doubleValue >= int.MinValue && doubleValue <= int.MaxValue)
+                {
+                    return (int)doubleValue;
+                }
+            }
+
+            throw new JsonException($"Expected an integer value for {typeToConvert.Name}.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
+        {
+            writer.WriteNumberValue(value);
+        }
     }
 }

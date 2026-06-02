@@ -1,0 +1,212 @@
+X4 K1 O5 O3 *Q T6 Z4 P1 .. L6 *K .. ## ## Z1 ## .. ##
+## H5 .. .. ## D3 K3 .. ## .. .. *A ## D4 *8 ## .. ..
+C5 O4 T5 I8 *1 I5 *N L2 .. ## ## F7 U1 I3 *W .. I6 ..
+M6 ## M7 .. A3 Q2 ## ## .. ## .. S4 ## *O ## ## X8 G3
+## ## .. X1 K5 O1 N3 S5 *C I7 F1 *G .. A5 T3 *V .. *B
+## .. .. *D K6 Z9 K7 U3 L5 E8 ## ## M4 R4 X6 .. *S ##
+## *P Z5 Y2 WA E6 ## T2 .. ## ## ## F4 K8 ## .. I4 ..
+## ## A4 P4 .. .. P8 .. *5 ## Z3 W8 EA W9 PA P6 M3 ..
+S3 *T F6 ## .. .. *6 *J G1 ZA .. *9 ## .. H4 S6 W6 E5
+X3 .. .. .. W4 .. .. ## E2 P2 .. P9 ## .. D1 E7 M1 P7
+L3 J2 J1 .. .. S2 ## V1 E4 *7 S1 G2 EB N2 ## .. ## ##
+M9 D7 .. W3 *3 R3 W2 G4 ## Y1 H1 O2 *I .. R5 H2 WB ..
+## .. ## C2 ## *U *4 .. E1 F5 X5 L1 .. C1 M8 M5 D6 ..
+.. K4 ## .. Z6 *L .. E9 *F D2 W7 F2 ## .. D5 *M T7 K2
+C4 Y4 ## .. .. *H .. ## I1 A2 .. R1 ## ## F3 .. ## ##
+*E ## .. A1 P3 X2 Z7 Z8 Q1 E3 .. B2 .. ## Q3 R2 .. ##
+## ## .. V3 ## T4 *R ## *2 T1 H3 .. ## W1 T8 .. .. N1
+U2 P5 ## I2 W5 C3 B1 .. M2 V2 X7 ## L4 Y3 ## Z2 V4 V5
+
+Legend:
+*1: red-myco-001; red-myco; needs E,X,R,W
+*2: red-myco-002; red-myco; needs R,X,D,M
+*3: red-myco-003; red-myco; needs Q,I,F,K
+*4: red-myco-004; red-myco; needs Y,B,V,N
+*5: red-myco-005; red-myco; needs L,R,D,Z
+*6: red-myco-006; red-myco; needs U,V,R,Y
+*7: red-myco-007; red-myco; needs U,K,X,F
+*8: red-myco-008; red-myco; needs O,I,V,Q
+*9: red-myco-009; red-myco; needs Q,N,B,C
+*A: red-myco-010; red-myco; needs X,F,A,B
+*B: red-myco-011; red-myco; needs S,J,T,R
+*C: red-myco-012; red-myco; needs I,J,Z,X
+*D: red-myco-013; red-myco; needs J,E,I,B
+*E: red-myco-014; red-myco; needs R,A,I,B
+*F: red-myco-015; red-myco; needs I,P,U,Y
+*G: red-myco-016; red-myco; needs N,A,P,I
+*H: red-myco-017; red-myco; needs W,N,B,L
+*I: red-myco-018; red-myco; needs V,J,Q,U
+*J: red-myco-019; red-myco; needs Q,U,K,N
+*K: red-myco-020; red-myco; needs L,J,D,Y
+*L: red-myco-021; red-myco; needs W,H,F,C
+*M: red-myco-022; red-myco; needs N,X,L,H
+*N: red-myco-023; red-myco; needs U,C,Y,I
+*O: red-myco-024; red-myco; needs J,E,A,H
+*P: red-myco-025; red-myco; needs J,T,K,E
+*Q: red-myco-026; red-myco; needs E,J,Z,I
+*R: red-myco-027; red-myco; needs S,I,E,F
+*S: red-myco-028; red-myco; needs M,H,I,J
+*T: red-myco-029; red-myco; needs X,B,F,Y
+*U: red-myco-030; red-myco; needs A,L,H,G
+*V: red-myco-031; red-myco; needs R,Y,I,X
+*W: red-myco-032; red-myco; needs B,C,O,Z
+A1: cell-a-001; produces A; needs I,F,D
+A2: cell-a-002; produces A; needs I,R,M
+A3: cell-a-003; produces A; needs S,U,F
+A4: cell-a-004; produces A; needs Q,G,B
+A5: cell-a-005; produces A; needs V,N,P
+B1: cell-b-001; produces B; needs U,V,W
+B2: cell-b-002; produces B; needs C,S,E
+C1: cell-c-001; produces C; needs T,B,M
+C2: cell-c-002; produces C; needs V,G,B
+C3: cell-c-003; produces C; needs S,B,N
+C4: cell-c-004; produces C; needs P,H,J
+C5: cell-c-005; produces C; needs I,Z,T
+D1: cell-d-001; produces D; needs K,L,I
+D2: cell-d-002; produces D; needs X,I,M
+D3: cell-d-003; produces D; needs Z,V,F
+D4: cell-d-004; produces D; needs E,X,K
+D5: cell-d-005; produces D; needs Z,K,I
+D6: cell-d-006; produces D; needs P,J,M
+D7: cell-d-007; produces D; needs P,O,A
+E1: cell-e-001; produces E; needs O,U,T
+E2: cell-e-002; produces E; needs U,O,M
+E3: cell-e-003; produces E; needs K,D,M
+E4: cell-e-004; produces E; needs U,K,A
+E5: cell-e-005; produces E; needs S,L,B
+E6: cell-e-006; produces E; needs S,C,F
+E7: cell-e-007; produces E; needs H,J,W
+E8: cell-e-008; produces E; needs V,R,Y
+E9: cell-e-009; produces E; needs Z,N,X
+EA: cell-e-010; produces E; needs Y,T,X
+EB: cell-e-011; produces E; needs Y,C,Z
+F1: cell-f-001; produces F; needs Z,D,V
+F2: cell-f-002; produces F; needs Z,M,N
+F3: cell-f-003; produces F; needs V,W,U
+F4: cell-f-004; produces F; needs W,L,P
+F5: cell-f-005; produces F; needs P,S,Z
+F6: cell-f-006; produces F; needs I,W,O
+F7: cell-f-007; produces F; needs S,R,G
+G1: cell-g-001; produces G; needs A,P,Q
+G2: cell-g-002; produces G; needs P,V,X
+G3: cell-g-003; produces G; needs C,T,V
+G4: cell-g-004; produces G; needs W,E,L
+H1: cell-h-001; produces H; needs X,P,K
+H2: cell-h-002; produces H; needs K,X,Y
+H3: cell-h-003; produces H; needs I,L,X
+H4: cell-h-004; produces H; needs Y,Z,O
+H5: cell-h-005; produces H; needs T,X,E
+I1: cell-i-001; produces I; needs X,K,T
+I2: cell-i-002; produces I; needs D,A,X
+I3: cell-i-003; produces I; needs M,A,R
+I4: cell-i-004; produces I; needs T,J,K
+I5: cell-i-005; produces I; needs K,E,D
+I6: cell-i-006; produces I; needs J,S,M
+I7: cell-i-007; produces I; needs X,H,M
+I8: cell-i-008; produces I; needs O,F,Q
+J1: cell-j-001; produces J; needs E,P,H
+J2: cell-j-002; produces J; needs R,P,F
+K1: cell-k-001; produces K; needs I,D,E
+K2: cell-k-002; produces K; needs H,N,Z
+K3: cell-k-003; produces K; needs M,E,R
+K4: cell-k-004; produces K; needs F,T,W
+K5: cell-k-005; produces K; needs E,S,U
+K6: cell-k-006; produces K; needs X,T,R
+K7: cell-k-007; produces K; needs D,I,Z
+K8: cell-k-008; produces K; needs W,Z,J
+L1: cell-l-001; produces L; needs D,R,K
+L2: cell-l-002; produces L; needs S,T,V
+L3: cell-l-003; produces L; needs F,P,W
+L4: cell-l-004; produces L; needs B,Z,H
+L5: cell-l-005; produces L; needs N,W,E
+L6: cell-l-006; produces L; needs F,W,H
+M1: cell-m-001; produces M; needs U,T,E
+M2: cell-m-002; produces M; needs X,R,D
+M3: cell-m-003; produces M; needs R,K,F
+M4: cell-m-004; produces M; needs R,I,X
+M5: cell-m-005; produces M; needs S,T,I
+M6: cell-m-006; produces M; needs Y,X,P
+M7: cell-m-007; produces M; needs Z,P,H
+M8: cell-m-008; produces M; needs W,P,L
+M9: cell-m-009; produces M; needs O,T,D
+N1: cell-n-001; produces N; needs B,U,W
+N2: cell-n-002; produces N; needs A,X,V
+N3: cell-n-003; produces N; needs E,L,J
+O1: cell-o-001; produces O; needs V,W,T
+O2: cell-o-002; produces O; needs Q,I,F
+O3: cell-o-003; produces O; needs Z,I,P
+O4: cell-o-004; produces O; needs P,H,M
+O5: cell-o-005; produces O; needs D,M,P
+P1: cell-p-001; produces P; needs I,X,A
+P2: cell-p-002; produces P; needs Q,X,U
+P3: cell-p-003; produces P; needs G,A,U
+P4: cell-p-004; produces P; needs Z,F,J
+P5: cell-p-005; produces P; needs J,Z,E
+P6: cell-p-006; produces P; needs M,D,Z
+P7: cell-p-007; produces P; needs T,V,R
+P8: cell-p-008; produces P; needs J,C,R
+P9: cell-p-009; produces P; needs M,O,W
+PA: cell-p-010; produces P; needs G,D,O
+Q1: cell-q-001; produces Q; needs U,P,N
+Q2: cell-q-002; produces Q; needs A,C,G
+Q3: cell-q-003; produces Q; needs H,O,E
+R1: cell-r-001; produces R; needs L,M,D
+R2: cell-r-002; produces R; needs A,W,I
+R3: cell-r-003; produces R; needs S,X,K
+R4: cell-r-004; produces R; needs E,T,V
+R5: cell-r-005; produces R; needs F,J,P
+S1: cell-s-001; produces S; needs Q,L,W
+S2: cell-s-002; produces S; needs F,A,X
+S3: cell-s-003; produces S; needs I,M,T
+S4: cell-s-004; produces S; needs U,C,T
+S5: cell-s-005; produces S; needs B,E,C
+S6: cell-s-006; produces S; needs F,E,P
+T1: cell-t-001; produces T; needs M,E,U
+T2: cell-t-002; produces T; needs K,V,U
+T3: cell-t-003; produces T; needs L,W,S
+T4: cell-t-004; produces T; needs K,I,X
+T5: cell-t-005; produces T; needs M,C,S
+T6: cell-t-006; produces T; needs G,Q,C
+T7: cell-t-007; produces T; needs E,H,Y
+T8: cell-t-008; produces T; needs M,Y,O
+U1: cell-u-001; produces U; needs E,M,T
+U2: cell-u-002; produces U; needs N,Q,B
+U3: cell-u-003; produces U; needs A,E,S
+V1: cell-v-001; produces V; needs T,O,K
+V2: cell-v-002; produces V; needs U,F,G
+V3: cell-v-003; produces V; needs B,C,U
+V4: cell-v-004; produces V; needs Y,E,W
+V5: cell-v-005; produces V; needs P,A,K
+W1: cell-w-001; produces W; needs R,K,A
+W2: cell-w-002; produces W; needs O,V,S
+W3: cell-w-003; produces W; needs T,L,Q
+W4: cell-w-004; produces W; needs B,T,N
+W5: cell-w-005; produces W; needs F,V,L
+W6: cell-w-006; produces W; needs Z,K,L
+W7: cell-w-007; produces W; needs K,Q,B
+W8: cell-w-008; produces W; needs F,L,I
+W9: cell-w-009; produces W; needs J,Y,D
+WA: cell-w-010; produces W; needs L,G,N
+WB: cell-w-011; produces W; needs L,M,X
+X1: cell-x-001; produces X; needs M,D,I
+X2: cell-x-002; produces X; needs P,H,Q
+X3: cell-x-003; produces X; needs D,R,E
+X4: cell-x-004; produces X; needs P,F,Q
+X5: cell-x-005; produces X; needs R,K,T
+X6: cell-x-006; produces X; needs M,I,Y
+X7: cell-x-007; produces X; needs N,J,A
+X8: cell-x-008; produces X; needs H,Y,C
+Y1: cell-y-001; produces Y; needs I,M,L
+Y2: cell-y-002; produces Y; needs W,V,J
+Y3: cell-y-003; produces Y; needs X,E,I
+Y4: cell-y-004; produces Y; needs Z,E,G
+Z1: cell-z-001; produces Z; needs B,D,K
+Z2: cell-z-002; produces Z; needs D,F,B
+Z3: cell-z-003; produces Z; needs J,I,D
+Z4: cell-z-004; produces Z; needs D,X,K
+Z5: cell-z-005; produces Z; needs L,W,N
+Z6: cell-z-006; produces Z; needs J,P,E
+Z7: cell-z-007; produces Z; needs P,O,J
+Z8: cell-z-008; produces Z; needs H,M,Y
+Z9: cell-z-009; produces Z; needs C,Y,N
+ZA: cell-z-010; produces Z; needs Y,C,E

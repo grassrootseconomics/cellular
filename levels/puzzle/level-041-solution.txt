@@ -1,0 +1,50 @@
+R4 Y1 R5 RB Q1 X1 RC C1 N1 P1 A1
+Z1 O1 V1 RG RH R2 S1 R8 R9 R7 K1
+L1 U1 RA D1 J1 W1 RE RD E1 T1 B1
+R1 R6 I1 RI M1 RJ R3 F1 H1 G1 RF
+
+Legend:
+A1: cell-a; produces A; needs R31,K,P
+B1: cell-b; produces B; needs G,R39,T
+C1: cell-c; produces C; needs N,R36,P
+D1: cell-d; produces D; needs R34,J,W
+E1: cell-e; produces E; needs T,B,R37
+F1: cell-f; produces F; needs H,R43,R27
+G1: cell-g; produces G; needs R39,F,H
+H1: cell-h; produces H; needs G,R27,F
+I1: cell-i; produces I; needs R42,R30,R
+J1: cell-j; produces J; needs D,R38,W
+K1: cell-k; produces K; needs R33,A,R31
+L1: cell-l; produces L; needs Z,R28,R
+M1: cell-m; produces M; needs I,R43,R42
+N1: cell-n; produces N; needs P,A,C
+O1: cell-o; produces O; needs U,R34,V
+P1: cell-p; produces P; needs N,K,A
+Q1: cell-q; produces Q; needs X,R35,R36
+R1: cell-r; produces R; needs Z,L,R30
+R2: cell-r26; produces R26; needs R40,R41,S
+R3: cell-r27; produces R27; needs F,R43,M
+R4: cell-r28; produces R28; needs R29,Y,Z
+R5: cell-r29; produces R29; needs Y,R35,Q
+R6: cell-r30; produces R30; needs R,L,I
+R7: cell-r31; produces R31; needs R32,R33,K
+R8: cell-r32; produces R32; needs R33,R26,S
+R9: cell-r33; produces R33; needs R31,R32,S
+RA: cell-r34; produces R34; needs J,U,D
+RB: cell-r35; produces R35; needs Q,R29,X
+RC: cell-r36; produces R36; needs C,N,X
+RD: cell-r37; produces R37; needs T,R38,E
+RE: cell-r38; produces R38; needs R37,E,W
+RF: cell-r39; produces R39; needs G,B,H
+RG: cell-r40; produces R40; needs O,V,R41
+RH: cell-r41; produces R41; needs R26,R40,V
+RI: cell-r42; produces R42; needs I,R30,M
+RJ: cell-r43; produces R43; needs R42,M,R27
+S1: cell-s; produces S; needs R32,R26,R41
+T1: cell-t; produces T; needs R39,B,E
+U1: cell-u; produces U; needs D,O,R34
+V1: cell-v; produces V; needs U,O,R40
+W1: cell-w; produces W; needs J,R37,R38
+X1: cell-x; produces X; needs Q,C,R36
+Y1: cell-y; produces Y; needs R28,R35,R29
+Z1: cell-z; produces Z; needs L,R28,Y

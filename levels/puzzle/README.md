@@ -18,118 +18,30 @@ sim/generated/level-001/starting-fixture.json
 
 ## Shipped Levels
 
-Each shipped level has four files:
+Current shipped playable levels are the Godot-loaded start fixtures:
 
 - `level-NNN.json`: separated player start fixture loaded by Godot.
-- `level-NNN-solution.json`: verified backend solution fixture.
-- `level-NNN-solution.txt`: ASCII solution map for inspection.
-- `level-NNN-definition.json`: seed, cells, start layout, solution layout, and solver summary.
+- `level-NNN.txt`: ASCII map of the initial live fixture setup.
+- `level-NNN-solution.txt`: full-board ASCII map of a known live solution layout, when known.
 
-Current first-twenty solution maps:
+The latest generated setup artifacts are saved under:
 
 ```text
-001:
-AB
-CD
-
-002:
-BE.
-CDA
-
-003:
-FDA
-CBE
-
-004:
-ED.
-GF.
-ACB
-
-005:
-FHC
-BAD
-EG.
-
-006:
-DAF
-BIE
-GHC
-
-007:
-GEBA
-FDHJ
-CI..
-
-008:
-IBEA
-JCGH
-KFD.
-
-009:
-IKHL
-CEGA
-JBFD
-
-010:
-FGHLMA
-CIBJKD
-E.....
-
-011:
-KBCJ
-HEIL
-ANDF
-..MG
-
-012:
-HNIF
-AODE
-MJGC
-.LKB
-
-013:
-COMJPL
-AKHNBF
-GE..ID
-
-014:
-MEKLOBN
-QAFIJHP
-D....CG
-
-015:
-QOEBLCN
-DPGHIMA
-KR...FJ
-
-016:
-RPQEOBA
-NJKCFDG
-HISML..
-
-017:
-SKTCAE
-GILOFQ
-DNBPMJ
-....RH
-
-018:
-DGKBM
-FJAIR
-CQTSL
-PHOUN
-E....
-
-019:
-BGJDK
-VSOCU
-RINTQ
-LHPFE
-AM...
-
-020:
-WKCJOFA
-HPQBDIV
-ETGNRMU
-.....LS
+sim/generated/playable-1-200/level-NNN/
 ```
+
+Setup and solution maps use two-character tokens so duplicate producers are
+unambiguous:
+
+- `A1`, `A2`, ... for normal resource-producing cells.
+- `01`, `02`, ... for white-myco cells.
+- `*1`, `*2`, ... for red-myco cells.
+- `##` for rocks/blocked spaces.
+- `..` for fully empty spaces.
+
+When a marker has more than nine cells, the suffix continues with single
+characters such as `A`, `B`, and so on, keeping each token exactly two
+characters.
+
+Each `.txt` map includes a legend with the concrete cell id, produced resource
+or myco type, and needs for every numbered cell token.

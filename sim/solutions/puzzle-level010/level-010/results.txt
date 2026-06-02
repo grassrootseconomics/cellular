@@ -1,0 +1,42 @@
+Puzzle solution search
+  level: 10
+  status: pass
+  fixture: levels/puzzle/level-010.json
+  candidates evaluated: 1/10000
+  first win tick: 11
+  best 10-tick flow: 14.30
+  best 10-tick swaps: 143
+  total swaps: 156
+  total reactions: 86
+  sustained ticks: 3
+  active cells: 15
+  glowing cells: 15
+  final score: 893
+  best connected cells: 15
+  open tiles: 37
+  largest open-tile component: 37
+  useful graph edges: 57
+  reciprocal graph edges: 13
+  non-glowing histogram: none
+  diagnostics: alive=True;won=True;sustained=3;nonGlowing=none;missingResources=none;strong=[cell-a-001,cell-b-001,cell-b-002,cell-c-001,cell-d-001,cell-e-001,cell-e-002,cell-f-001,cell-g-001,cell-h-001,cell-i-001,cell-j-001,cell-k-001,red-myco-001,red-myco-002];weak=[cell-a-001,cell-b-001,cell-b-002,cell-c-001,cell-d-001,cell-e-001,cell-e-002,cell-f-001,cell-g-001,cell-h-001,cell-i-001,cell-j-001,cell-k-001,red-myco-001,red-myco-002]
+required cell details:
+  cell-a-001: glowing=yes lastReaction=11 adjacent=cell-f-001|cell-j-001 needs=J=11/100|F=27/100|B=1/100 stress=6(unmet=6,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=A|B|F|J recentOut=A|J
+  cell-b-001: glowing=yes lastReaction=11 adjacent=cell-d-001|cell-e-002|cell-g-001 needs=G=3/100|D=7/100|E=5/100 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=B|D|E|G recentOut=B|D|E|G
+  cell-b-002: glowing=yes lastReaction=8 adjacent=cell-e-002|cell-f-001|cell-g-001|cell-j-001 needs=C=0/100|J=32/100|G=16/100 stress=9(unmet=9,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=C|G|J recentOut=B|J
+  cell-c-001: glowing=yes lastReaction=11 adjacent=cell-e-002|cell-j-001 needs=F=2/100|B=3/100|E=0/100 stress=15(unmet=11,sourceBlocked=2,overCapacity=2,failedSwap=0) recentIn=B|E|F recentOut=B|C
+  cell-d-001: glowing=yes lastReaction=11 adjacent=cell-b-001 needs=B=4/100|E=2/100|G=0/100 stress=8(unmet=6,sourceBlocked=1,overCapacity=1,failedSwap=0) recentIn=B|E|G recentOut=B|D
+  cell-e-001: glowing=yes lastReaction=11 adjacent=cell-f-001|cell-g-001|cell-i-001|red-myco-001 needs=I=6/100|G=12/100|H=0/100 stress=1(unmet=1,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=E|G|H|I recentOut=E|H|I
+  cell-e-002: glowing=yes lastReaction=11 adjacent=cell-b-001|cell-b-002|cell-c-001|red-myco-002 needs=D=2/100|F=12/100|B=25/100 stress=4(unmet=4,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=B|D|F recentOut=B|E|F
+  cell-f-001: glowing=yes lastReaction=11 adjacent=cell-a-001|cell-b-002|cell-e-001|cell-k-001 needs=A=3/100|K=23/100|J=5/100 stress=2(unmet=2,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=A|F|J|K recentOut=A|F|J
+  cell-g-001: glowing=yes lastReaction=11 adjacent=cell-b-001|cell-b-002|cell-e-001 needs=E=18/100|B=30/100|I=4/100 stress=8(unmet=8,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=B|E|G|I recentOut=E|G
+  cell-h-001: glowing=yes lastReaction=11 adjacent=cell-i-001 needs=I=7/100|F=0/100|K=1/100 stress=13(unmet=11,sourceBlocked=1,overCapacity=1,failedSwap=0) recentIn=F|I|K recentOut=H|I
+  cell-i-001: glowing=yes lastReaction=11 adjacent=cell-e-001|cell-h-001|cell-k-001 needs=K=6/100|H=1/100|F=3/100 stress=2(unmet=2,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=F|H|I|K recentOut=F|H|I|K
+  cell-j-001: glowing=yes lastReaction=11 adjacent=cell-a-001|cell-b-002|cell-c-001 needs=B=3/100|A=26/100|C=5/100 stress=1(unmet=1,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=A|B|C|J recentOut=B|C|J
+  cell-k-001: glowing=yes lastReaction=11 adjacent=cell-f-001|cell-i-001 needs=F=5/100|I=31/100|A=1/100 stress=6(unmet=6,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=A|F|I|K recentOut=F|K
+  red-myco-001: glowing=yes lastReaction=none adjacent=cell-e-001 needs=E=294/500|J=250/500|I=206/500|F=250/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=E recentOut=I
+  red-myco-002: glowing=yes lastReaction=none adjacent=cell-e-002 needs=F=214/500|E=286/500|G=250/500|J=250/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=E recentOut=F
+resource graph:
+  provider counts: A=1, B=2, C=1, D=1, E=2, F=1, G=1, H=1, I=1, J=1, K=1
+  duplicate producers: B:[cell-b-001|cell-b-002], E:[cell-e-001|cell-e-002]
+  reciprocal pairs: cell-a-001<->cell-f-001, cell-a-001<->cell-j-001, cell-b-001<->cell-d-001, cell-b-001<->cell-e-002, cell-b-002<->cell-j-001, cell-c-001<->cell-b-002, cell-d-001<->cell-e-002, cell-e-001<->cell-g-001, cell-f-001<->cell-k-001, cell-g-001<->cell-b-001, cell-g-001<->cell-b-002, cell-i-001<->cell-h-001, cell-k-001<->cell-i-001
+  bottleneck cells: cell-b-002(produces=B,needs=C|J|G,score=3700), cell-e-001(produces=E,needs=I|G|H,score=3700), red-myco-001(produces=none,needs=E|J|I|F,score=3300), red-myco-002(produces=none,needs=F|E|G|J,score=3300), cell-f-001(produces=F,needs=A|K|J,score=3000), cell-b-001(produces=B,needs=G|D|E,score=3000), cell-e-002(produces=E,needs=D|F|B,score=3000), cell-i-001(produces=I,needs=K|H|F,score=3000)

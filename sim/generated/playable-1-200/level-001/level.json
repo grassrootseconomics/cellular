@@ -1,0 +1,134 @@
+{
+  "levelNumber": 1,
+  "mode": "Puzzle",
+  "difficulty": "Level 1: 4 cells, duplicate producers, red myco, rocks",
+  "generationSeed": 1001,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "cells": [
+    {
+      "id": "cell-d-001",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "C",
+        "A",
+        "B"
+      ]
+    },
+    {
+      "id": "cell-a-001",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "D",
+        "B",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-b-001",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "A",
+        "C",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-c-001",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "B",
+        "D",
+        "A"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 5,
+    "height": 4,
+    "cells": [
+      {
+        "cellId": "cell-b-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 2,
+        "y": 2
+      }
+    ],
+    "rocks": [
+      {
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "ascii": "....A\n.B...\n.#C..\n...D."
+  },
+  "solutionLayout": {
+    "width": 2,
+    "height": 2,
+    "cells": [
+      {
+        "cellId": "cell-d-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 0,
+        "y": 1
+      }
+    ],
+    "rocks": [],
+    "ascii": "DA\nCB"
+  },
+  "solverSummary": {
+    "won": false,
+    "acceptedNearWin": false,
+    "needAttempt": 0,
+    "candidateIndex": -1,
+    "candidateCount": 0,
+    "ticksPerCandidate": 0,
+    "glowingCells": 0,
+    "totalSwaps": 0,
+    "totalReactions": 0,
+    "activeCellsInLastWindow": 0,
+    "strainPenalty": 0,
+    "finalScore": 0,
+    "adjacentPairs": 4,
+    "winDurationTicks": 3,
+    "requiredAliveTicksAtEnd": 0,
+    "finalSustainedTicks": 0,
+    "stableAtEnd": false
+  }
+}

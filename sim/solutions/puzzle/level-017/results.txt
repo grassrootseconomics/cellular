@@ -1,0 +1,104 @@
+Puzzle solution search
+  level: 17
+  status: fail
+  uses needs repair: no
+  fixture: levels/puzzle/level-017.json
+  candidates evaluated: 104/10000
+  first win tick: -1
+  best 10-tick flow: 25.50
+  best 10-tick swaps: 255
+  total swaps: 20075
+  total reactions: 6890
+  sustained ticks: 0
+  active cells: 24
+  glowing cells: 11
+  final score: 27677
+  best connected cells: 24
+  open tiles: 56
+  largest open-tile component: 56
+  useful graph edges: 86
+  reciprocal graph edges: 19
+  non-glowing histogram: cell-i-001=104, cell-k-001=104, cell-k-002=104, cell-l-001=104, cell-n-001=104, cell-o-001=104, cell-p-001=104, red-myco-004=104, cell-q-001=101, cell-b-001=100, cell-m-001=100, cell-c-001=98, cell-a-002=92, red-myco-003=82, red-myco-001=77, cell-a-001=44, cell-e-001=8, cell-g-001=5, cell-h-001=4, cell-j-001=4, cell-d-001=3, red-myco-002=3, cell-d-002=1, cell-f-001=1
+  failure category: insufficient source/engine settings
+  diagnostics: alive=False;won=False;sustained=0;nonGlowing=cell-a-002,cell-b-001,cell-c-001,cell-i-001,cell-k-001,cell-k-002,cell-l-001,cell-m-001,cell-n-001,cell-o-001,cell-p-001,cell-q-001,red-myco-004;missingResources=B;strong=[cell-a-001,cell-a-002,cell-c-001,cell-d-001,cell-d-002,cell-e-001,cell-h-001,cell-i-001,cell-l-001,cell-n-001,cell-p-001,cell-q-001]|[cell-f-001,cell-g-001,cell-j-001,cell-k-001,cell-k-002,cell-m-001,cell-o-001,red-myco-001,red-myco-002,red-myco-003]|[cell-b-001]|[red-myco-004];weak=[cell-a-001,cell-a-002,cell-c-001,cell-d-001,cell-d-002,cell-e-001,cell-h-001,cell-i-001,cell-l-001,cell-n-001,cell-p-001,cell-q-001]|[cell-f-001,cell-g-001,cell-j-001,cell-k-001,cell-k-002,cell-m-001,cell-o-001,red-myco-001,red-myco-002,red-myco-003]|[cell-b-001]|[red-myco-004]
+required cell details:
+  cell-a-001: glowing=yes lastReaction=900 adjacent=cell-d-002|cell-i-001|cell-p-001 needs=D=14/100|P=8/100|I=15/100 stress=1768(unmet=0,sourceBlocked=884,overCapacity=884,failedSwap=0) recentIn=A|D|I|P recentOut=A|D|P
+  cell-a-002: glowing=no lastReaction=none adjacent=cell-d-002|cell-f-001|cell-h-001|cell-i-001 needs=I=17/100|H=100/100|F=0/100 stress=2676(unmet=900,sourceBlocked=888,overCapacity=888,failedSwap=0) recentIn=H|I recentOut=A|I
+  cell-b-001: glowing=no lastReaction=none adjacent=cell-c-001|cell-d-001 needs=C=16/100|K=0/100|D=16/100 stress=2682(unmet=902,sourceBlocked=890,overCapacity=890,failedSwap=0) recentIn=none recentOut=none
+  cell-c-001: glowing=no lastReaction=none adjacent=cell-b-001|cell-d-002|cell-h-001|cell-l-001 needs=D=100/100|B=32/100|M=0/100 stress=2678(unmet=900,sourceBlocked=889,overCapacity=889,failedSwap=0) recentIn=D recentOut=C
+  cell-d-001: glowing=yes lastReaction=900 adjacent=cell-b-001|cell-d-002|cell-p-001|cell-q-001 needs=Q=2/100|A=7/100|N=6/100 stress=1557(unmet=3,sourceBlocked=777,overCapacity=777,failedSwap=0) recentIn=A|D|N|Q recentOut=A|D|N
+  cell-d-002: glowing=yes lastReaction=900 adjacent=cell-a-001|cell-a-002|cell-c-001|cell-d-001 needs=A=6/100|C=15/100|P=5/100 stress=1771(unmet=1,sourceBlocked=885,overCapacity=885,failedSwap=0) recentIn=A|C|D|P recentOut=A|D|P
+  cell-e-001: glowing=yes lastReaction=899 adjacent=cell-h-001|cell-l-001 needs=H=16/100|L=7/100|A=0/100 stress=2079(unmet=301,sourceBlocked=889,overCapacity=889,failedSwap=0) recentIn=A|H|L recentOut=E|H|L
+  cell-f-001: glowing=yes lastReaction=900 adjacent=cell-a-002|cell-g-001|cell-j-001|cell-k-001 needs=J=4/100|G=7/100|K=7/100 stress=1773(unmet=1,sourceBlocked=886,overCapacity=886,failedSwap=0) recentIn=F|G|J|K recentOut=F|G|J|K
+  cell-g-001: glowing=yes lastReaction=900 adjacent=cell-f-001|cell-i-001|cell-m-001|red-myco-001 needs=F=9/100|M=7/100|J=2/100 stress=1756(unmet=2,sourceBlocked=877,overCapacity=877,failedSwap=0) recentIn=F|G|J|M recentOut=F|G|M
+  cell-h-001: glowing=yes lastReaction=900 adjacent=cell-a-002|cell-c-001|cell-e-001|cell-k-001 needs=A=2/100|E=99/100|I=3/100 stress=1772(unmet=2,sourceBlocked=885,overCapacity=885,failedSwap=0) recentIn=A|E|H|I recentOut=A|H|I
+  cell-i-001: glowing=no lastReaction=none adjacent=cell-a-001|cell-a-002|cell-g-001 needs=K=0/100|A=100/100|O=0/100 stress=3574(unmet=1800,sourceBlocked=887,overCapacity=887,failedSwap=0) recentIn=A recentOut=I
+  cell-j-001: glowing=yes lastReaction=900 adjacent=cell-f-001|cell-k-002|cell-m-001|cell-o-001 needs=K=17/100|F=90/100|M=15/100 stress=1767(unmet=1,sourceBlocked=883,overCapacity=883,failedSwap=0) recentIn=F|J|K|M recentOut=F|J|K
+  cell-k-001: glowing=no lastReaction=none adjacent=cell-f-001|cell-h-001|cell-o-001 needs=G=100/100|O=100/100|C=0/100 stress=2677(unmet=901,sourceBlocked=888,overCapacity=888,failedSwap=0) recentIn=G|K|O recentOut=G|K
+  cell-k-002: glowing=no lastReaction=none adjacent=cell-j-001|red-myco-002|red-myco-004 needs=G=5/100|J=94/100|L=0/100 stress=2638(unmet=900,sourceBlocked=869,overCapacity=869,failedSwap=0) recentIn=J|K recentOut=J|K
+  cell-l-001: glowing=no lastReaction=none adjacent=cell-c-001|cell-e-001 needs=E=100/100|M=0/100|H=96/100 stress=2684(unmet=902,sourceBlocked=891,overCapacity=891,failedSwap=0) recentIn=E|H|L recentOut=H|L
+  cell-m-001: glowing=no lastReaction=none adjacent=cell-g-001|cell-j-001|red-myco-003|red-myco-004 needs=G=97/100|F=100/100|N=0/100 stress=2677(unmet=901,sourceBlocked=888,overCapacity=888,failedSwap=0) recentIn=F|G|M recentOut=F|G|M
+  cell-n-001: glowing=no lastReaction=none adjacent=cell-q-001 needs=P=0/100|Q=100/100|M=0/100 stress=3580(unmet=1800,sourceBlocked=890,overCapacity=890,failedSwap=0) recentIn=Q recentOut=N
+  cell-o-001: glowing=no lastReaction=none adjacent=cell-j-001|cell-k-001|red-myco-002 needs=K=18/100|J=12/100|B=0/100 stress=2679(unmet=901,sourceBlocked=889,overCapacity=889,failedSwap=0) recentIn=J|K recentOut=J|K|O
+  cell-p-001: glowing=no lastReaction=none adjacent=cell-a-001|cell-d-001 needs=A=12/100|G=0/100|D=96/100 stress=2681(unmet=901,sourceBlocked=890,overCapacity=890,failedSwap=0) recentIn=A|D|P recentOut=A|D|P
+  cell-q-001: glowing=no lastReaction=none adjacent=cell-d-001|cell-n-001 needs=N=16/100|D=100/100|E=0/100 stress=2678(unmet=900,sourceBlocked=889,overCapacity=889,failedSwap=0) recentIn=D|N recentOut=N|Q
+  red-myco-001: glowing=yes lastReaction=none adjacent=cell-g-001|red-myco-003 needs=I=250/500|A=250/500|G=2/500|M=0/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=G|M recentOut=G|M
+  red-myco-002: glowing=yes lastReaction=none adjacent=cell-k-002|cell-o-001 needs=F=250/500|K=248/500|J=252/500|A=250/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=J|K recentOut=J|K
+  red-myco-003: glowing=yes lastReaction=none adjacent=cell-m-001|red-myco-001 needs=M=0/500|G=2/500|C=250/500|J=250/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=G|M recentOut=G|M
+  red-myco-004: glowing=no lastReaction=none adjacent=cell-k-002|cell-m-001 needs=P=250/500|G=0/500|E=250/500|K=500/500 stress=0(unmet=0,sourceBlocked=0,overCapacity=0,failedSwap=0) recentIn=none recentOut=none
+resource graph:
+  provider counts: A=2, B=1, C=1, D=2, E=1, F=1, G=1, H=1, I=1, J=1, K=2, L=1, M=1, N=1, O=1, P=1, Q=1
+  duplicate producers: A:[cell-a-001|cell-a-002], D:[cell-d-001|cell-d-002], K:[cell-k-001|cell-k-002]
+  reciprocal pairs: cell-a-001<->cell-d-002, cell-a-001<->cell-p-001, cell-a-002<->cell-h-001, cell-b-001<->cell-k-001, cell-c-001<->cell-b-001, cell-d-001<->cell-a-001, cell-d-002<->cell-c-001, cell-e-001<->cell-l-001, cell-f-001<->cell-g-001, cell-g-001<->cell-m-001, cell-h-001<->cell-e-001, cell-i-001<->cell-a-002, cell-j-001<->cell-f-001, cell-k-001<->cell-o-001, cell-k-002<->cell-j-001, cell-n-001<->cell-m-001, cell-n-001<->cell-q-001, cell-p-001<->cell-d-002, cell-q-001<->cell-d-001
+  bottleneck cells: red-myco-003(produces=none,needs=M|G|C|J,score=4000), cell-a-002(produces=A,needs=I|H|F,score=3700), cell-k-001(produces=K,needs=B|O|C,score=3700), cell-k-002(produces=K,needs=G|J|L,score=3700), red-myco-001(produces=none,needs=I|A|G|M,score=3300), red-myco-004(produces=none,needs=P|G|E|K,score=3300), cell-a-001(produces=A,needs=D|P|Q,score=3000), cell-g-001(produces=G,needs=F|M|J,score=3000)
+shape-first needs suggestion:
+  near-miss rule: for high-flow misses, inspect stressed empty needs on non-glowing cells, then change that need to a resource produced, offered, or carried by an adjacent cell; keep distinct non-self needs.
+  base candidate: 13; flow=23.70; swaps=17595; glowing=8; active=24
+  need edit focus: cell-a-001|cell-a-002|cell-b-001|cell-c-001|cell-i-001|cell-k-001|cell-k-002|cell-l-001|cell-m-001|cell-n-001|cell-o-001|cell-p-001|cell-q-001|red-myco-001|red-myco-003|red-myco-004
+  empty stressed needs: cell-a-001:Q;cell-a-002:F;cell-b-001:K;cell-c-001:M;cell-e-001:A;cell-i-001:K|O;cell-k-001:B|C;cell-k-002:L;cell-l-001:M;cell-m-001:N;cell-n-001:M|P;cell-o-001:B;cell-p-001:G;cell-q-001:E;red-myco-001:M;red-myco-003:G;red-myco-004:G
+  stress-guided actions:
+    cell-a-001: empty Q; adjacent I from cell-i-001 produced; edit Q->I and keep 3 needs
+    cell-a-002: empty F; adjacent D from cell-d-002 produced; edit F->D and keep 3 needs
+    cell-b-001: empty K; adjacent A from cell-d-001 nonzero carried need; edit K->A and keep 3 needs
+    cell-c-001: empty M; adjacent H from cell-h-001 produced|cell-l-001 nonzero carried need; edit M->H and keep 3 needs
+    cell-i-001: empty K; adjacent G from cell-g-001 produced; edit K->G and keep 3 needs
+    cell-i-001: empty O; adjacent H from cell-a-002 nonzero carried need; edit O->H and keep 3 needs
+    cell-k-001: empty B; adjacent F from cell-f-001 produced; edit B->F and keep 3 needs
+    cell-k-001: empty C; adjacent H from cell-h-001 produced; edit C->H and keep 3 needs
+    cell-k-002: empty L; adjacent A from red-myco-002 offered; edit L->A and keep 3 needs
+    cell-l-001: empty M; adjacent C from cell-c-001 produced; edit M->C and keep 3 needs
+    cell-m-001: empty N; adjacent J from cell-g-001 nonzero carried need|cell-j-001 produced|red-myco-003 offered; edit N->J and keep 3 needs
+    cell-n-001: empty P; adjacent D from cell-q-001 nonzero carried need; edit P->D and keep 3 needs
+    cell-n-001: empty M; no adjacent provider; move cell-m-001 adjacent or replace with an adjacent resource
+    cell-o-001: empty B; adjacent A from red-myco-002 offered; edit B->A and keep 3 needs
+    cell-p-001: empty G; adjacent N from cell-d-001 nonzero carried need; edit G->N and keep 3 needs
+    cell-q-001: empty E; adjacent A from cell-d-001 nonzero carried need; edit E->A and keep 3 needs
+    red-myco-001: empty M; adjacent C from red-myco-003 offered; edit M->C and keep 4 needs
+    red-myco-003: empty G; adjacent A from red-myco-001 offered; edit G->A and keep 4 needs
+    red-myco-004: empty G; adjacent M from cell-m-001 produced; edit G->M and keep 4 needs
+  base shape:
+    ..N.....
+    #.Q#...#
+    .BDP....
+    LCDA#...
+    EHAI#...
+    #KFG*.#.
+    .OJM*...
+    .*K*..#.
+  proposed need edits:
+    cell-a-001: D|P|Q -> D|P|I (Q->I)
+    cell-a-002: I|H|F -> I|H|D (F->D)
+    cell-b-001: C|K|D -> C|A|D (K->A)
+    cell-c-001: D|B|M -> D|B|H (M->H)
+    cell-i-001: K|A|O -> G|A|H (K->G, O->H)
+    cell-k-001: B|O|C -> F|O|H (B->F, C->H)
+    cell-k-002: G|J|L -> G|J|A (L->A)
+    cell-l-001: E|M|H -> E|C|H (M->C)
+    cell-m-001: G|F|N -> G|F|J (N->J)
+    cell-n-001: P|Q|M -> D|Q|M (P->D)
+    cell-o-001: K|J|B -> K|J|A (B->A)
+    cell-p-001: A|G|D -> A|N|D (G->N)
+    cell-q-001: N|D|E -> N|D|A (E->A)
+    red-myco-001: I|A|G|M -> I|A|G|C (M->C)
+    red-myco-003: M|G|C|J -> M|A|C|J (G->A)
+    red-myco-004: P|G|E|K -> P|M|E|K (G->M)

@@ -38,6 +38,8 @@ public sealed record SwapEvent(
     int InitiatorPaidQuantity,
     ResourceId CounterpartyPaidResource,
     int CounterpartyPaidQuantity,
+    int InitiatorReceivedQuantity,
+    int CounterpartyReceivedQuantity,
     int InitiatorReceivedBalanceAfterSwap,
     int InitiatorReceivedCapacity,
     int CounterpartyReceivedBalanceAfterSwap,

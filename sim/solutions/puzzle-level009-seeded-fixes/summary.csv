@@ -1,0 +1,2 @@
+level,status,candidates_evaluated,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,failure_category,output
+9,fail,200,-1,16.00,12439,5889,0,insufficient source/engine settings,sim/solutions/puzzle-level009-seeded-fixes/level-009

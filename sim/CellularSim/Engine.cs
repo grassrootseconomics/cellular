@@ -5,7 +5,7 @@ public sealed class EngineOptions
     public int GlowTtlTicks { get; set; } = 5;
     public int EventCapacity { get; set; } = 4096;
     public int EdgeThroughputPerDirection { get; set; } = 1;
-    public int MaxSwapQuantityPerEdge { get; set; } = 4;
+    public int MaxSwapQuantityPerEdge { get; set; } = 8;
     public int SwapRoundsPerTick { get; set; } = 1;
     public int NeedDesiredQuantity { get; set; } = 100;
     public int NeedOfferReserve { get; set; } = 1;
@@ -49,10 +49,15 @@ public sealed class CircuitState
 
 public sealed class CellularEngine
 {
+    private const int StandardMinimumGrossSwapQuantity = 1;
+    private const int RedMycoOutwardFeeQuantity = 1;
+    private const int RedMycoMinimumGrossSwapQuantity = RedMycoOutwardFeeQuantity + 1;
+
     private readonly EventBuffer _events;
     private readonly List<SwapProposal> _swapProposals = new(1024);
     private readonly List<PrioritizedSwapProposal> _candidateSwapProposals = new(1024);
     private readonly List<int> _reactedCells = new(1024);
+    private readonly List<int> _glowRefreshedCells = new(128);
     private readonly HashSet<string> _reachSeen = new(StringComparer.Ordinal);
     private readonly Stack<string> _reachStack = new();
     private readonly Dictionary<string, List<string>> _winGraph = new(StringComparer.Ordinal);
@@ -124,6 +129,7 @@ public sealed class CellularEngine
     public void Tick()
     {
         CurrentTick++;
+        _glowRefreshedCells.Clear();
 
         RunSourceProduction();
         ResolveSwapRounds();
@@ -235,8 +241,8 @@ public sealed class CellularEngine
     {
         var initiator = World.Cells[initiatorIndex];
         var counterparty = World.Cells[counterpartyIndex];
+
         var initiatorSlots = initiator.Pool.Slots;
-        var counterpartyPool = counterparty.Pool;
 
         for (var requestedIndex = 0; requestedIndex < initiatorSlots.Count; requestedIndex++)
         {
@@ -247,8 +253,8 @@ public sealed class CellularEngine
             }
 
             AddSwapCandidatesForRequestedResource(
-                    initiator.Pool,
-                    counterpartyPool,
+                    initiator,
+                    counterparty,
                     initiatorIndex,
                     counterpartyIndex,
                     requestedSlot,
@@ -260,65 +266,59 @@ public sealed class CellularEngine
     {
         var initiator = World.Cells[proposal.InitiatorIndex];
         var counterparty = World.Cells[proposal.CounterpartyIndex];
-        var initiatorPaidSlot = initiator.Pool.GetSlot(proposal.InitiatorPaidResource);
-        if (initiatorPaidSlot is null)
-        {
-            return false;
-        }
 
         if (GetOfferableSwapQuantity(
-                initiator.Pool,
+                initiator,
                 proposal.InitiatorPaidResource,
-                GetReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource),
-                Options.NeedOfferReserve) < proposal.Quantity)
+                GetReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource)) < proposal.InitiatorPaidQuantity)
         {
             return false;
         }
 
         if (GetOfferableSwapQuantity(
-            counterparty.Pool,
+            counterparty,
             proposal.CounterpartyPaidResource,
-            GetReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource),
-            Options.NeedOfferReserve) < proposal.Quantity)
+            GetReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource)) < proposal.CounterpartyPaidQuantity)
         {
             return false;
         }
 
         if (GetRequestedResourceReceivableSwapQuantity(
-                initiator.Pool,
+                initiator,
                 proposal.CounterpartyPaidResource,
-                GetReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource)) < proposal.Quantity)
+                GetReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource)) < proposal.InitiatorReceivedQuantity)
         {
             return false;
         }
 
         return GetReceivableSwapQuantity(
-            counterparty.Pool,
+            counterparty,
             proposal.InitiatorPaidResource,
-            GetReservedIn(proposal.CounterpartyIndex, proposal.InitiatorPaidResource)) >= proposal.Quantity;
+            GetReservedIn(proposal.CounterpartyIndex, proposal.InitiatorPaidResource)) >= proposal.CounterpartyReceivedQuantity;
     }
 
     private void AddSwapCandidatesForRequestedResource(
-        SwapPoolState initiatorPool,
-        SwapPoolState counterpartyPool,
+        CellState initiator,
+        CellState counterparty,
         int initiatorIndex,
         int counterpartyIndex,
         PoolSlot requestedSlot,
         int edgeOrder)
     {
+        var initiatorPool = initiator.Pool;
+        var counterpartyPool = counterparty.Pool;
         var requestedResource = requestedSlot.Resource;
         var counterpartyRequestedOfferable = GetOfferableSwapQuantity(
-            counterpartyPool,
+            counterparty,
             requestedResource,
-            GetReservedOut(counterpartyIndex, requestedResource),
-            Options.NeedOfferReserve);
+            GetReservedOut(counterpartyIndex, requestedResource));
         if (counterpartyRequestedOfferable <= 0)
         {
             return;
         }
 
         var initiatorRequestedReceivable = GetRequestedResourceReceivableSwapQuantity(
-            initiatorPool,
+            initiator,
             requestedResource,
             GetReservedIn(initiatorIndex, requestedResource));
         if (initiatorRequestedReceivable <= 0)
@@ -337,10 +337,9 @@ public sealed class CellularEngine
 
             var candidate = slot.Resource;
             var initiatorCandidateOfferable = GetOfferableSwapQuantity(
-                initiatorPool,
+                initiator,
                 candidate,
-                GetReservedOut(initiatorIndex, candidate),
-                Options.NeedOfferReserve);
+                GetReservedOut(initiatorIndex, candidate));
             if (initiatorCandidateOfferable <= 0)
             {
                 continue;
@@ -354,7 +353,7 @@ public sealed class CellularEngine
 
             var counterpartyReservedIn = GetReservedIn(counterpartyIndex, candidate);
             var counterpartyCandidateReceivable = GetReceivableSwapQuantity(
-                counterpartyPool,
+                counterparty,
                 candidate,
                 counterpartyReservedIn);
             if (counterpartyCandidateReceivable <= 0)
@@ -362,12 +361,18 @@ public sealed class CellularEngine
                 continue;
             }
 
-            var quantity = Math.Min(
-                Options.MaxSwapQuantityPerEdge,
-                Math.Min(
-                    Math.Min(initiatorCandidateOfferable, counterpartyRequestedOfferable),
-                    Math.Min(initiatorRequestedReceivable, counterpartyCandidateReceivable)));
-            if (quantity <= 0)
+            var proposal = CreateSwapProposal(
+                initiator,
+                counterparty,
+                initiatorIndex,
+                counterpartyIndex,
+                candidate,
+                requestedResource,
+                initiatorCandidateOfferable,
+                counterpartyRequestedOfferable,
+                initiatorRequestedReceivable,
+                counterpartyCandidateReceivable);
+            if (proposal is null)
             {
                 continue;
             }
@@ -376,23 +381,116 @@ public sealed class CellularEngine
                 slot,
                 counterpartyReceiveSlot,
                 counterpartyReservedIn);
-            var proposal = new SwapProposal(initiatorIndex, counterpartyIndex, candidate, requestedResource, quantity);
             var priority = new SwapPriority(
                 requestedSlot.Quantity + GetReservedIn(initiatorIndex, requestedResource),
                 candidatePriority);
-            _candidateSwapProposals.Add(new PrioritizedSwapProposal(proposal, priority, edgeOrder));
+            _candidateSwapProposals.Add(new PrioritizedSwapProposal(proposal.Value, priority, edgeOrder));
         }
     }
 
+    private SwapProposal? CreateSwapProposal(
+        CellState initiator,
+        CellState counterparty,
+        int initiatorIndex,
+        int counterpartyIndex,
+        ResourceId initiatorPaidResource,
+        ResourceId counterpartyPaidResource,
+        int initiatorPaidOfferable,
+        int counterpartyPaidOfferable,
+        int initiatorReceivable,
+        int counterpartyReceivable)
+    {
+        var quantities = GetSwapQuantities(
+            initiator,
+            counterparty,
+            Options.MaxSwapQuantityPerEdge,
+            initiatorPaidOfferable,
+            counterpartyPaidOfferable,
+            initiatorReceivable,
+            counterpartyReceivable);
+        if (quantities is null)
+        {
+            return null;
+        }
+
+        return new SwapProposal(
+            initiatorIndex,
+            counterpartyIndex,
+            initiatorPaidResource,
+            counterpartyPaidResource,
+            quantities.Value.InitiatorPaidQuantity,
+            quantities.Value.CounterpartyPaidQuantity,
+            quantities.Value.InitiatorReceivedQuantity,
+            quantities.Value.CounterpartyReceivedQuantity);
+    }
+
+    private static SwapQuantities? GetSwapQuantities(
+        CellState initiator,
+        CellState counterparty,
+        int maxSwapQuantityPerEdge,
+        int initiatorPaidOfferable,
+        int counterpartyPaidOfferable,
+        int initiatorReceivable,
+        int counterpartyReceivable)
+    {
+        var initiatorOutwardFee = GetRedMycoOutwardFee(initiator);
+        var counterpartyOutwardFee = GetRedMycoOutwardFee(counterparty);
+        // Red myco has a one-unit outward fee in the gross exchange envelope.
+        // Gross-one red candidates stop here and never reserve an edge.
+        var minimumGrossQuantity = GetMinimumGrossSwapQuantity(initiatorOutwardFee, counterpartyOutwardFee);
+        var grossQuantity = Math.Min(
+            maxSwapQuantityPerEdge,
+            Math.Min(
+                Math.Min(
+                    initiatorPaidOfferable,
+                    counterpartyPaidOfferable),
+                Math.Min(
+                    IncreaseLimit(initiatorReceivable, counterpartyOutwardFee),
+                    IncreaseLimit(counterpartyReceivable, initiatorOutwardFee))));
+        if (grossQuantity < minimumGrossQuantity)
+        {
+            return null;
+        }
+
+        return new SwapQuantities(
+            grossQuantity,
+            grossQuantity,
+            grossQuantity - counterpartyOutwardFee,
+            grossQuantity - initiatorOutwardFee);
+    }
+
+    private static int IncreaseLimit(int value, int increase)
+    {
+        if (increase <= 0 || value == int.MaxValue)
+        {
+            return value;
+        }
+
+        return value > int.MaxValue - increase ? int.MaxValue : value + increase;
+    }
+
+    private static int GetRedMycoOutwardFee(CellState cell) => cell.IsRedMyco ? RedMycoOutwardFeeQuantity : 0;
+
+    private static int GetMinimumGrossSwapQuantity(int initiatorOutwardFee, int counterpartyOutwardFee) =>
+        initiatorOutwardFee > 0 || counterpartyOutwardFee > 0
+            ? RedMycoMinimumGrossSwapQuantity
+            : StandardMinimumGrossSwapQuantity;
+
     private int GetRequestedResourceReceivableSwapQuantity(
-        SwapPoolState pool,
+        CellState cell,
         ResourceId resource,
         int reservedIncoming)
     {
+        var pool = cell.Pool;
         var slot = pool.GetSlot(resource);
         if (slot is null)
         {
             return 0;
+        }
+
+        if (cell.IsMyco)
+        {
+            return GetReceivableSwapQuantity(cell, resource, reservedIncoming);
         }
 
         if (slot.Role == PoolSlotRole.Need)
@@ -401,18 +499,24 @@ public sealed class CellularEngine
             return Math.Max(0, target - slot.Quantity - reservedIncoming);
         }
 
-        return GetReceivableSwapQuantity(pool, resource, reservedIncoming);
+        return GetReceivableSwapQuantity(cell, resource, reservedIncoming);
     }
 
     private int GetReceivableSwapQuantity(
-        SwapPoolState pool,
+        CellState cell,
         ResourceId resource,
         int reservedIncoming)
     {
+        var pool = cell.Pool;
         var slot = pool.GetSlot(resource);
         if (slot is null)
         {
             return 0;
+        }
+
+        if (cell.IsMyco)
+        {
+            return Math.Max(0, slot.Capacity - slot.Quantity - reservedIncoming);
         }
 
         if (slot.Role == PoolSlotRole.SourceOutput
@@ -424,12 +528,12 @@ public sealed class CellularEngine
         return Math.Max(0, slot.Capacity - slot.Quantity - reservedIncoming);
     }
 
-    private static int GetOfferableSwapQuantity(
-        SwapPoolState pool,
+    private int GetOfferableSwapQuantity(
+        CellState cell,
         ResourceId resource,
-        int reservedOutgoing,
-        int needOfferReserve = 1)
+        int reservedOutgoing)
     {
+        var pool = cell.Pool;
         var slot = pool.GetSlot(resource);
         if (slot is null)
         {
@@ -437,9 +541,14 @@ public sealed class CellularEngine
         }
 
         var available = slot.Quantity - reservedOutgoing;
+        if (cell.IsMyco)
+        {
+            return Math.Max(0, available);
+        }
+
         if (slot.Role == PoolSlotRole.Need)
         {
-            available -= needOfferReserve;
+            available -= Options.NeedOfferReserve;
         }
         else if (slot.Role == PoolSlotRole.SourceOutput && HasNeedSlot(pool))
         {
@@ -491,10 +600,10 @@ public sealed class CellularEngine
 
     private void ReserveSwap(SwapProposal proposal)
     {
-        AddReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource, proposal.Quantity);
-        AddReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource, proposal.Quantity);
-        AddReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource, proposal.Quantity);
-        AddReservedIn(proposal.CounterpartyIndex, proposal.InitiatorPaidResource, proposal.Quantity);
+        AddReservedOut(proposal.InitiatorIndex, proposal.InitiatorPaidResource, proposal.InitiatorPaidQuantity);
+        AddReservedOut(proposal.CounterpartyIndex, proposal.CounterpartyPaidResource, proposal.CounterpartyPaidQuantity);
+        AddReservedIn(proposal.InitiatorIndex, proposal.CounterpartyPaidResource, proposal.InitiatorReceivedQuantity);
+        AddReservedIn(proposal.CounterpartyIndex, proposal.InitiatorPaidResource, proposal.CounterpartyReceivedQuantity);
     }
 
     private void ResolveSwapProposals()
@@ -510,19 +619,36 @@ public sealed class CellularEngine
             var counterpartyReceiveSlot = counterparty.Pool.GetSlot(proposal.InitiatorPaidResource)
                 ?? throw new InvalidOperationException("Counterparty receive slot disappeared before swap resolution.");
 
-            initiator.Pool.RemoveResource(proposal.InitiatorPaidResource, proposal.Quantity);
-            counterparty.Pool.RemoveResource(proposal.CounterpartyPaidResource, proposal.Quantity);
-            initiator.Pool.AddResource(proposal.CounterpartyPaidResource, proposal.Quantity);
-            counterparty.Pool.AddResource(proposal.InitiatorPaidResource, proposal.Quantity);
+            initiator.Pool.RemoveResource(proposal.InitiatorPaidResource, proposal.InitiatorPaidQuantity);
+            counterparty.Pool.RemoveResource(proposal.CounterpartyPaidResource, proposal.CounterpartyPaidQuantity);
+            initiator.Pool.AddResource(proposal.CounterpartyPaidResource, proposal.InitiatorReceivedQuantity);
+            counterparty.Pool.AddResource(proposal.InitiatorPaidResource, proposal.CounterpartyReceivedQuantity);
+
+            if (initiator.IsRedMyco || counterparty.IsRedMyco)
+            {
+                if (initiator.IsRedMyco)
+                {
+                    initiator.GlowTicksRemaining = Options.GlowTtlTicks;
+                    _glowRefreshedCells.Add(initiator.Index);
+                }
+
+                if (counterparty.IsRedMyco)
+                {
+                    counterparty.GlowTicksRemaining = Options.GlowTtlTicks;
+                    _glowRefreshedCells.Add(counterparty.Index);
+                }
+            }
 
             _events.Add(new SwapEvent(
                 CurrentTick,
                 initiator.Id,
                 counterparty.Id,
                 proposal.InitiatorPaidResource,
-                proposal.Quantity,
+                proposal.InitiatorPaidQuantity,
                 proposal.CounterpartyPaidResource,
-                proposal.Quantity,
+                proposal.CounterpartyPaidQuantity,
+                proposal.InitiatorReceivedQuantity,
+                proposal.CounterpartyReceivedQuantity,
                 initiatorReceiveSlot.Quantity,
                 initiatorReceiveSlot.Capacity,
                 counterpartyReceiveSlot.Quantity,
@@ -533,14 +659,14 @@ public sealed class CellularEngine
                 initiator.Id,
                 counterparty.Id,
                 proposal.InitiatorPaidResource,
-                proposal.Quantity,
+                proposal.CounterpartyReceivedQuantity,
                 FlowKind.Reciprocal));
             _events.Add(new FlowEvent(
                 CurrentTick,
                 counterparty.Id,
                 initiator.Id,
                 proposal.CounterpartyPaidResource,
-                proposal.Quantity,
+                proposal.InitiatorReceivedQuantity,
                 FlowKind.Reciprocal));
         }
     }
@@ -559,7 +685,7 @@ public sealed class CellularEngine
             return compareOffer;
         }
 
-        var compareQuantity = right.Proposal.Quantity.CompareTo(left.Proposal.Quantity);
+        var compareQuantity = right.Proposal.PriorityQuantity.CompareTo(left.Proposal.PriorityQuantity);
         if (compareQuantity != 0)
         {
             return compareQuantity;
@@ -643,6 +769,11 @@ public sealed class CellularEngine
 
         foreach (var cell in World.Cells)
         {
+            if (cell.IsMyco)
+            {
+                continue;
+            }
+
             if (!cell.Pool.CanReact())
             {
                 continue;
@@ -661,12 +792,13 @@ public sealed class CellularEngine
         foreach (var cell in World.Cells)
         {
             var reacted = DidReact(cell.Index);
-            if (!reacted && cell.GlowTicksRemaining > 0)
+            var glowRefreshed = WasGlowRefreshed(cell.Index);
+            if (!reacted && !glowRefreshed && cell.GlowTicksRemaining > 0)
             {
                 cell.GlowTicksRemaining--;
             }
 
-            if (reacted)
+            if (reacted || cell.IsMyco)
             {
                 continue;
             }
@@ -857,6 +989,19 @@ public sealed class CellularEngine
         return false;
     }
 
+    private bool WasGlowRefreshed(int cellIndex)
+    {
+        for (var i = 0; i < _glowRefreshedCells.Count; i++)
+        {
+            if (_glowRefreshedCells[i] == cellIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private int GetReservedOut(int cellIndex, ResourceId resource) => _reservedOut[cellIndex, resource.Value];
 
     private int GetReservedIn(int cellIndex, ResourceId resource) => _reservedIn[cellIndex, resource.Value];
@@ -916,7 +1061,19 @@ public sealed class CellularEngine
         int CounterpartyIndex,
         ResourceId InitiatorPaidResource,
         ResourceId CounterpartyPaidResource,
-        int Quantity);
+        int InitiatorPaidQuantity,
+        int CounterpartyPaidQuantity,
+        int InitiatorReceivedQuantity,
+        int CounterpartyReceivedQuantity)
+    {
+        public int PriorityQuantity => Math.Max(InitiatorPaidQuantity, CounterpartyPaidQuantity);
+    }
+
+    private readonly record struct SwapQuantities(
+        int InitiatorPaidQuantity,
+        int CounterpartyPaidQuantity,
+        int InitiatorReceivedQuantity,
+        int CounterpartyReceivedQuantity);
 
     private readonly record struct OfferPriority(
         int CounterpartyMissingNeedRank,

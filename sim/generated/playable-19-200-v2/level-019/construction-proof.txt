@@ -1,0 +1,15 @@
+Shape-first exact construction proof
+  static proof passed: True
+  target shape connected: True
+  target cells: 26
+  target edges: 40
+  reciprocal edges: 34
+  useful edges: 39
+  missing providers: 0
+  invalid needs: 0
+  duplicate producer conflicts: 0
+  repair edits: 0
+  producer edits: 0
+  failure category: passed
+  diagnostics:
+    all static checks passed

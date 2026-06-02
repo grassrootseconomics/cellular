@@ -1,0 +1,56 @@
+RN B1 RC RL W1 RF Q1 RH
+R7 X1 H1 RB N1 R2 T1 O1
+U1 R8 R5 R1 M1 RM D1 I1
+J1 R6 S1 RD RI C1 RE Z1
+R3 RG RK RA V1 P1 E1 RJ
+A1 R9 F1 R4 K1 Y1 G1 L1
+
+Legend:
+A1: cell-a; produces A; needs R33,R27,J
+B1: cell-b; produces B; needs R47,R45,R36
+C1: cell-c; produces C; needs R38,R42,R37
+D1: cell-d; produces D; needs Z,I,R46
+E1: cell-e; produces E; needs R43,P,L
+F1: cell-f; produces F; needs A,R28,R33
+G1: cell-g; produces G; needs K,L,Y
+H1: cell-h; produces H; needs R32,R35,X
+I1: cell-i; produces I; needs Z,R38,D
+J1: cell-j; produces J; needs R31,U,R27
+K1: cell-k; produces K; needs Y,F,R28
+L1: cell-l; produces L; needs R43,Y,G
+M1: cell-m; produces M; needs R,R46,D
+N1: cell-n; produces N; needs R26,H,R35
+O1: cell-o; produces O; needs R41,R26,T
+P1: cell-p; produces P; needs V,R43,E
+Q1: cell-q; produces Q; needs O,R39,R41
+R1: cell-r; produces R; needs R29,R46,M
+R2: cell-r26; produces R26; needs T,N,R35
+R3: cell-r27; produces R27; needs J,A,U
+R4: cell-r28; produces R28; needs K,R33,F
+R5: cell-r29; produces R29; needs M,R,R32
+R6: cell-r30; produces R30; needs R40,S,R44
+R7: cell-r31; produces R31; needs B,R47,U
+R8: cell-r32; produces R32; needs R29,R,X
+R9: cell-r33; produces R33; needs A,F,R27
+RA: cell-r34; produces R34; needs V,R44,P
+RB: cell-r35; produces R35; needs N,X,H
+RC: cell-r36; produces R36; needs R45,B,W
+RD: cell-r37; produces R37; needs R30,R42,S
+RE: cell-r38; produces R38; needs Z,C,R42
+RF: cell-r39; produces R39; needs Q,R41,W
+RG: cell-r40; produces R40; needs R44,R34,R30
+RH: cell-r41; produces R41; needs Q,O,T
+RI: cell-r42; produces R42; needs C,S,R37
+RJ: cell-r43; produces R43; needs E,G,L
+RK: cell-r44; produces R44; needs V,R40,R34
+RL: cell-r45; produces R45; needs R39,R36,W
+RM: cell-r46; produces R46; needs I,D,M
+RN: cell-r47; produces R47; needs B,R31,R36
+S1: cell-s; produces S; needs R30,R40,R37
+T1: cell-t; produces T; needs O,N,R26
+U1: cell-u; produces U; needs R47,J,R31
+V1: cell-v; produces V; needs R34,P,E
+W1: cell-w; produces W; needs R45,Q,R39
+X1: cell-x; produces X; needs R29,H,R32
+Y1: cell-y; produces Y; needs R28,G,K
+Z1: cell-z; produces Z; needs C,I,R38

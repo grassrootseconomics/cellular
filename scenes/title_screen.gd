@@ -3,8 +3,7 @@ extends Control
 const TITLE_COMPACT_SHORT_EDGE := 640.0
 const TITLE_TINY_SHORT_EDGE := 500.0
 const GE_LOGO_PATH := "res://graphics/ge-logo-horizontal-text.png"
-const TITLE_SOIL_BACKGROUND_PATH := "res://graphics/soil_end.jpeg"
-const TITLE_ART_BACKGROUND_PATH := "res://graphics/social.png"
+const TITLE_CELLULAR_BACKGROUND_PATH := "res://graphics/cellular-lapace.png"
 const TITLE_PREDATOR_BIRD_SOUND_PATH := "res://audio/cardinal.mp3"
 const TITLE_TUKTUK_ENGINE_SOUND_PATH := "res://audio/tuktuk-engine-loop.wav"
 const TITLE_BASKET_LAND_SOUND_PATH := "res://audio/squelch_slayer.wav"
@@ -82,6 +81,14 @@ var _title_quit_button: Button = null
 var _title_quit_requested := false
 var _puzzle_progress_label: Label = null
 var _puzzle_reset_button: Button = null
+var _puzzle_reset_confirm_overlay: Control = null
+var _puzzle_reset_confirm_scrim: ColorRect = null
+var _puzzle_reset_confirm_panel: Panel = null
+var _puzzle_reset_confirm_title: Label = null
+var _puzzle_reset_confirm_message: Label = null
+var _puzzle_reset_confirm_close_button: Button = null
+var _puzzle_reset_confirm_yes_button: Button = null
+var _puzzle_reset_confirm_no_button: Button = null
 var _arcade_high_score_label: Label = null
 
 
@@ -151,6 +158,43 @@ func _make_title_score_panel_style() -> StyleBoxFlat:
 	return style
 
 
+func _make_title_confirm_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.025, 0.055, 0.065, 0.96)
+	style.border_color = Color(0.34, 0.92, 0.86, 0.72)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.46)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 4)
+	return style
+
+
+func _make_title_confirm_button_style(bg_color: Color, border_color: Color, border_width: int = 2) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg_color
+	style.border_color = border_color
+	style.border_width_left = border_width
+	style.border_width_top = border_width
+	style.border_width_right = border_width
+	style.border_width_bottom = border_width
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	return style
+
+
 func _style_cta_button(button: Button, base_bg: Color, base_border: Color) -> void:
 	if not is_instance_valid(button):
 		return
@@ -209,6 +253,26 @@ func _style_title_secondary_button(button: Button) -> void:
 	button.add_theme_stylebox_override("focus", _make_cta_style(base_bg.lightened(0.12), Color(1, 1, 1, 0.95), 4))
 
 
+func _style_title_confirm_button(button: Button, destructive: bool) -> void:
+	if not is_instance_valid(button):
+		return
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.focus_mode = Control.FOCUS_ALL
+	button.add_theme_font_size_override("font_size", 20)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color(0.92, 1.0, 0.96, 1.0))
+	var base_bg := Color(0.08, 0.22, 0.24, 0.94)
+	var base_border := Color(0.48, 0.86, 0.78, 0.88)
+	if destructive:
+		base_bg = Color(0.46, 0.08, 0.06, 0.95)
+		base_border = Color(1.0, 0.55, 0.45, 0.92)
+	button.add_theme_stylebox_override("normal", _make_title_confirm_button_style(base_bg, base_border, 2))
+	button.add_theme_stylebox_override("hover", _make_title_confirm_button_style(base_bg.lightened(0.12), base_border.lightened(0.10), 3))
+	button.add_theme_stylebox_override("pressed", _make_title_confirm_button_style(base_bg.darkened(0.18), base_border.darkened(0.12), 2))
+	button.add_theme_stylebox_override("focus", _make_title_confirm_button_style(base_bg.lightened(0.12), Color(1, 1, 1, 0.95), 4))
+
+
 func _style_title_info_label(label: Label, font_size: int) -> void:
 	if not is_instance_valid(label):
 		return
@@ -219,6 +283,14 @@ func _style_title_info_label(label: Label, font_size: int) -> void:
 	label.add_theme_color_override("font_color", Color(0.92, 1.0, 0.94, 1.0))
 	label.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.05, 0.92))
 	label.add_theme_constant_override("outline_size", 3)
+
+
+func _hide_title_menu_stat_label(label: Label) -> void:
+	if not is_instance_valid(label):
+		return
+	label.visible = false
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.custom_minimum_size = Vector2.ZERO
 
 
 func _get_title_menu_box() -> VBoxContainer:
@@ -235,6 +307,7 @@ func _ensure_cellular_title_widgets() -> void:
 		_puzzle_progress_label = Label.new()
 		_puzzle_progress_label.name = "PuzzleProgressLabel"
 		menu_box.add_child(_puzzle_progress_label)
+	_hide_title_menu_stat_label(_puzzle_progress_label)
 	if not is_instance_valid(_puzzle_reset_button):
 		_puzzle_reset_button = menu_box.get_node_or_null("ResetPuzzleButton") as Button
 	if not is_instance_valid(_puzzle_reset_button):
@@ -243,12 +316,14 @@ func _ensure_cellular_title_widgets() -> void:
 		menu_box.add_child(_puzzle_reset_button)
 	if not _puzzle_reset_button.pressed.is_connected(_on_reset_puzzle_progress_pressed):
 		_puzzle_reset_button.pressed.connect(_on_reset_puzzle_progress_pressed)
+	_ensure_puzzle_reset_confirm_panel()
 	if not is_instance_valid(_arcade_high_score_label):
 		_arcade_high_score_label = menu_box.get_node_or_null("ArcadeHighScoreLabel") as Label
 	if not is_instance_valid(_arcade_high_score_label):
 		_arcade_high_score_label = Label.new()
 		_arcade_high_score_label.name = "ArcadeHighScoreLabel"
 		menu_box.add_child(_arcade_high_score_label)
+	_hide_title_menu_stat_label(_arcade_high_score_label)
 	var ordered_names := [
 		"RegenerationLabel",
 		"Tutorial",
@@ -267,11 +342,136 @@ func _ensure_cellular_title_widgets() -> void:
 	_refresh_cellular_title_stats()
 
 
+func _ensure_puzzle_reset_confirm_panel() -> void:
+	if is_instance_valid(_puzzle_reset_confirm_overlay):
+		return
+	_puzzle_reset_confirm_overlay = Control.new()
+	_puzzle_reset_confirm_overlay.name = "ResetPuzzleProgressConfirmOverlay"
+	_puzzle_reset_confirm_overlay.visible = false
+	_puzzle_reset_confirm_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_puzzle_reset_confirm_overlay.z_as_relative = false
+	_puzzle_reset_confirm_overlay.z_index = 95
+	add_child(_puzzle_reset_confirm_overlay)
+
+	_puzzle_reset_confirm_scrim = ColorRect.new()
+	_puzzle_reset_confirm_scrim.name = "ResetPuzzleProgressScrim"
+	_puzzle_reset_confirm_scrim.color = Color(0.0, 0.0, 0.0, 0.54)
+	_puzzle_reset_confirm_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_puzzle_reset_confirm_overlay.add_child(_puzzle_reset_confirm_scrim)
+
+	_puzzle_reset_confirm_panel = Panel.new()
+	_puzzle_reset_confirm_panel.name = "ResetPuzzleProgressPanel"
+	_puzzle_reset_confirm_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_puzzle_reset_confirm_overlay.add_child(_puzzle_reset_confirm_panel)
+
+	_puzzle_reset_confirm_title = Label.new()
+	_puzzle_reset_confirm_title.name = "ResetPuzzleProgressTitle"
+	_puzzle_reset_confirm_title.text = "Restart Puzzle Progress"
+	_puzzle_reset_confirm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_puzzle_reset_confirm_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_title)
+
+	_puzzle_reset_confirm_message = Label.new()
+	_puzzle_reset_confirm_message.name = "ResetPuzzleProgressMessage"
+	_puzzle_reset_confirm_message.text = "Are you sure you want to restart? This will reset all your scores also."
+	_puzzle_reset_confirm_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_puzzle_reset_confirm_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_puzzle_reset_confirm_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_message)
+
+	_puzzle_reset_confirm_close_button = Button.new()
+	_puzzle_reset_confirm_close_button.name = "ResetPuzzleProgressCloseButton"
+	_puzzle_reset_confirm_close_button.text = "x"
+	_puzzle_reset_confirm_close_button.pressed.connect(_hide_puzzle_reset_confirm_panel)
+	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_close_button)
+
+	_puzzle_reset_confirm_yes_button = Button.new()
+	_puzzle_reset_confirm_yes_button.name = "ResetPuzzleProgressYesButton"
+	_puzzle_reset_confirm_yes_button.text = "Yes"
+	_puzzle_reset_confirm_yes_button.pressed.connect(_on_reset_puzzle_progress_confirmed)
+	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_yes_button)
+
+	_puzzle_reset_confirm_no_button = Button.new()
+	_puzzle_reset_confirm_no_button.name = "ResetPuzzleProgressNoButton"
+	_puzzle_reset_confirm_no_button.text = "No"
+	_puzzle_reset_confirm_no_button.pressed.connect(_hide_puzzle_reset_confirm_panel)
+	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_no_button)
+
+
+func _layout_puzzle_reset_confirm_panel(safe_rect: Rect2, compact: bool, tiny: bool) -> void:
+	if not is_instance_valid(_puzzle_reset_confirm_overlay):
+		return
+	var view_size := get_viewport_rect().size
+	_puzzle_reset_confirm_overlay.position = Vector2.ZERO
+	_puzzle_reset_confirm_overlay.size = view_size
+	if is_instance_valid(_puzzle_reset_confirm_scrim):
+		_puzzle_reset_confirm_scrim.position = Vector2.ZERO
+		_puzzle_reset_confirm_scrim.size = view_size
+	if not is_instance_valid(_puzzle_reset_confirm_panel):
+		return
+	var panel_width: float = clampf(safe_rect.size.x - 28.0, minf(280.0, safe_rect.size.x), minf(500.0, maxf(280.0, safe_rect.size.x)))
+	var panel_height: float = 212.0
+	if compact:
+		panel_height = 198.0
+	if tiny:
+		panel_height = 184.0
+	var panel_size := Vector2(panel_width, minf(panel_height, maxf(150.0, safe_rect.size.y - 24.0)))
+	var panel_pos := safe_rect.get_center() - panel_size * 0.5
+	panel_pos = _clamp_title_control_position_to_rect(panel_pos, panel_size, safe_rect)
+	_puzzle_reset_confirm_panel.position = Vector2(round(panel_pos.x), round(panel_pos.y))
+	_puzzle_reset_confirm_panel.size = Vector2(round(panel_size.x), round(panel_size.y))
+	_puzzle_reset_confirm_panel.add_theme_stylebox_override("panel", _make_title_confirm_panel_style())
+
+	var pad: float = 18.0 if not tiny else 14.0
+	var title_h: float = 34.0
+	var button_h: float = 44.0
+	var button_w: float = minf(112.0, maxf(84.0, (panel_size.x - pad * 2.0 - 12.0) * 0.5))
+	if is_instance_valid(_puzzle_reset_confirm_title):
+		_puzzle_reset_confirm_title.position = Vector2(pad, pad - 1.0)
+		_puzzle_reset_confirm_title.size = Vector2(maxf(1.0, panel_size.x - pad * 2.0 - 42.0), title_h)
+		_style_title_info_label(_puzzle_reset_confirm_title, 23 if not compact else (21 if not tiny else 19))
+		_puzzle_reset_confirm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if is_instance_valid(_puzzle_reset_confirm_close_button):
+		_puzzle_reset_confirm_close_button.position = Vector2(panel_size.x - pad - 32.0, pad - 2.0)
+		_puzzle_reset_confirm_close_button.size = Vector2(32.0, 32.0)
+		_style_title_confirm_button(_puzzle_reset_confirm_close_button, false)
+		_puzzle_reset_confirm_close_button.add_theme_font_size_override("font_size", 20)
+	if is_instance_valid(_puzzle_reset_confirm_message):
+		var message_y: float = pad + title_h + 6.0
+		var button_y: float = panel_size.y - pad - button_h
+		_puzzle_reset_confirm_message.position = Vector2(pad, message_y)
+		_puzzle_reset_confirm_message.size = Vector2(panel_size.x - pad * 2.0, maxf(48.0, button_y - message_y - 12.0))
+		_style_title_info_label(_puzzle_reset_confirm_message, 18 if not compact else (17 if not tiny else 15))
+		_puzzle_reset_confirm_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_puzzle_reset_confirm_message.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	if is_instance_valid(_puzzle_reset_confirm_yes_button) and is_instance_valid(_puzzle_reset_confirm_no_button):
+		var buttons_width: float = button_w * 2.0 + 12.0
+		var button_y: float = panel_size.y - pad - button_h
+		var button_x: float = round((panel_size.x - buttons_width) * 0.5)
+		_puzzle_reset_confirm_yes_button.position = Vector2(button_x, button_y)
+		_puzzle_reset_confirm_yes_button.size = Vector2(button_w, button_h)
+		_puzzle_reset_confirm_no_button.position = Vector2(button_x + button_w + 12.0, button_y)
+		_puzzle_reset_confirm_no_button.size = Vector2(button_w, button_h)
+		_style_title_confirm_button(_puzzle_reset_confirm_yes_button, true)
+		_style_title_confirm_button(_puzzle_reset_confirm_no_button, false)
+
+
+func _hide_puzzle_reset_confirm_panel() -> void:
+	if is_instance_valid(_puzzle_reset_confirm_overlay):
+		_puzzle_reset_confirm_overlay.visible = false
+
+
 func _refresh_cellular_title_stats() -> void:
+	var puzzle_progress_text := str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
+	var arcade_high_score_text := str("Arcade High Score: ", Global.format_score_value(Global.high_score))
 	if is_instance_valid(_puzzle_progress_label):
-		_puzzle_progress_label.text = str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
+		_puzzle_progress_label.text = puzzle_progress_text
 	if is_instance_valid(_arcade_high_score_label):
-		_arcade_high_score_label.text = str("Arcade High Score: ", Global.format_score_value(Global.high_score))
+		_arcade_high_score_label.text = arcade_high_score_text
+	if is_instance_valid(_last_score_label):
+		_last_score_label.text = puzzle_progress_text
+	if is_instance_valid(_high_score_label):
+		_high_score_label.text = arcade_high_score_text
 
 
 func _ensure_title_quit_button() -> Button:
@@ -434,9 +634,9 @@ func _get_title_menu_column_rect(view_size: Vector2, fallback_width: float) -> R
 
 func _update_title_score_widgets(view_size: Vector2, compact: bool, tiny: bool) -> void:
 	_ensure_title_score_widgets()
-	var has_last_score = false
-	var has_high_score = false
-	var show_scores = has_last_score or has_high_score
+	var has_puzzle_progress = true
+	var has_arcade_high_score = true
+	var show_scores = has_puzzle_progress or has_arcade_high_score
 	var safe_rect := _get_title_padded_safe_view_rect(compact, tiny)
 	var safe_panel_max_width: float = maxf(1.0, minf(720.0, safe_rect.size.x))
 	var safe_panel_min_width: float = minf(220.0, safe_panel_max_width)
@@ -444,40 +644,42 @@ func _update_title_score_widgets(view_size: Vector2, compact: bool, tiny: bool) 
 	var menu_rect: Rect2 = _get_title_menu_column_rect(view_size, fallback_panel_width)
 	var score_center_x: float = menu_rect.get_center().x
 	var max_panel_width: float = maxf(safe_panel_min_width, minf(safe_panel_max_width, safe_rect.size.x - 32.0))
-	var panel_width: float = clampf(menu_rect.size.x, safe_panel_min_width, max_panel_width)
+	var desired_panel_width: float = 300.0 if tiny else (360.0 if compact else 410.0)
+	var panel_width: float = clampf(maxf(menu_rect.size.x, desired_panel_width), safe_panel_min_width, max_panel_width)
 	var label_width: float = maxf(minf(200.0, panel_width), panel_width - 20.0)
-	var last_size: Vector2 = Vector2(label_width, 66.0 if tiny else (72.0 if compact else 78.0))
-	var high_size: Vector2 = Vector2(label_width, 42.0 if tiny else (48.0 if compact else 54.0))
+	var stat_height: float = 42.0 if tiny else (48.0 if compact else 54.0)
+	var stat_size: Vector2 = Vector2(label_width, stat_height)
 	var basket_center: Vector2 = _get_title_basket_score_anchor(view_size, compact)
 	var score_y: float = basket_center.y + _get_title_basket_score_gap(compact, tiny)
 	var score_gap: float = _get_title_score_gap()
-	_style_title_score_label(_last_score_label, 22 if tiny else (24 if compact else 27))
-	_style_title_score_label(_high_score_label, 22 if tiny else (24 if compact else 27))
+	var stat_font_size := 20 if tiny else (22 if compact else 24)
+	_style_title_score_label(_last_score_label, stat_font_size)
+	_style_title_score_label(_high_score_label, stat_font_size)
 	if is_instance_valid(_last_score_label):
-		_last_score_label.visible = has_last_score
-		_last_score_label.custom_minimum_size = last_size
-		_last_score_label.size = last_size
-		_last_score_label.text = str("Last Score: ", Global.format_score_value(Global.last_score), "\nLast Rank: ", _get_last_rank_text())
+		_last_score_label.visible = has_puzzle_progress
+		_last_score_label.custom_minimum_size = stat_size
+		_last_score_label.size = stat_size
+		_last_score_label.text = str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
 	if is_instance_valid(_high_score_label):
-		_high_score_label.visible = has_high_score
-		_high_score_label.custom_minimum_size = high_size
-		_high_score_label.size = high_size
-		_high_score_label.text = str("High Score: ", Global.format_score_value(Global.high_score))
+		_high_score_label.visible = has_arcade_high_score
+		_high_score_label.custom_minimum_size = stat_size
+		_high_score_label.size = stat_size
+		_high_score_label.text = str("Arcade High Score: ", Global.format_score_value(Global.high_score))
 	if is_instance_valid(_last_score_label):
 		var last_y: float = score_y
-		_last_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - last_size.x * 0.5), round(last_y)), last_size, safe_rect)
-		if has_last_score:
-			score_y = last_y + last_size.y + score_gap
+		_last_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - stat_size.x * 0.5), round(last_y)), stat_size, safe_rect)
+		if has_puzzle_progress:
+			score_y = last_y + stat_size.y + score_gap
 	if is_instance_valid(_high_score_label):
 		var high_y: float = score_y
-		_high_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - high_size.x * 0.5), round(high_y)), high_size, safe_rect)
-	_layout_title_score_panel(_last_score_panel, _last_score_label, has_last_score)
-	_layout_title_score_panel(_high_score_panel, _high_score_label, has_high_score)
+		_high_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - stat_size.x * 0.5), round(high_y)), stat_size, safe_rect)
+	_layout_title_score_panel(_last_score_panel, _last_score_label, has_puzzle_progress)
+	_layout_title_score_panel(_high_score_panel, _high_score_label, has_arcade_high_score)
 	_title_score_sparkle_target = null
-	if show_scores and has_last_score and int(Global.last_score) == int(Global.high_score):
-		_title_score_sparkle_target = _last_score_label
-	elif show_scores and has_high_score:
+	if show_scores and has_arcade_high_score and int(Global.high_score) > 0:
 		_title_score_sparkle_target = _high_score_label
+	elif show_scores and has_puzzle_progress:
+		_title_score_sparkle_target = _last_score_label
 	_update_title_score_sparkles(0.0)
 
 
@@ -834,12 +1036,12 @@ func _get_title_basket_score_gap(compact: bool, tiny: bool) -> float:
 
 
 func _get_title_score_stack_height(compact: bool, tiny: bool) -> float:
-	var has_last_score := false
-	var has_high_score := false
+	var has_puzzle_progress := true
+	var has_arcade_high_score := true
 	var height: float = 0.0
-	if has_last_score:
-		height += 66.0 if tiny else (72.0 if compact else 78.0)
-	if has_high_score:
+	if has_puzzle_progress:
+		height += 42.0 if tiny else (48.0 if compact else 54.0)
+	if has_arcade_high_score:
 		if height > 0.0:
 			height += _get_title_score_gap()
 		height += 42.0 if tiny else (48.0 if compact else 54.0)
@@ -1137,19 +1339,50 @@ func _request_title_layout_refresh(frames: int = 3) -> void:
 
 
 func _load_title_texture(path: String) -> Texture2D:
-	var texture: Resource = load(path)
-	if texture is Texture2D:
-		return texture as Texture2D
+	if path != TITLE_CELLULAR_BACKGROUND_PATH or OS.has_feature("template") or _title_import_cache_exists(path):
+		var texture: Resource = load(path)
+		if texture is Texture2D:
+			return texture as Texture2D
+	if path == TITLE_CELLULAR_BACKGROUND_PATH and not OS.has_feature("template"):
+		var image := _load_png_image_from_file(path)
+		if is_instance_valid(image):
+			return ImageTexture.create_from_image(image)
 	return null
 
 
-func _configure_title_background_rect(rect: TextureRect, z_index: int, texture_path: String) -> void:
+func _title_import_cache_exists(path: String) -> bool:
+	var import_config := ConfigFile.new()
+	if import_config.load(str(path, ".import")) != OK:
+		return false
+	var dest_files = import_config.get_value("deps", "dest_files", [])
+	if typeof(dest_files) != TYPE_ARRAY:
+		return false
+	for dest_file in dest_files:
+		if typeof(dest_file) == TYPE_STRING and FileAccess.file_exists(dest_file):
+			return true
+	return false
+
+
+func _load_png_image_from_file(path: String) -> Image:
+	if not FileAccess.file_exists(path):
+		return null
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return null
+	var image := Image.new()
+	if image.load_png_from_buffer(bytes) != OK:
+		return null
+	return image
+
+
+func _configure_title_background_rect(rect: TextureRect, z_index: int, texture_path: String, tiled: bool = false) -> void:
 	if not is_instance_valid(rect):
 		return
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rect.z_as_relative = false
 	rect.z_index = z_index
 	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED if tiled else CanvasItem.TEXTURE_REPEAT_DISABLED
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.offset_left = 0.0
 	rect.offset_top = 0.0
@@ -1163,16 +1396,13 @@ func _configure_title_background_rect(rect: TextureRect, z_index: int, texture_p
 func _ensure_responsive_background_nodes() -> void:
 	if not is_instance_valid(_title_soil_background):
 		_title_soil_background = TextureRect.new()
-		_title_soil_background.name = "ResponsiveSoilBackground"
+		_title_soil_background.name = "ResponsiveCellularBackground"
 		add_child(_title_soil_background)
-		_configure_title_background_rect(_title_soil_background, -120, TITLE_SOIL_BACKGROUND_PATH)
-	if not is_instance_valid(_title_art_background):
-		_title_art_background = TextureRect.new()
-		_title_art_background.name = "ResponsiveTitleArt"
-		add_child(_title_art_background)
-		_configure_title_background_rect(_title_art_background, -110, TITLE_ART_BACKGROUND_PATH)
+		_configure_title_background_rect(_title_soil_background, -120, TITLE_CELLULAR_BACKGROUND_PATH, true)
+	if is_instance_valid(_title_art_background):
+		_title_art_background.queue_free()
+		_title_art_background = null
 	move_child(_title_soil_background, 0)
-	move_child(_title_art_background, 1)
 	_hide_legacy_background_nodes()
 
 
@@ -1186,22 +1416,22 @@ func _hide_legacy_background_nodes() -> void:
 func _layout_responsive_background(view_size: Vector2) -> void:
 	_ensure_responsive_background_nodes()
 	if is_instance_valid(_title_soil_background):
-		_title_soil_background.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_title_soil_background.offset_left = 0.0
-		_title_soil_background.offset_top = 0.0
-		_title_soil_background.offset_right = 0.0
-		_title_soil_background.offset_bottom = 0.0
+		var tile_size := Vector2(968.0, 1046.0)
+		if is_instance_valid(_title_soil_background.texture):
+			tile_size = _title_soil_background.texture.get_size()
+		tile_size.x = maxf(tile_size.x, 1.0)
+		tile_size.y = maxf(tile_size.y, 1.0)
+		var tile_origin := Vector2(
+			fposmod((view_size.x - tile_size.x) * 0.5, tile_size.x) - tile_size.x,
+			fposmod((view_size.y - tile_size.y) * 0.5, tile_size.y) - tile_size.y
+		)
+		_title_soil_background.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_title_soil_background.position = Vector2(floor(tile_origin.x), floor(tile_origin.y))
+		_title_soil_background.size = Vector2(ceil(view_size.x + tile_size.x * 2.0), ceil(view_size.y + tile_size.y * 2.0))
 		_title_soil_background.visible = true
 		_title_soil_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_title_soil_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	if is_instance_valid(_title_art_background):
-		var art_size = maxf(view_size.y, 1.0)
-		_title_art_background.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		_title_art_background.position = Vector2(round((view_size.x - art_size) * 0.5), 0.0)
-		_title_art_background.size = Vector2(art_size, art_size)
-		_title_art_background.visible = true
-		_title_art_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_title_art_background.stretch_mode = TextureRect.STRETCH_SCALE
+		_title_soil_background.stretch_mode = TextureRect.STRETCH_TILE
+		_title_soil_background.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 
 
 func _apply_responsive_layout() -> void:
@@ -1266,6 +1496,7 @@ func _apply_responsive_layout() -> void:
 		info_font_size = 17
 	_style_title_info_label(_puzzle_progress_label, info_font_size)
 	_style_title_info_label(_arcade_high_score_label, info_font_size)
+	_layout_puzzle_reset_confirm_panel(safe_rect, compact, tiny)
 	if is_instance_valid(_title_quit_button):
 		_title_quit_button.custom_minimum_size = Vector2(quit_width, quit_height)
 		_title_quit_button.size = Vector2(quit_width, quit_height)
@@ -1458,7 +1689,7 @@ func _on_tutorial_pressed() -> void:
 	_reset_run_state()
 	Global.mode = "puzzle"
 	Global.active_mode_id = "cellular_puzzle"
-	Global.cellular_puzzle_current_level = maxi(1, Global.cellular_puzzle_highest_level)
+	Global.cellular_puzzle_current_level = clampi(maxi(1, Global.cellular_puzzle_current_level), 1, maxi(1, Global.cellular_puzzle_highest_level))
 	Global.active_scenario_id = str("puzzle_level_", Global.cellular_puzzle_current_level)
 	get_tree().change_scene_to_file("res://scenes/cellular_puzzle_level.tscn")
 
@@ -1491,6 +1722,16 @@ func _on_challenge_button_pressed() -> void:
 
 
 func _on_reset_puzzle_progress_pressed() -> void:
+	_ensure_puzzle_reset_confirm_panel()
+	_apply_responsive_layout()
+	if is_instance_valid(_puzzle_reset_confirm_overlay):
+		_puzzle_reset_confirm_overlay.visible = true
+		if is_instance_valid(_puzzle_reset_confirm_no_button):
+			_puzzle_reset_confirm_no_button.grab_focus()
+
+
+func _on_reset_puzzle_progress_confirmed() -> void:
+	_hide_puzzle_reset_confirm_panel()
 	if Global.has_method("reset_cellular_puzzle_progress"):
 		Global.reset_cellular_puzzle_progress()
 	_refresh_cellular_title_stats()

@@ -3,7 +3,8 @@ extends Control
 const BOARD_SIZE := 8
 const RESOURCE_LETTERS := [
 	"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
-	"M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X"
+	"M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X",
+	"Y", "Z"
 ]
 const RESOURCE_COLORS := [
 	Color(0.18, 0.72, 0.78, 1.0),
@@ -20,17 +21,55 @@ const SWAP_VISUAL_TTL_TICKS := 10.0
 const REACTION_VISUAL_TTL_TICKS := 10.0
 const PIP_ANGLE_SMOOTH := 0.10
 const PIP_OFFSET_SMOOTH := 0.12
+const ZERO_PIP_PULSE_PERIOD_MSEC := 3000
+const ZERO_PIP_PULSE_FADE_MSEC := 1000
+const ZERO_PIP_PULSE_COLOR := Color(1.0, 0.04, 0.02, 1.0)
 const NEED_STATE_MISSING := "missing"
 const NEED_STATE_AVAILABLE := "available"
 const NEED_STATE_ACTIVE := "active"
 const NEED_STATE_SATISFIED := "satisfied"
+const CELL_KIND_STANDARD := "Standard"
+const CELL_KIND_WHITE_MYCO := "WhiteMyco"
+const CELL_KIND_RED_MYCO := "RedMyco"
+const MYCO_MAX_NEEDS := 4
+const RED_MYCO_RING_RADIUS := 0.54
+const RED_MYCO_RING_EDGE_COLOR := Color(0.86, 0.02, 0.04, 0.16)
+const RED_MYCO_RING_MID_COLOR := Color(0.92, 0.04, 0.06, 0.44)
+const RED_MYCO_RING_CORE_COLOR := Color(0.70, 0.00, 0.02, 0.88)
+const CAMERA_READABLE_TILE_SIZE := 72.0
+const CAMERA_TINY_READABLE_TILE_SIZE := 64.0
+const CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM := 4.0
+const CAMERA_ZOOM_STEP := 1.18
+const CAMERA_PINCH_MIN_DISTANCE := 18.0
+const CAMERA_RESIZE_TILE_EPSILON := 0.25
+const PUZZLE_STATE_VERSION := 1
+const PUZZLE_STATE_SAVE_PATH := "user://cellular_puzzle_state.cfg"
+const VELOCITY_WINDOW_TICKS := 10
+const HINT_RECENT_MEMORY := 5
+const HINT_TOP_RANDOM_WINDOW := 8
+const HINT_TOP_SCORE_FALLOFF := 160.0
+const HUD_LANDSCAPE_ENTER_RATIO := 1.14
+const HUD_LANDSCAPE_INITIAL_RATIO := 1.08
+const HUD_LANDSCAPE_EXIT_RATIO := 1.02
+const SAFE_EDGE_MARGIN_DEFAULT := 12.0
+const SAFE_EDGE_MARGIN_COMPACT := 9.0
+const SAFE_EDGE_MARGIN_TINY := 6.0
+const MOBILE_SAFE_TOP_FALLBACK_MIN := 18.0
+const MOBILE_SAFE_TOP_FALLBACK_MAX := 52.0
+const MOBILE_SAFE_SIDE_FALLBACK_PORTRAIT_MIN := 8.0
+const MOBILE_SAFE_SIDE_FALLBACK_PORTRAIT_MAX := 28.0
+const MOBILE_SAFE_SIDE_FALLBACK_LANDSCAPE_MIN := 18.0
+const MOBILE_SAFE_SIDE_FALLBACK_LANDSCAPE_MAX := 64.0
+const MOBILE_SAFE_BOTTOM_FALLBACK_MIN := 10.0
+const MOBILE_SAFE_BOTTOM_FALLBACK_MAX := 36.0
 const MARK_MODE_LETTERS := 0
 const MARK_MODE_SYMBOLS := 1
 const MARK_MODE_HIDDEN := 2
 const RESOURCE_SYMBOL_MARKS := [
 	"+", "*", "#", "@", "$", "%", "&", "!",
 	"?", "=", "~", "^", "<", ">", "/", "\\",
-	":", ";", "|", "_", "x", "o", "[", "]"
+	":", ";", "|", "_", "x", "o", "[", "]",
+	"{", "}"
 ]
 const CIRCUIT_GROUP_COLORS := [
 	Color(0.30, 1.00, 0.84, 1.0),
@@ -48,24 +87,51 @@ var _cells: Array[String] = []
 var _needs := {}
 var _positions := {}
 var _produced_by_cell := {}
+var _cell_kind_by_id := {}
+var _rocks := {}
 var _original_drag_tile := Vector2i.ZERO
 var _drag_cell := ""
+var _drag_touch_id := -1
 var _drag_offset := Vector2.ZERO
 var _drag_position := Vector2.ZERO
 var _board_rect := Rect2()
+var _board_view_rect := Rect2()
 var _tile_size := 64.0
+var _fit_tile_size := 64.0
+var _camera_tile_size := 64.0
+var _camera_center_tiles := Vector2.ZERO
+var _camera_initialized := false
+var _last_camera_board_size := Vector2i.ZERO
+var _last_board_view_size := Vector2.ZERO
+var _hud_orientation_initialized := false
+var _hud_landscape := false
+var _hud_relayout_queued := false
+var _pan_active := false
+var _pan_last_pos := Vector2.ZERO
+var _pan_touch_id := -1
+var _touch_points := {}
+var _pinch_active := false
+var _pinch_touch_a := -1
+var _pinch_touch_b := -1
+var _pinch_last_distance := 0.0
+var _pinch_last_center := Vector2.ZERO
 var _board_cols := BOARD_SIZE
 var _board_rows := BOARD_SIZE
 var _solved := false
 var _back_button: Button = null
 var _reset_button: Button = null
 var _hint_button: Button = null
-var _circuit_button: Button = null
+var _zoom_in_button: Button = null
+var _zoom_out_button: Button = null
+var _info_button: Button = null
 var _last_button: Button = null
 var _next_button: Button = null
 var _level_label: Label = null
 var _status_label: Label = null
 var _flow_label: Label = null
+var _info_panel: Panel = null
+var _info_label: Label = null
+var _info_close_button: Button = null
 var _sim_bridge: Node = null
 var _board_renderer: Node = null
 var _sim_snapshot: Dictionary = {}
@@ -79,6 +145,7 @@ var _sim_status_message := ""
 var _hint_pair: Array[String] = []
 var _hint_cursor := 0
 var _hint_text := ""
+var _recent_hint_keys: Array[String] = []
 var _solution_positions: Dictionary = {}
 var _resource_mark_mode := MARK_MODE_LETTERS
 var _circuit_overlay_enabled := true
@@ -87,11 +154,25 @@ var _pip_offset_by_key: Dictionary = {}
 var _display_fullness_by_key: Dictionary = {}
 var _last_draw_msec := 0
 var _frame_blend := 1.0
+var _myco_rng := RandomNumberGenerator.new()
+var _white_myco_count := 0
+var _red_myco_count := 0
+var _fixture_override_path := ""
+var _visual_profile_enabled := false
+var _visual_profile_print_every := 120
+var _visual_profile_duration_seconds := 0.0
+var _visual_profile_elapsed := 0.0
+var _latest_report := ""
+var _latest_report_dirty := false
+var _level_high_velocity := 0
+var _level_high_velocity_dirty := false
 
 
 func _ready() -> void:
 	Global.reset_gameplay_speed()
 	Global.mode = "puzzle"
+	_myco_rng.randomize()
+	_parse_puzzle_debug_args()
 	_sim_bridge = get_node_or_null("/root/CellularSim")
 	_create_hud()
 	_try_create_board_renderer()
@@ -100,7 +181,18 @@ func _ready() -> void:
 	queue_redraw()
 
 
+func _exit_tree() -> void:
+	_save_puzzle_level_state()
+
+
 func _process(delta: float) -> void:
+	if _visual_profile_enabled:
+		_visual_profile_elapsed += maxf(delta, 0.0)
+		queue_redraw()
+		if _visual_profile_duration_seconds > 0.0 and _visual_profile_elapsed >= _visual_profile_duration_seconds:
+			print(str("[cellular-puzzle-profile] complete level=", _level_number, " fixture=", _fixture_override_path, " elapsed=", _visual_profile_elapsed))
+			get_tree().quit()
+			return
 	if not _using_csharp_sim or _drag_cell != "":
 		return
 	_sim_tick_accum += maxf(delta, 0.0)
@@ -136,10 +228,37 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_resource_mark_mode = (_resource_mark_mode + 1) % 3
 			_board_renderer_full_sync_needed = true
 			queue_redraw()
-		elif key_event.keycode == KEY_C:
-			_toggle_circuit_overlay()
 		elif key_event.keycode == KEY_H:
 			_on_hint_pressed()
+		elif key_event.keycode == KEY_N:
+			_on_next_pressed(true)
+		elif key_event.keycode == KEY_W:
+			_spawn_myco(CELL_KIND_WHITE_MYCO)
+		elif key_event.keycode == KEY_R:
+			_spawn_myco(CELL_KIND_RED_MYCO)
+
+
+func _parse_puzzle_debug_args() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--puzzle-level="):
+			Global.cellular_puzzle_current_level = maxi(1, int(arg.trim_prefix("--puzzle-level=")))
+		elif arg.begins_with("--puzzle-fixture="):
+			_fixture_override_path = _normalize_fixture_override_path(arg.trim_prefix("--puzzle-fixture="))
+		elif arg == "--puzzle-visual-profile":
+			_visual_profile_enabled = true
+		elif arg.begins_with("--puzzle-profile-print-every="):
+			_visual_profile_print_every = maxi(1, int(arg.trim_prefix("--puzzle-profile-print-every=")))
+		elif arg.begins_with("--puzzle-profile-duration="):
+			_visual_profile_duration_seconds = maxf(0.0, float(arg.trim_prefix("--puzzle-profile-duration=")))
+
+
+func _normalize_fixture_override_path(path: String) -> String:
+	var trimmed := path.strip_edges()
+	if trimmed.is_empty():
+		return ""
+	if trimmed.begins_with("res://") or trimmed.begins_with("user://") or trimmed.begins_with("/"):
+		return trimmed
+	return str("res://", trimmed)
 
 
 func _create_hud() -> void:
@@ -161,22 +280,34 @@ func _create_hud() -> void:
 	_hint_button.pressed.connect(_on_hint_pressed)
 	add_child(_hint_button)
 
-	_circuit_button = Button.new()
-	_circuit_button.name = "CircuitButton"
-	_circuit_button.text = "Circuit"
-	_circuit_button.pressed.connect(_toggle_circuit_overlay)
-	add_child(_circuit_button)
+	_info_button = Button.new()
+	_info_button.name = "InfoButton"
+	_info_button.text = "i"
+	_info_button.pressed.connect(_on_info_pressed)
+	add_child(_info_button)
+
+	_zoom_out_button = Button.new()
+	_zoom_out_button.name = "ZoomOutButton"
+	_zoom_out_button.text = "-"
+	_zoom_out_button.pressed.connect(_on_zoom_out_pressed)
+	add_child(_zoom_out_button)
+
+	_zoom_in_button = Button.new()
+	_zoom_in_button.name = "ZoomInButton"
+	_zoom_in_button.text = "+"
+	_zoom_in_button.pressed.connect(_on_zoom_in_pressed)
+	add_child(_zoom_in_button)
 
 	_last_button = Button.new()
 	_last_button.name = "LastLevelButton"
-	_last_button.text = "Last Level"
+	_last_button.text = "Prev"
 	_last_button.pressed.connect(_on_last_pressed)
 	add_child(_last_button)
 
 	_next_button = Button.new()
 	_next_button.name = "NextLevelButton"
-	_next_button.text = "Next Level"
-	_next_button.visible = true
+	_next_button.text = "Next"
+	_next_button.visible = false
 	_next_button.pressed.connect(_on_next_pressed)
 	add_child(_next_button)
 
@@ -197,6 +328,24 @@ func _create_hud() -> void:
 	_flow_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_flow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	add_child(_flow_label)
+
+	_info_panel = Panel.new()
+	_info_panel.name = "LatestInfoPanel"
+	_info_panel.visible = false
+	add_child(_info_panel)
+
+	_info_label = Label.new()
+	_info_label.name = "LatestInfoLabel"
+	_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_info_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_info_panel.add_child(_info_label)
+
+	_info_close_button = Button.new()
+	_info_close_button.name = "LatestInfoCloseButton"
+	_info_close_button.text = "x"
+	_info_close_button.pressed.connect(_on_info_close_pressed)
+	_info_panel.add_child(_info_close_button)
 	_layout_hud()
 
 
@@ -212,59 +361,341 @@ func _style_label(label: Label, font_size: int, color: Color) -> void:
 func _style_button(button: Button) -> void:
 	if not is_instance_valid(button):
 		return
-	button.custom_minimum_size = Vector2(116, 44)
+	button.custom_minimum_size = Vector2(44, 44)
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.add_theme_font_size_override("font_size", 20)
 
 
+func _style_compact_button(button: Button) -> void:
+	if not is_instance_valid(button):
+		return
+	button.custom_minimum_size = Vector2(44, 44)
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.add_theme_font_size_override("font_size", 23)
+
+
+func _set_control_rect(control: Control, pos: Vector2, rect_size: Vector2) -> void:
+	if not is_instance_valid(control):
+		return
+	control.anchor_left = 0.0
+	control.anchor_top = 0.0
+	control.anchor_right = 0.0
+	control.anchor_bottom = 0.0
+	control.position = Vector2(round(pos.x), round(pos.y))
+	control.size = Vector2(round(maxf(rect_size.x, 1.0)), round(maxf(rect_size.y, 1.0)))
+
+
 func _layout_hud() -> void:
 	var view_size := get_viewport_rect().size
-	var margin := 18.0
+	var view_rect := Rect2(Vector2.ZERO, view_size)
+	var safe_rect := _get_padded_safe_view_rect()
+	if safe_rect.size.x <= 1.0 or safe_rect.size.y <= 1.0:
+		safe_rect = view_rect.grow(-12.0)
+	var margin := _get_safe_edge_margin()
+	var landscape := _resolve_hud_landscape(safe_rect)
 	_style_button(_back_button)
 	_style_button(_reset_button)
 	_style_button(_hint_button)
-	_style_button(_circuit_button)
+	_style_compact_button(_info_button)
+	_style_compact_button(_zoom_out_button)
+	_style_compact_button(_zoom_in_button)
 	_style_button(_last_button)
 	_style_button(_next_button)
-	if is_instance_valid(_back_button):
-		_back_button.position = Vector2(margin, margin)
-		_back_button.size = Vector2(116, 44)
-	if is_instance_valid(_hint_button):
-		_hint_button.position = Vector2(margin, margin + 52.0)
-		_hint_button.size = Vector2(116, 44)
-	if is_instance_valid(_circuit_button):
-		_circuit_button.position = Vector2(margin, view_size.y - 58.0)
-		_circuit_button.size = Vector2(116, 40)
-		_circuit_button.text = "Circuit" if _circuit_overlay_enabled else "Circuit Off"
-	if is_instance_valid(_reset_button):
-		_reset_button.position = Vector2(view_size.x - 116.0 - margin, margin)
-		_reset_button.size = Vector2(116, 44)
-	if is_instance_valid(_last_button):
-		_last_button.custom_minimum_size = Vector2(142, 44)
-		_last_button.position = Vector2(view_size.x - 142.0 - margin, margin + 52.0)
-		_last_button.size = Vector2(142, 44)
-		_last_button.disabled = _level_number <= 1
-	if is_instance_valid(_next_button):
-		_next_button.custom_minimum_size = Vector2(142, 44)
-		_next_button.position = Vector2(view_size.x - 142.0 - margin, margin + 104.0)
-		_next_button.size = Vector2(142, 44)
-		_next_button.visible = true
-	if is_instance_valid(_level_label):
-		_level_label.position = Vector2(144, 14)
-		_level_label.size = Vector2(maxf(1.0, view_size.x - 288.0), 54)
-		_style_label(_level_label, 34, Color(0.92, 1.0, 0.96, 1.0))
 	if is_instance_valid(_status_label):
-		_status_label.position = Vector2(margin, 74)
-		_status_label.size = Vector2(maxf(1.0, view_size.x - margin * 2.0), 34)
-		_style_label(_status_label, 22, Color(0.74, 0.92, 0.90, 1.0))
-	if is_instance_valid(_flow_label):
-		_flow_label.position = Vector2(margin, view_size.y - 56.0)
-		_flow_label.size = Vector2(maxf(1.0, view_size.x - margin * 2.0), 36)
-		_style_label(_flow_label, 21, Color(1.0, 0.86, 0.36, 1.0))
+		_status_label.visible = false
+	if landscape:
+		_layout_hud_landscape(safe_rect, margin)
+	else:
+		_layout_hud_portrait(safe_rect, margin)
+	_layout_info_panel(safe_rect, landscape, margin)
+	_update_info_button_state()
 	if is_instance_valid(_board_renderer) and _board_renderer is Control:
 		var renderer := _board_renderer as Control
-		renderer.position = Vector2.ZERO
-		renderer.size = view_size
+		_set_control_rect(renderer, Vector2.ZERO, view_size)
+
+
+func _request_hud_relayout() -> void:
+	if _hud_relayout_queued:
+		return
+	_hud_relayout_queued = true
+	call_deferred("_apply_queued_hud_relayout")
+
+
+func _apply_queued_hud_relayout() -> void:
+	_hud_relayout_queued = false
+	_layout_hud()
+	queue_redraw()
+
+
+func _resolve_hud_landscape(safe_rect: Rect2) -> bool:
+	var ratio: float = safe_rect.size.x / maxf(safe_rect.size.y, 1.0)
+	if not _hud_orientation_initialized:
+		_hud_landscape = ratio > HUD_LANDSCAPE_INITIAL_RATIO
+		_hud_orientation_initialized = true
+	elif _hud_landscape:
+		if ratio < HUD_LANDSCAPE_EXIT_RATIO:
+			_hud_landscape = false
+	elif ratio > HUD_LANDSCAPE_ENTER_RATIO:
+		_hud_landscape = true
+	return _hud_landscape
+
+
+func _set_board_view_rect(pos: Vector2, rect_size: Vector2) -> void:
+	_board_view_rect = Rect2(
+		Vector2(round(pos.x), round(pos.y)),
+		Vector2(round(maxf(rect_size.x, 1.0)), round(maxf(rect_size.y, 1.0)))
+	)
+
+
+func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
+	var top_height: float = 58.0
+	var button_h: float = 44.0
+	var button_y: float = safe_rect.position.y + round((top_height - button_h) * 0.5)
+	_update_next_button_state()
+	var wide_controls: Array = [_hint_button, _info_button, _zoom_out_button, _zoom_in_button, _last_button, _next_button]
+	var wide_widths: Array = [84.0, 46.0, 46.0, 46.0, 88.0, 88.0]
+	var row_available_width: float = maxf(1.0, safe_rect.size.x - _portrait_button_row_side_buffer(safe_rect) * 2.0)
+	var use_two_rows: bool = _portrait_button_row_total_width(wide_controls, wide_widths, 12.0) > row_available_width
+	var bottom_height: float = 102.0 if use_two_rows else 58.0
+	if is_instance_valid(_back_button):
+		_set_control_rect(_back_button, safe_rect.position + Vector2(margin, round((top_height - button_h) * 0.5)), Vector2(92, button_h))
+	if is_instance_valid(_reset_button):
+		_set_control_rect(_reset_button, Vector2(safe_rect.position.x + safe_rect.size.x - margin - 92.0, button_y), Vector2(92, button_h))
+	if is_instance_valid(_level_label):
+		_set_control_rect(_level_label, safe_rect.position + Vector2(104.0 + margin, 6.0), Vector2(maxf(1.0, safe_rect.size.x - 208.0 - margin * 2.0), 46.0))
+		_style_label(_level_label, 28, Color(0.92, 1.0, 0.96, 1.0))
+	if use_two_rows:
+		_layout_portrait_button_row([_hint_button, _info_button, _zoom_out_button, _zoom_in_button], [84.0, 46.0, 46.0, 46.0], safe_rect.position.y + safe_rect.size.y - bottom_height + 5.0, safe_rect)
+		_layout_portrait_button_row([_last_button, _next_button], [88.0, 88.0], safe_rect.position.y + safe_rect.size.y - 48.0, safe_rect)
+	else:
+		_layout_portrait_button_row(wide_controls, wide_widths, safe_rect.position.y + safe_rect.size.y - bottom_height + round((bottom_height - button_h) * 0.5), safe_rect)
+	if is_instance_valid(_last_button):
+		_last_button.disabled = _level_number <= 1
+	if is_instance_valid(_next_button):
+		_update_next_button_state()
+	if is_instance_valid(_flow_label):
+		_set_control_rect(_flow_label, safe_rect.position + Vector2(margin, top_height - 4.0), Vector2(maxf(1.0, safe_rect.size.x - margin * 2.0), 28.0))
+		_style_label(_flow_label, 17, Color(1.0, 0.86, 0.36, 1.0))
+	var board_top: float = safe_rect.position.y + top_height + 26.0
+	var board_bottom: float = safe_rect.position.y + safe_rect.size.y - bottom_height - 8.0
+	_set_board_view_rect(Vector2(safe_rect.position.x + margin, board_top), Vector2(maxf(1.0, safe_rect.size.x - margin * 2.0), maxf(1.0, board_bottom - board_top)))
+
+
+func _portrait_button_row_total_width(controls: Array, widths: Array, gap: float) -> float:
+	var total_width: float = 0.0
+	var visible_count := 0
+	for index in range(controls.size()):
+		var candidate: Control = controls[index] as Control
+		if not is_instance_valid(candidate) or not candidate.visible:
+			continue
+		visible_count += 1
+		total_width += maxf(float(widths[index]), _minimum_portrait_button_width(candidate))
+	if visible_count <= 0:
+		return 0.0
+	return total_width + gap * float(visible_count - 1)
+
+
+func _portrait_button_width_total(widths: Array, gap: float) -> float:
+	if widths.is_empty():
+		return 0.0
+	var total_width: float = 0.0
+	for width_value in widths:
+		total_width += float(width_value)
+	return total_width + gap * float(widths.size() - 1)
+
+
+func _portrait_button_row_side_buffer(safe_rect: Rect2) -> float:
+	return minf(24.0, maxf(12.0, safe_rect.size.x * 0.035))
+
+
+func _minimum_portrait_button_width(control: Control) -> float:
+	var button := control as Button
+	if not is_instance_valid(button):
+		return 34.0
+	var text_length := button.text.length()
+	if text_length >= 4:
+		return 82.0
+	if text_length >= 3:
+		return 74.0
+	if text_length >= 2:
+		return 52.0
+	return 42.0
+
+
+func _layout_portrait_button_row(controls: Array, widths: Array, row_y: float, safe_rect: Rect2) -> void:
+	var visible_controls: Array = []
+	var visible_widths: Array = []
+	for index in range(controls.size()):
+		var candidate: Control = controls[index] as Control
+		if not is_instance_valid(candidate) or not candidate.visible:
+			continue
+		visible_controls.append(candidate)
+		visible_widths.append(maxf(float(widths[index]), _minimum_portrait_button_width(candidate)))
+	if visible_controls.is_empty():
+		return
+	var side_buffer: float = _portrait_button_row_side_buffer(safe_rect)
+	var row_width: float = maxf(1.0, safe_rect.size.x - side_buffer * 2.0)
+	var gap: float = 12.0
+	var total_width: float = _portrait_button_width_total(visible_widths, gap)
+	if total_width > row_width:
+		gap = 8.0
+		total_width = _portrait_button_width_total(visible_widths, gap)
+	if total_width > row_width:
+		var width_sum: float = 0.0
+		for width_value in visible_widths:
+			width_sum += float(width_value)
+		var available_width: float = maxf(1.0, row_width - gap * float(visible_widths.size() - 1))
+		var scale: float = available_width / maxf(width_sum, 1.0)
+		for shrink_index in range(visible_widths.size()):
+			var shrink_control: Control = visible_controls[shrink_index] as Control
+			visible_widths[shrink_index] = maxf(_minimum_portrait_button_width(shrink_control), floor(float(visible_widths[shrink_index]) * scale))
+		total_width = _portrait_button_width_total(visible_widths, gap)
+	if total_width > row_width:
+		var excess: float = total_width - row_width
+		for reduce_index in range(visible_widths.size()):
+			if excess <= 0.0:
+				break
+			var current_width: float = float(visible_widths[reduce_index])
+			var reduce_control: Control = visible_controls[reduce_index] as Control
+			var reduction: float = minf(excess, maxf(0.0, current_width - _minimum_portrait_button_width(reduce_control)))
+			visible_widths[reduce_index] = current_width - reduction
+			excess -= reduction
+		total_width = _portrait_button_width_total(visible_widths, gap)
+	var row_x: float = safe_rect.position.x + side_buffer + round(maxf(0.0, (row_width - total_width) * 0.5))
+	for index in range(visible_controls.size()):
+		var control: Control = visible_controls[index] as Control
+		var width: float = float(visible_widths[index])
+		control.custom_minimum_size = Vector2(width, 44.0)
+		_set_control_rect(control, Vector2(row_x, row_y), Vector2(width, 44.0))
+		row_x += width + gap
+
+
+func _layout_hud_landscape(safe_rect: Rect2, margin: float) -> void:
+	var top_height: float = 54.0
+	var rail_width: float = 58.0
+	var button_h: float = 44.0
+	if is_instance_valid(_back_button):
+		_set_control_rect(_back_button, safe_rect.position + Vector2(margin, 5.0), Vector2(88, button_h))
+	if is_instance_valid(_level_label):
+		_set_control_rect(_level_label, safe_rect.position + Vector2(98.0 + margin, 4.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 46.0))
+		_style_label(_level_label, 26, Color(0.92, 1.0, 0.96, 1.0))
+	if is_instance_valid(_flow_label):
+		_set_control_rect(_flow_label, safe_rect.position + Vector2(98.0 + margin, 31.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 20.0))
+		_style_label(_flow_label, 14, Color(1.0, 0.86, 0.36, 1.0))
+	_update_next_button_state()
+	var controls: Array = [_reset_button, _hint_button, _info_button, _zoom_in_button, _zoom_out_button, _last_button, _next_button]
+	var rail_x: float = safe_rect.position.x + safe_rect.size.x - rail_width + 7.0
+	var rail_y: float = safe_rect.position.y + top_height + 4.0
+	var gap: float = 6.0
+	for control_value in controls:
+		var control := control_value as Control
+		if not is_instance_valid(control) or not control.visible:
+			continue
+		var width: float = 44.0
+		if control == _reset_button or control == _hint_button:
+			width = 50.0
+		control.custom_minimum_size = Vector2(width, button_h)
+		_set_control_rect(control, Vector2(rail_x, rail_y), Vector2(width, button_h))
+		rail_y += button_h + gap
+	if is_instance_valid(_last_button):
+		_last_button.disabled = _level_number <= 1
+	if is_instance_valid(_next_button):
+		_update_next_button_state()
+	_set_board_view_rect(
+		safe_rect.position + Vector2(margin, top_height),
+		Vector2(maxf(1.0, safe_rect.size.x - rail_width - margin * 2.0), maxf(1.0, safe_rect.size.y - top_height - margin))
+	)
+
+
+func _layout_info_panel(safe_rect: Rect2, landscape: bool, margin: float) -> void:
+	if not is_instance_valid(_info_panel):
+		return
+	var panel_width: float = minf(360.0, maxf(220.0, safe_rect.size.x - margin * 2.0))
+	if landscape:
+		panel_width = minf(330.0, maxf(220.0, safe_rect.size.x * 0.34))
+	var panel_height: float = 116.0
+	var panel_pos: Vector2 = Vector2(
+		safe_rect.position.x + safe_rect.size.x - panel_width - margin,
+		safe_rect.position.y + 58.0
+	)
+	if landscape:
+		panel_pos = Vector2(safe_rect.position.x + safe_rect.size.x - panel_width - 64.0, safe_rect.position.y + margin)
+	_set_control_rect(_info_panel, panel_pos, Vector2(panel_width, panel_height))
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.025, 0.055, 0.065, 0.96)
+	panel_style.border_color = Color(0.34, 0.92, 0.86, 0.72)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(8)
+	_info_panel.add_theme_stylebox_override("panel", panel_style)
+	if is_instance_valid(_info_close_button):
+		_style_compact_button(_info_close_button)
+		_set_control_rect(_info_close_button, Vector2(panel_width - 40.0, 8.0), Vector2(32, 32))
+	if is_instance_valid(_info_label):
+		_set_control_rect(_info_label, Vector2(14.0, 12.0), Vector2(maxf(1.0, panel_width - 60.0), maxf(1.0, panel_height - 24.0)))
+		_style_label(_info_label, 17, Color(0.88, 1.0, 0.96, 1.0))
+
+
+func _get_safe_edge_margin() -> float:
+	var view_size: Vector2 = get_viewport_rect().size
+	var short_edge: float = minf(view_size.x, view_size.y)
+	if short_edge < 520.0:
+		return SAFE_EDGE_MARGIN_TINY
+	if short_edge < 760.0:
+		return SAFE_EDGE_MARGIN_COMPACT
+	return SAFE_EDGE_MARGIN_DEFAULT
+
+
+func _apply_mobile_safe_fallback(view_rect: Rect2, safe_rect: Rect2) -> Rect2:
+	if not Global.is_mobile_platform:
+		return safe_rect
+	var short_edge: float = minf(view_rect.size.x, view_rect.size.y)
+	var portrait: bool = view_rect.size.y >= view_rect.size.x
+	var min_top: float = clampf(short_edge * 0.09, MOBILE_SAFE_TOP_FALLBACK_MIN, MOBILE_SAFE_TOP_FALLBACK_MAX)
+	var side_min: float = MOBILE_SAFE_SIDE_FALLBACK_PORTRAIT_MIN if portrait else MOBILE_SAFE_SIDE_FALLBACK_LANDSCAPE_MIN
+	var side_max: float = MOBILE_SAFE_SIDE_FALLBACK_PORTRAIT_MAX if portrait else MOBILE_SAFE_SIDE_FALLBACK_LANDSCAPE_MAX
+	var side_fraction: float = 0.035 if portrait else 0.08
+	var min_side: float = clampf(short_edge * side_fraction, side_min, side_max)
+	var min_bottom: float = clampf(short_edge * 0.035, MOBILE_SAFE_BOTTOM_FALLBACK_MIN, MOBILE_SAFE_BOTTOM_FALLBACK_MAX)
+	var safe_left: float = maxf(safe_rect.position.x, view_rect.position.x + min_side)
+	var safe_top: float = maxf(safe_rect.position.y, view_rect.position.y + min_top)
+	var safe_right: float = minf(safe_rect.position.x + safe_rect.size.x, view_rect.position.x + view_rect.size.x - min_side)
+	var safe_bottom: float = minf(safe_rect.position.y + safe_rect.size.y, view_rect.position.y + view_rect.size.y - min_bottom)
+	if safe_right - safe_left <= 1.0 or safe_bottom - safe_top <= 1.0:
+		return safe_rect
+	return Rect2(Vector2(safe_left, safe_top), Vector2(safe_right - safe_left, safe_bottom - safe_top))
+
+
+func _get_safe_view_rect() -> Rect2:
+	var view_rect := get_viewport_rect()
+	if not Global.is_mobile_platform:
+		return view_rect
+	var window_size_i := DisplayServer.window_get_size()
+	var window_size := Vector2(window_size_i)
+	if window_size.x <= 0.0 or window_size.y <= 0.0:
+		return _apply_mobile_safe_fallback(view_rect, view_rect)
+	var safe_area_i := DisplayServer.get_display_safe_area()
+	var safe_area := Rect2(Vector2(safe_area_i.position), Vector2(safe_area_i.size))
+	if safe_area.size.x <= 0.0 or safe_area.size.y <= 0.0:
+		return _apply_mobile_safe_fallback(view_rect, view_rect)
+	var scale := Vector2(view_rect.size.x / window_size.x, view_rect.size.y / window_size.y)
+	var safe_pos := view_rect.position + safe_area.position * scale
+	var safe_size := safe_area.size * scale
+	var safe_left := clampf(safe_pos.x, view_rect.position.x, view_rect.position.x + view_rect.size.x)
+	var safe_top := clampf(safe_pos.y, view_rect.position.y, view_rect.position.y + view_rect.size.y)
+	var safe_right := clampf(safe_pos.x + safe_size.x, view_rect.position.x, view_rect.position.x + view_rect.size.x)
+	var safe_bottom := clampf(safe_pos.y + safe_size.y, view_rect.position.y, view_rect.position.y + view_rect.size.y)
+	if safe_right - safe_left <= 1.0 or safe_bottom - safe_top <= 1.0:
+		return _apply_mobile_safe_fallback(view_rect, view_rect)
+	return _apply_mobile_safe_fallback(view_rect, Rect2(Vector2(safe_left, safe_top), Vector2(safe_right - safe_left, safe_bottom - safe_top)))
+
+
+func _get_padded_safe_view_rect(extra_margin: float = 0.0) -> Rect2:
+	var safe_rect := _get_safe_view_rect()
+	var margin: float = maxf(_get_safe_edge_margin() + extra_margin, 0.0)
+	var padded := safe_rect.grow(-margin)
+	if padded.size.x <= 1.0 or padded.size.y <= 1.0:
+		return safe_rect
+	return padded
 
 
 func _try_create_board_renderer() -> void:
@@ -287,12 +718,26 @@ func _try_create_board_renderer() -> void:
 	_board_renderer_has_state = false
 
 
-func _load_level(level_number: int) -> void:
+func _load_level(level_number: int, record_progress: bool = true) -> void:
+	_save_level_high_velocity_if_dirty()
 	_level_number = level_number
+	Global.active_scenario_id = str("puzzle_level_", _level_number)
+	if record_progress:
+		Global.cellular_puzzle_current_level = maxi(1, _level_number)
+		if Global.cellular_puzzle_current_level > Global.cellular_puzzle_highest_level:
+			Global.cellular_puzzle_highest_level = Global.cellular_puzzle_current_level
+		if Global.has_method("save_cellular_progress"):
+			Global.save_cellular_progress()
+	_level_high_velocity = 0
+	if Global.has_method("get_cellular_puzzle_level_high_velocity"):
+		_level_high_velocity = int(Global.get_cellular_puzzle_level_high_velocity(_level_number))
+	_level_high_velocity_dirty = false
 	_cells.clear()
 	_needs.clear()
 	_positions.clear()
 	_produced_by_cell.clear()
+	_cell_kind_by_id.clear()
+	_rocks.clear()
 	_solution_positions.clear()
 	_sim_snapshot.clear()
 	_cell_state_by_id.clear()
@@ -304,16 +749,23 @@ func _load_level(level_number: int) -> void:
 	_hint_pair.clear()
 	_hint_cursor = 0
 	_hint_text = ""
+	_recent_hint_keys.clear()
 	_pip_angle_by_key.clear()
 	_pip_offset_by_key.clear()
+	_white_myco_count = 0
+	_red_myco_count = 0
 	_board_cols = BOARD_SIZE
 	_board_rows = BOARD_SIZE
 	_solved = false
+	_reset_camera_state()
+	_latest_report = ""
+	_latest_report_dirty = false
 	var cell_count := mini(RESOURCE_LETTERS.size(), _level_number + 3)
 	for index in range(cell_count):
 		var resource := str(RESOURCE_LETTERS[index])
 		_cells.append(resource)
 		_produced_by_cell[resource] = resource
+		_cell_kind_by_id[resource] = CELL_KIND_STANDARD
 	for index in range(_cells.size()):
 		var resource := _cells[index]
 		var needed: Array[String] = []
@@ -327,6 +779,8 @@ func _load_level(level_number: int) -> void:
 	for index in range(_cells.size()):
 		_positions[_cells[index]] = starts[index]
 	_try_load_csharp_level()
+	if not _using_csharp_sim:
+		_apply_saved_puzzle_state_to_visual_model()
 	_load_solution_layout_for_level()
 	_update_level_text()
 
@@ -336,9 +790,12 @@ func _try_load_csharp_level() -> void:
 		return
 	var fixture_json := _load_fixture_json_for_level()
 	if not fixture_json.is_empty():
+		fixture_json = _apply_saved_puzzle_state_to_fixture_json(fixture_json)
 		_apply_fixture_document_to_visual_model(fixture_json)
 	if fixture_json.is_empty():
 		fixture_json = JSON.stringify(_build_current_fixture_document())
+		fixture_json = _apply_saved_puzzle_state_to_fixture_json(fixture_json)
+		_apply_fixture_document_to_visual_model(fixture_json)
 	var loaded_value: Variant = _sim_bridge.call("load_fixture_json", fixture_json)
 	_using_csharp_sim = bool(loaded_value)
 	if not _using_csharp_sim:
@@ -352,6 +809,10 @@ func _try_load_csharp_level() -> void:
 
 
 func _load_fixture_json_for_level() -> String:
+	if not _fixture_override_path.is_empty() and FileAccess.file_exists(_fixture_override_path):
+		var override_file := FileAccess.open(_fixture_override_path, FileAccess.READ)
+		if override_file != null:
+			return override_file.get_as_text()
 	var level_path := "res://levels/puzzle/level-%03d.json" % _level_number
 	if FileAccess.file_exists(level_path):
 		var file := FileAccess.open(level_path, FileAccess.READ)
@@ -363,6 +824,363 @@ func _load_fixture_json_for_level() -> String:
 		if file != null:
 			return file.get_as_text()
 	return ""
+
+
+func _puzzle_state_section(level_number: int) -> String:
+	return "level_%03d" % maxi(1, level_number)
+
+
+func _load_saved_puzzle_state_document(level_number: int) -> Dictionary:
+	if not _fixture_override_path.is_empty():
+		return {}
+	var cfg := ConfigFile.new()
+	if cfg.load(PUZZLE_STATE_SAVE_PATH) != OK:
+		return {}
+	var section := _puzzle_state_section(level_number)
+	var state_json := str(cfg.get_value(section, "state_json", ""))
+	if state_json.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(state_json)
+	if parsed is Dictionary:
+		return parsed as Dictionary
+	return {}
+
+
+func _save_puzzle_level_state() -> void:
+	if _fixture_override_path != "":
+		_save_level_high_velocity_if_dirty()
+		return
+	if _cells.is_empty():
+		_save_level_high_velocity_if_dirty()
+		return
+	var cfg := ConfigFile.new()
+	cfg.load(PUZZLE_STATE_SAVE_PATH)
+	cfg.set_value(_puzzle_state_section(_level_number), "state_json", JSON.stringify(_build_puzzle_level_state_document()))
+	var err := cfg.save(PUZZLE_STATE_SAVE_PATH)
+	if err != OK:
+		push_warning("Cellular puzzle state save failed: %s" % str(err))
+	_save_level_high_velocity_if_dirty()
+
+
+func _clear_saved_puzzle_level_state(level_number: int) -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(PUZZLE_STATE_SAVE_PATH) != OK:
+		return
+	var section := _puzzle_state_section(level_number)
+	if cfg.has_section(section):
+		cfg.erase_section(section)
+		cfg.save(PUZZLE_STATE_SAVE_PATH)
+
+
+func _build_puzzle_level_state_document() -> Dictionary:
+	var cell_docs: Array = []
+	for cell in _cells:
+		var tile := _get_cell_tile(cell)
+		var needs: Array = []
+		var needs_value: Array = _needs.get(cell, [])
+		for need in needs_value:
+			needs.append(str(need))
+		cell_docs.append({
+			"id": cell,
+			"x": tile.x,
+			"y": tile.y,
+			"kind": _cell_kind(cell),
+			"produced": _cell_produced_resource(cell),
+			"needs": needs
+		})
+	return {
+		"version": PUZZLE_STATE_VERSION,
+		"level": _level_number,
+		"width": _board_cols,
+		"height": _board_rows,
+		"cells": cell_docs
+	}
+
+
+func _apply_saved_puzzle_state_to_fixture_json(fixture_json: String) -> String:
+	var state := _load_saved_puzzle_state_document(_level_number)
+	if state.is_empty():
+		return fixture_json
+	var parsed: Variant = JSON.parse_string(fixture_json)
+	if not parsed is Dictionary:
+		return fixture_json
+	var fixture: Dictionary = parsed as Dictionary
+	var grid_info := _fixture_grid_info(fixture)
+	var rocks_value: Variant = grid_info.get("rocks", {})
+	var rocks: Dictionary = {}
+	if rocks_value is Dictionary:
+		rocks = rocks_value as Dictionary
+	var saved_cell_by_id := _build_saved_cell_map(state, int(grid_info.get("width", BOARD_SIZE)), int(grid_info.get("height", BOARD_SIZE)), rocks)
+	if saved_cell_by_id.is_empty():
+		return fixture_json
+	var cells_value: Variant = fixture.get("cells", [])
+	if not cells_value is Array:
+		return fixture_json
+	var cells: Array = cells_value as Array
+	var fixture_cell_ids: Dictionary = {}
+	for cell_value in cells:
+		if not cell_value is Dictionary:
+			continue
+		var cell_doc := cell_value as Dictionary
+		var id := str(cell_doc.get("id", ""))
+		if not id.is_empty():
+			fixture_cell_ids[id] = true
+	for id in fixture_cell_ids.keys():
+		if not saved_cell_by_id.has(id):
+			return fixture_json
+	if saved_cell_by_id.size() < fixture_cell_ids.size():
+		return fixture_json
+	var remaining := saved_cell_by_id.duplicate()
+	for index in range(cells.size()):
+		var cell_value: Variant = cells[index]
+		if not cell_value is Dictionary:
+			continue
+		var cell_doc := cell_value as Dictionary
+		var id := str(cell_doc.get("id", ""))
+		if not saved_cell_by_id.has(id):
+			continue
+		var saved_cell := saved_cell_by_id.get(id, {}) as Dictionary
+		cell_doc["x"] = int(saved_cell.get("x", cell_doc.get("x", 0)))
+		cell_doc["y"] = int(saved_cell.get("y", cell_doc.get("y", 0)))
+		cells[index] = cell_doc
+		remaining.erase(id)
+	for id in remaining.keys():
+		var saved_cell := remaining.get(id, {}) as Dictionary
+		var kind := str(saved_cell.get("kind", CELL_KIND_STANDARD))
+		if not _is_myco_kind(kind):
+			return fixture_json
+		cells.append(_build_saved_myco_cell_doc(saved_cell))
+	fixture["cells"] = cells
+	_ensure_fixture_resources_for_saved_cells(fixture, saved_cell_by_id)
+	_normalize_fixture_integer_fields(fixture)
+	return JSON.stringify(fixture)
+
+
+func _normalize_fixture_integer_fields(fixture: Dictionary) -> void:
+	var grid_value: Variant = fixture.get("grid", {})
+	if grid_value is Dictionary:
+		var grid := grid_value as Dictionary
+		_set_int_field(grid, "width")
+		_set_int_field(grid, "height")
+		var rocks_value: Variant = grid.get("rocks", [])
+		if rocks_value is Array:
+			for rock_value in rocks_value:
+				if rock_value is Dictionary:
+					_normalize_position_doc(rock_value as Dictionary)
+	var cells_value: Variant = fixture.get("cells", [])
+	if cells_value is Array:
+		for cell_value in cells_value:
+			if not cell_value is Dictionary:
+				continue
+			var cell_doc := cell_value as Dictionary
+			_normalize_position_doc(cell_doc)
+			var slots_value: Variant = cell_doc.get("slots", [])
+			if slots_value is Array:
+				for slot_value in slots_value:
+					if slot_value is Dictionary:
+						var slot_doc := slot_value as Dictionary
+						_set_int_field(slot_doc, "quantity")
+						_set_int_field(slot_doc, "capacity")
+			var sources_value: Variant = cell_doc.get("sources", [])
+			if sources_value is Array:
+				for source_value in sources_value:
+					if source_value is Dictionary:
+						var source_doc := source_value as Dictionary
+						_set_int_field(source_doc, "quantityPerTick")
+						_set_int_field(source_doc, "intervalTicks")
+	var engine_value: Variant = fixture.get("engine", {})
+	if engine_value is Dictionary:
+		var engine_doc := engine_value as Dictionary
+		var engine_int_fields: Array[String] = [
+			"glowTtlTicks",
+			"winRecentFlowWindowTicks",
+			"swapRoundsPerTick",
+			"maxSwapQuantityPerEdge",
+			"needDesiredQuantity",
+			"needOfferReserve"
+		]
+		for field in engine_int_fields:
+			_set_int_field(engine_doc, field)
+	var win_value: Variant = fixture.get("win", {})
+	if win_value is Dictionary:
+		_set_int_field(win_value as Dictionary, "durationTicks")
+
+
+func _normalize_position_doc(doc: Dictionary) -> void:
+	_set_int_field(doc, "x")
+	_set_int_field(doc, "y")
+
+
+func _set_int_field(doc: Dictionary, field: String) -> void:
+	if doc.has(field):
+		doc[field] = int(doc.get(field, 0))
+
+
+func _apply_saved_puzzle_state_to_visual_model() -> bool:
+	var state := _load_saved_puzzle_state_document(_level_number)
+	if state.is_empty():
+		return false
+	var saved_cell_by_id := _build_saved_cell_map(state, _board_cols, _board_rows, _rocks)
+	if saved_cell_by_id.is_empty():
+		return false
+	for cell in _cells:
+		if not saved_cell_by_id.has(cell):
+			return false
+	for id in saved_cell_by_id.keys():
+		var saved_cell := saved_cell_by_id.get(id, {}) as Dictionary
+		var kind := str(saved_cell.get("kind", CELL_KIND_STANDARD))
+		if not _positions.has(id) and not _is_myco_kind(kind):
+			return false
+	for id in saved_cell_by_id.keys():
+		var saved_cell := saved_cell_by_id.get(id, {}) as Dictionary
+		var kind := str(saved_cell.get("kind", CELL_KIND_STANDARD))
+		if not _positions.has(id):
+			_cells.append(str(id))
+		_cell_kind_by_id[id] = kind
+		if _is_myco_kind(kind):
+			_produced_by_cell[id] = ""
+		else:
+			_produced_by_cell[id] = str(saved_cell.get("produced", id))
+		_needs[id] = _saved_cell_needs(saved_cell)
+		_positions[id] = Vector2i(int(saved_cell.get("x", 0)), int(saved_cell.get("y", 0)))
+	_refresh_myco_id_counters()
+	_board_renderer_full_sync_needed = true
+	return true
+
+
+func _fixture_grid_info(fixture: Dictionary) -> Dictionary:
+	var width := BOARD_SIZE
+	var height := BOARD_SIZE
+	var rocks: Dictionary = {}
+	var grid_value: Variant = fixture.get("grid", {})
+	if grid_value is Dictionary:
+		var grid := grid_value as Dictionary
+		width = maxi(1, int(grid.get("width", BOARD_SIZE)))
+		height = maxi(1, int(grid.get("height", BOARD_SIZE)))
+		var rocks_value: Variant = grid.get("rocks", [])
+		if rocks_value is Array:
+			for rock_value in rocks_value:
+				if not rock_value is Dictionary:
+					continue
+				var rock := rock_value as Dictionary
+				rocks[_tile_key(Vector2i(int(rock.get("x", 0)), int(rock.get("y", 0))))] = true
+	return {"width": width, "height": height, "rocks": rocks}
+
+
+func _build_saved_cell_map(state: Dictionary, width: int, height: int, rocks: Dictionary) -> Dictionary:
+	if int(state.get("level", _level_number)) != _level_number:
+		return {}
+	if int(state.get("width", width)) != width or int(state.get("height", height)) != height:
+		return {}
+	var cells_value: Variant = state.get("cells", [])
+	if not cells_value is Array:
+		return {}
+	var saved_cells: Array = cells_value as Array
+	var result: Dictionary = {}
+	var used_tiles: Dictionary = {}
+	for cell_value in saved_cells:
+		if not cell_value is Dictionary:
+			return {}
+		var cell_doc := cell_value as Dictionary
+		var id := str(cell_doc.get("id", ""))
+		if id.is_empty() or result.has(id):
+			return {}
+		var tile := Vector2i(int(cell_doc.get("x", -1)), int(cell_doc.get("y", -1)))
+		if tile.x < 0 or tile.y < 0 or tile.x >= width or tile.y >= height:
+			return {}
+		var key := _tile_key(tile)
+		if rocks.has(key) or used_tiles.has(key):
+			return {}
+		used_tiles[key] = true
+		result[id] = cell_doc
+	return result
+
+
+func _build_saved_myco_cell_doc(saved_cell: Dictionary) -> Dictionary:
+	var slots: Array = []
+	for need in _saved_cell_needs(saved_cell):
+		slots.append({"resource": need, "role": "Need", "quantity": 250, "capacity": 500})
+	return {
+		"id": str(saved_cell.get("id", "")),
+		"kind": str(saved_cell.get("kind", CELL_KIND_RED_MYCO)),
+		"x": int(saved_cell.get("x", 0)),
+		"y": int(saved_cell.get("y", 0)),
+		"slots": slots
+	}
+
+
+func _saved_cell_needs(saved_cell: Dictionary) -> Array[String]:
+	var needs: Array[String] = []
+	var needs_value: Variant = saved_cell.get("needs", [])
+	if needs_value is Array:
+		for need in needs_value:
+			var resource := str(need)
+			if not resource.is_empty() and not needs.has(resource):
+				needs.append(resource)
+	return needs
+
+
+func _ensure_fixture_resources_for_saved_cells(fixture: Dictionary, saved_cell_by_id: Dictionary) -> void:
+	var resources: Array = []
+	var seen: Dictionary = {}
+	var resources_value: Variant = fixture.get("resources", [])
+	if resources_value is Array:
+		for resource_value in resources_value:
+			var resource := str(resource_value)
+			if not resource.is_empty() and not seen.has(resource):
+				seen[resource] = true
+				resources.append(resource)
+	for saved_value in saved_cell_by_id.values():
+		if not saved_value is Dictionary:
+			continue
+		var saved_cell := saved_value as Dictionary
+		var produced := str(saved_cell.get("produced", ""))
+		if not produced.is_empty() and not seen.has(produced):
+			seen[produced] = true
+			resources.append(produced)
+		for need in _saved_cell_needs(saved_cell):
+			if not seen.has(need):
+				seen[need] = true
+				resources.append(need)
+	fixture["resources"] = resources
+
+
+func _refresh_myco_id_counters() -> void:
+	_white_myco_count = 0
+	_red_myco_count = 0
+	for cell in _cells:
+		if cell.begins_with("white-myco-"):
+			_white_myco_count = maxi(_white_myco_count, int(cell.trim_prefix("white-myco-")))
+		elif cell.begins_with("red-myco-"):
+			_red_myco_count = maxi(_red_myco_count, int(cell.trim_prefix("red-myco-")))
+
+
+func _maybe_update_level_high_velocity() -> void:
+	if not _using_csharp_sim:
+		return
+	var velocity := _swap_velocity_from_snapshot()
+	if velocity <= _level_high_velocity:
+		return
+	_level_high_velocity = velocity
+	_level_high_velocity_dirty = true
+
+
+func _save_level_high_velocity_if_dirty() -> void:
+	if not _level_high_velocity_dirty:
+		return
+	if Global.has_method("record_cellular_puzzle_level_high_velocity"):
+		Global.record_cellular_puzzle_level_high_velocity(_level_number, _level_high_velocity)
+	_level_high_velocity_dirty = false
+
+
+func _save_current_level_progress() -> void:
+	if _solved:
+		_save_level_high_velocity_if_dirty()
+		return
+	Global.cellular_puzzle_current_level = clampi(maxi(1, _level_number), 1, maxi(1, Global.cellular_puzzle_highest_level))
+	if Global.has_method("save_cellular_progress"):
+		Global.save_cellular_progress()
+	_save_level_high_velocity_if_dirty()
 
 
 func _load_solution_layout_for_level() -> void:
@@ -405,6 +1223,14 @@ func _apply_fixture_document_to_visual_model(fixture_json: String) -> void:
 		var grid := grid_value as Dictionary
 		_board_cols = maxi(1, int(grid.get("width", BOARD_SIZE)))
 		_board_rows = maxi(1, int(grid.get("height", BOARD_SIZE)))
+		_rocks.clear()
+		var rocks_value: Variant = grid.get("rocks", [])
+		if rocks_value is Array:
+			for rock_value in rocks_value:
+				if not rock_value is Dictionary:
+					continue
+				var rock := rock_value as Dictionary
+				_rocks[_tile_key(Vector2i(int(rock.get("x", 0)), int(rock.get("y", 0))))] = true
 	var cells_value: Variant = fixture.get("cells", [])
 	if not cells_value is Array:
 		return
@@ -412,6 +1238,7 @@ func _apply_fixture_document_to_visual_model(fixture_json: String) -> void:
 	_needs.clear()
 	_positions.clear()
 	_produced_by_cell.clear()
+	_cell_kind_by_id.clear()
 	for cell_value in cells_value:
 		if not cell_value is Dictionary:
 			continue
@@ -419,7 +1246,9 @@ func _apply_fixture_document_to_visual_model(fixture_json: String) -> void:
 		var id := str(cell_doc.get("id", ""))
 		if id.is_empty():
 			continue
+		var kind := str(cell_doc.get("kind", CELL_KIND_STANDARD))
 		_cells.append(id)
+		_cell_kind_by_id[id] = kind
 		_positions[id] = Vector2i(int(cell_doc.get("x", 0)), int(cell_doc.get("y", 0)))
 		var needs: Array[String] = []
 		var slots_value: Variant = cell_doc.get("slots", [])
@@ -434,7 +1263,9 @@ func _apply_fixture_document_to_visual_model(fixture_json: String) -> void:
 					_produced_by_cell[id] = resource
 				elif role == "Need":
 					needs.append(resource)
-		if not _produced_by_cell.has(id):
+		if _is_myco_kind(kind):
+			_produced_by_cell[id] = ""
+		elif not _produced_by_cell.has(id):
 			_produced_by_cell[id] = id
 		_needs[id] = needs
 
@@ -487,8 +1318,20 @@ func _refresh_sim_snapshot() -> void:
 	_sim_snapshot = snapshot_value
 	_board_cols = maxi(1, int(_sim_snapshot.get("width", _board_cols)))
 	_board_rows = maxi(1, int(_sim_snapshot.get("height", _board_rows)))
+	_rocks.clear()
+	var rocks_value: Variant = _sim_snapshot.get("rocks", [])
+	if rocks_value is Array:
+		for rock_value in rocks_value:
+			if not rock_value is Dictionary:
+				continue
+			var rock := rock_value as Dictionary
+			_rocks[_tile_key(Vector2i(int(rock.get("x", 0)), int(rock.get("y", 0))))] = true
 	_cell_state_by_id.clear()
 	_positions.clear()
+	_cells.clear()
+	_needs.clear()
+	_produced_by_cell.clear()
+	_cell_kind_by_id.clear()
 	var cells_value: Variant = _sim_snapshot.get("cells", [])
 	if cells_value is Array:
 		for cell_value in cells_value:
@@ -498,13 +1341,157 @@ func _refresh_sim_snapshot() -> void:
 			var id := str(cell_data.get("id", ""))
 			if id.is_empty():
 				continue
+			var kind := str(cell_data.get("kind", CELL_KIND_STANDARD))
+			_cells.append(id)
 			_cell_state_by_id[id] = cell_data
+			_cell_kind_by_id[id] = kind
 			_positions[id] = Vector2i(int(cell_data.get("x", 0)), int(cell_data.get("y", 0)))
 			var produced := str(cell_data.get("producedResource", ""))
-			if not produced.is_empty():
+			if _is_myco_kind(kind):
+				_produced_by_cell[id] = ""
+			elif not produced.is_empty():
 				_produced_by_cell[id] = produced
+			else:
+				_produced_by_cell[id] = id
+			var needs: Array[String] = []
+			var slots_value: Variant = cell_data.get("slots", [])
+			if slots_value is Array:
+				for slot_value in slots_value:
+					if not slot_value is Dictionary:
+						continue
+					var slot_doc := slot_value as Dictionary
+					if str(slot_doc.get("role", "")) == "Need":
+						needs.append(str(slot_doc.get("resource", "")))
+			_needs[id] = needs
 	_solved = bool(_sim_snapshot.get("won", false))
+	_refresh_myco_id_counters()
+	_maybe_update_level_high_velocity()
 	_board_renderer_full_sync_needed = true
+
+
+func _spawn_myco(kind: String) -> void:
+	if not _using_csharp_sim or not is_instance_valid(_sim_bridge) or not _sim_bridge.has_method("add_myco_cell"):
+		_sim_status_message = "Myco requires the C# sim bridge"
+		_hint_text = ""
+		_update_level_text()
+		queue_redraw()
+		return
+	var resources := _collect_myco_resource_names()
+	if resources.is_empty():
+		_sim_status_message = "No resources available for myco"
+		_hint_text = ""
+		_update_level_text()
+		queue_redraw()
+		return
+	var tile := _random_empty_tile()
+	if tile == Vector2i(-1, -1):
+		_sim_status_message = "No empty tile for myco"
+		_hint_text = ""
+		_update_level_text()
+		queue_redraw()
+		return
+	var needs := _choose_myco_needs(resources)
+	var id := _next_myco_id(kind)
+	var needs_arg := Array()
+	for need in needs:
+		needs_arg.append(str(need))
+	var added_value: Variant = _sim_bridge.call("add_myco_cell", kind, id, tile.x, tile.y, needs_arg)
+	if not bool(added_value):
+		var error_value: Variant = _sim_bridge.call("get_last_error")
+		_sim_status_message = str(error_value)
+		_hint_text = ""
+		_update_level_text()
+		queue_redraw()
+		return
+	_clear_hint()
+	_sim_tick_accum = 0.0
+	_refresh_sim_snapshot()
+	_sim_status_message = str("Added ", _myco_display_name(kind))
+	_board_renderer_full_sync_needed = true
+	_save_puzzle_level_state()
+	_update_level_text()
+	queue_redraw()
+
+
+func _collect_myco_resource_names() -> Array[String]:
+	var resources: Array[String] = []
+	var seen := {}
+	var cells_value: Variant = _sim_snapshot.get("cells", [])
+	if cells_value is Array:
+		for cell_value in cells_value:
+			if not cell_value is Dictionary:
+				continue
+			var cell_data := cell_value as Dictionary
+			var slots_value: Variant = cell_data.get("slots", [])
+			if not slots_value is Array:
+				continue
+			for slot_value in slots_value:
+				if not slot_value is Dictionary:
+					continue
+				var slot := slot_value as Dictionary
+				_append_unique_resource(resources, seen, str(slot.get("resource", "")))
+	if resources.is_empty():
+		for cell in _cells:
+			_append_unique_resource(resources, seen, _cell_produced_resource(cell))
+			for need in _needs.get(cell, []):
+				_append_unique_resource(resources, seen, str(need))
+	return resources
+
+
+func _append_unique_resource(resources: Array[String], seen: Dictionary, resource: String) -> void:
+	if resource.is_empty() or seen.has(resource):
+		return
+	seen[resource] = true
+	resources.append(resource)
+
+
+func _choose_myco_needs(resources: Array[String]) -> Array[String]:
+	var shuffled: Array[String] = []
+	for resource in resources:
+		shuffled.append(resource)
+	for index in range(shuffled.size() - 1, 0, -1):
+		var swap_index := _myco_rng.randi_range(0, index)
+		var value := shuffled[index]
+		shuffled[index] = shuffled[swap_index]
+		shuffled[swap_index] = value
+	var count := mini(MYCO_MAX_NEEDS, shuffled.size())
+	var chosen: Array[String] = []
+	for index in range(count):
+		chosen.append(shuffled[index])
+	return chosen
+
+
+func _random_empty_tile() -> Vector2i:
+	var tiles: Array[Vector2i] = []
+	for y in range(_board_rows):
+		for x in range(_board_cols):
+			var tile := Vector2i(x, y)
+			if _is_tile_empty(tile):
+				tiles.append(tile)
+	if tiles.is_empty():
+		return Vector2i(-1, -1)
+	return tiles[_myco_rng.randi_range(0, tiles.size() - 1)]
+
+
+func _next_myco_id(kind: String) -> String:
+	var prefix: String = "white-myco" if kind == CELL_KIND_WHITE_MYCO else "red-myco"
+	if kind == CELL_KIND_WHITE_MYCO:
+		while true:
+			_white_myco_count += 1
+			var white_id := "%s-%03d" % [prefix, _white_myco_count]
+			if not _positions.has(white_id):
+				return white_id
+	else:
+		while true:
+			_red_myco_count += 1
+			var red_id := "%s-%03d" % [prefix, _red_myco_count]
+			if not _positions.has(red_id):
+				return red_id
+	return "%s-fallback" % [prefix]
+
+
+func _myco_display_name(kind: String) -> String:
+	return "white myco" if kind == CELL_KIND_WHITE_MYCO else "red myco"
 
 
 func _make_start_positions(count: int) -> Array[Vector2i]:
@@ -548,48 +1535,247 @@ func _append_start_tile_if_unique(starts: Array[Vector2i], tile: Vector2i) -> vo
 func _update_level_text() -> void:
 	if is_instance_valid(_level_label):
 		_level_label.text = str("Level ", _level_number)
+	var report := ""
 	if is_instance_valid(_status_label):
 		if _solved:
-			if _circuit_alive_now():
-				_status_label.text = "Circuit complete"
-			else:
-				_status_label.text = "Circuit complete - flow broke apart"
+			_status_label.text = _puzzle_circuit_state_label()
 		elif not _hint_text.is_empty():
 			_status_label.text = _hint_text
+		elif not _sim_status_message.is_empty() and _sim_status_message != "C# sim active":
+			_status_label.text = _sim_status_message
 		elif _using_csharp_sim:
-			_status_label.text = "C# sim active"
+			_status_label.text = _puzzle_circuit_state_label()
 		elif not _sim_status_message.is_empty():
 			_status_label.text = "Prototype fallback: C# sim unavailable"
 		else:
-			_status_label.text = "Form one connected circuit"
+			_status_label.text = _puzzle_circuit_state_label()
+		report = _status_label.text
+	else:
+		if _solved:
+			report = _puzzle_circuit_state_label()
+		elif not _hint_text.is_empty():
+			report = _hint_text
+		elif not _sim_status_message.is_empty() and _sim_status_message != "C# sim active":
+			report = _sim_status_message
+		elif _using_csharp_sim:
+			report = _puzzle_circuit_state_label()
+		elif not _sim_status_message.is_empty():
+			report = "Prototype fallback: C# sim unavailable"
+		else:
+			report = _puzzle_circuit_state_label()
+	_set_latest_report(report)
 	if is_instance_valid(_last_button):
 		_last_button.disabled = _level_number <= 1
 	if is_instance_valid(_next_button):
-		_next_button.visible = true
+		_update_next_button_state()
 	if is_instance_valid(_flow_label):
 		if _using_csharp_sim:
-			var swaps_value: Variant = _sim_snapshot.get("swaps", [])
-			var swap_count := (swaps_value as Array).size() if swaps_value is Array else 0
-			var circuit_state: String = "alive" if _circuit_alive_now() else ("complete" if _solved else "forming")
-			_flow_label.text = str("Tick ", int(_sim_snapshot.get("tick", 0)), "  |  Recent swaps ", swap_count, "  |  Score/tick ", _score_per_tick_from_snapshot(), "  |  Circuit ", circuit_state)
+			_flow_label.text = str("flow: ", _swap_velocity_from_snapshot(), "  |  highest flow: ", _level_high_velocity, "  |  ", _puzzle_circuit_state_label())
 		else:
 			var met := _count_met_needs()
 			var total := _cells.size() * 3
-			_flow_label.text = str("Flow ", met, "/", total, " needs  |  Swaps ", _active_swap_pairs().size())
+			_flow_label.text = str(_puzzle_circuit_state_label(), "  |  Flow ", met, "/", total, " needs  |  Swaps ", _active_swap_pairs().size())
 
 
-func _score_per_tick_from_snapshot() -> int:
-	var tick_count := int(_sim_snapshot.get("tick", 0))
-	if tick_count <= 0:
+func _can_go_next() -> bool:
+	return _solved or Global.cellular_puzzle_highest_level > _level_number
+
+
+func _update_next_button_state() -> void:
+	if not is_instance_valid(_next_button):
+		return
+	var can_go_next := _can_go_next()
+	var was_visible := _next_button.visible
+	_next_button.visible = can_go_next
+	_next_button.disabled = not can_go_next
+	if was_visible != can_go_next:
+		_request_hud_relayout()
+
+
+func _set_latest_report(message: String) -> void:
+	var trimmed := message.strip_edges()
+	if trimmed.is_empty():
+		return
+	if trimmed == _latest_report:
+		if is_instance_valid(_info_panel) and _info_panel.visible and is_instance_valid(_info_label):
+			_info_label.text = _latest_report
+		_update_info_button_state()
+		return
+	var had_previous := not _latest_report.is_empty()
+	_latest_report = trimmed
+	if is_instance_valid(_info_panel) and _info_panel.visible:
+		if is_instance_valid(_info_label):
+			_info_label.text = _latest_report
+	else:
+		_latest_report_dirty = had_previous
+	_update_info_button_state()
+
+
+func _update_info_button_state() -> void:
+	if not is_instance_valid(_info_button):
+		return
+	_info_button.text = "i"
+	_info_button.disabled = _latest_report.is_empty()
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.05, 0.12, 0.14, 0.90) if not _latest_report_dirty else Color(0.95, 0.76, 0.24, 0.96)
+	normal.border_color = Color(0.32, 0.70, 0.72, 0.55) if not _latest_report_dirty else Color(1.0, 0.96, 0.62, 0.92)
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(8)
+	_info_button.add_theme_stylebox_override("normal", normal)
+	_info_button.add_theme_stylebox_override("hover", normal)
+	_info_button.add_theme_stylebox_override("pressed", normal)
+	_info_button.add_theme_color_override("font_color", Color(0.90, 1.0, 0.96, 1.0) if not _latest_report_dirty else Color(0.08, 0.06, 0.02, 1.0))
+
+
+func _on_info_pressed() -> void:
+	if _latest_report.is_empty() or not is_instance_valid(_info_panel):
+		return
+	_info_panel.visible = not _info_panel.visible
+	if _info_panel.visible:
+		_latest_report_dirty = false
+		if is_instance_valid(_info_label):
+			_info_label.text = _latest_report
+	_update_info_button_state()
+	accept_event()
+
+
+func _on_info_close_pressed() -> void:
+	if is_instance_valid(_info_panel):
+		_info_panel.visible = false
+	_latest_report_dirty = false
+	_update_info_button_state()
+	accept_event()
+
+
+func _on_zoom_in_pressed() -> void:
+	_zoom_camera(CAMERA_ZOOM_STEP, _board_view_rect.get_center())
+
+
+func _on_zoom_out_pressed() -> void:
+	_zoom_camera(1.0 / CAMERA_ZOOM_STEP, _board_view_rect.get_center())
+
+
+func _swap_velocity_from_snapshot() -> int:
+	if not _using_csharp_sim:
 		return 0
-	var score_value := float(_sim_snapshot.get("score", 0))
-	return int(round(score_value / float(tick_count)))
+	var current_tick := int(_sim_snapshot.get("tick", 0))
+	if current_tick <= 0:
+		return 0
+	var swaps_value: Variant = _sim_snapshot.get("swaps", [])
+	if not swaps_value is Array:
+		return 0
+	var swap_count := 0
+	var swaps: Array = swaps_value as Array
+	for swap_value in swaps:
+		if not swap_value is Dictionary:
+			continue
+		var swap := swap_value as Dictionary
+		var swap_tick := int(swap.get("tick", current_tick))
+		var age := current_tick - swap_tick
+		if age >= 0 and age < VELOCITY_WINDOW_TICKS:
+			swap_count += 1
+	return int(round(float(swap_count) / float(VELOCITY_WINDOW_TICKS)))
 
 
 func _circuit_alive_now() -> bool:
 	if _using_csharp_sim:
 		return bool(_sim_snapshot.get("alive", false))
 	return _solved
+
+
+func _puzzle_circuit_state_label() -> String:
+	if _circuit_alive_now():
+		return "Alive"
+	if not _all_cells_connected_by_useful_links():
+		return "Dormant"
+	if _all_cells_participating_in_recent_flow():
+		return "Flowing"
+	return "Connecting"
+
+
+func _all_cells_connected_by_useful_links() -> bool:
+	if _cells.size() < 2:
+		return false
+	var adjacency: Dictionary = {}
+	for cell in _cells:
+		adjacency[cell] = []
+	for i in range(_cells.size()):
+		var a: String = _cells[i]
+		for j in range(i + 1, _cells.size()):
+			var b: String = _cells[j]
+			if _get_cell_tile(a).distance_squared_to(_get_cell_tile(b)) != 1:
+				continue
+			if not _cell_pair_can_hint_match(a, b):
+				continue
+			var a_neighbors: Array = adjacency[a] as Array
+			var b_neighbors: Array = adjacency[b] as Array
+			a_neighbors.append(b)
+			b_neighbors.append(a)
+	for cell in _cells:
+		var neighbors: Array = adjacency[cell] as Array
+		if neighbors.is_empty():
+			return false
+	var seen: Dictionary = {}
+	var queue: Array[String] = [str(_cells[0])]
+	while not queue.is_empty():
+		var current: String = str(queue.pop_front())
+		if seen.has(current):
+			continue
+		seen[current] = true
+		var current_neighbors: Array = adjacency[current] as Array
+		for neighbor_value in current_neighbors:
+			var neighbor: String = str(neighbor_value)
+			if not seen.has(neighbor):
+				queue.append(neighbor)
+	return seen.size() == _cells.size()
+
+
+func _all_cells_participating_in_recent_flow() -> bool:
+	if _cells.is_empty():
+		return false
+	if _using_csharp_sim:
+		var participating := _recent_flow_participating_cells()
+		if participating.is_empty():
+			return false
+		for cell in _cells:
+			if not participating.has(cell):
+				return false
+		return true
+	for cell in _cells:
+		if not _cell_has_all_needs(cell):
+			return false
+	return true
+
+
+func _recent_flow_participating_cells() -> Dictionary:
+	var participating: Dictionary = {}
+	var current_tick := int(_sim_snapshot.get("tick", 0))
+	if current_tick <= 0:
+		return participating
+	_add_recent_event_participants(participating, "flows", current_tick, "sourceCellId", "targetCellId")
+	_add_recent_event_participants(participating, "swaps", current_tick, "initiator", "counterparty")
+	return participating
+
+
+func _add_recent_event_participants(participating: Dictionary, event_key: String, current_tick: int, first_cell_key: String, second_cell_key: String) -> void:
+	var events_value: Variant = _sim_snapshot.get(event_key, [])
+	if not events_value is Array:
+		return
+	var events: Array = events_value as Array
+	for event_value in events:
+		if not event_value is Dictionary:
+			continue
+		var event := event_value as Dictionary
+		var event_tick := int(event.get("tick", current_tick))
+		var age := current_tick - event_tick
+		if age < 0 or age >= VELOCITY_WINDOW_TICKS:
+			continue
+		var first_cell := str(event.get(first_cell_key, ""))
+		var second_cell := str(event.get(second_cell_key, ""))
+		if not first_cell.is_empty():
+			participating[first_cell] = true
+		if not second_cell.is_empty():
+			participating[second_cell] = true
 
 
 func _draw() -> void:
@@ -604,6 +1790,7 @@ func _draw() -> void:
 	_draw_board()
 	_draw_circuit_flow_groups()
 	_draw_links()
+	_draw_drag_sticky_connections()
 	_draw_hint()
 	_draw_next_level_pulse()
 	for cell in _cells:
@@ -619,7 +1806,7 @@ func _sync_board_renderer() -> void:
 		_using_board_renderer = false
 		return
 	if _drag_cell != "" and _board_renderer_has_state and not _board_renderer_full_sync_needed and _board_renderer.has_method("set_drag_state"):
-		_board_renderer.call("set_drag_state", _drag_cell, _drag_position, _original_drag_tile, true)
+		_board_renderer.call("set_drag_state", _drag_cell, _drag_position, _original_drag_tile, false)
 		return
 	if _board_renderer_has_state and not _board_renderer_full_sync_needed:
 		if _board_renderer is CanvasItem:
@@ -627,23 +1814,28 @@ func _sync_board_renderer() -> void:
 		return
 	var state := {
 		"boardRect": _board_rect,
+		"boardViewportRect": _board_view_rect,
 		"tileSize": _tile_size,
 		"boardCols": _board_cols,
 		"boardRows": _board_rows,
 		"cells": _cells,
 		"positions": _positions,
 		"producedByCell": _produced_by_cell,
+		"cellKinds": _cell_kind_by_id,
+		"rocks": _rocks,
 		"needs": _needs,
 		"snapshot": _sim_snapshot,
 		"usingCsharpSim": _using_csharp_sim,
 		"solved": _solved,
 		"circuitOverlayEnabled": _circuit_overlay_enabled,
-		"fastDragMode": _drag_cell != "",
+		"fastDragMode": false,
 		"dragCell": _drag_cell,
 		"dragPosition": _drag_position,
 		"originalDragTile": _original_drag_tile,
 		"hintPair": _hint_pair,
-		"resourceMarkMode": _resource_mark_mode
+		"resourceMarkMode": _resource_mark_mode,
+		"visualProfileEnabled": _visual_profile_enabled,
+		"visualProfilePrintEvery": _visual_profile_print_every
 	}
 	_board_renderer.call("set_render_state", state)
 	_board_renderer_full_sync_needed = false
@@ -657,33 +1849,150 @@ func _has_live_visual_animation() -> bool:
 	if flows_value is Array and not (flows_value as Array).is_empty():
 		return true
 	var reactions_value: Variant = _sim_snapshot.get("reactions", [])
-	return reactions_value is Array and not (reactions_value as Array).is_empty()
+	if reactions_value is Array and not (reactions_value as Array).is_empty():
+		return true
+	return _has_zero_need_pip()
+
+
+func _has_zero_need_pip() -> bool:
+	if not _using_csharp_sim:
+		return false
+	for cell in _cells:
+		var needed: Array = _needs.get(cell, [])
+		for need_value in needed:
+			if _slot_fullness(cell, str(need_value)) <= 0.0:
+				return true
+	return false
 
 
 func _layout_board(view_size: Vector2) -> void:
-	var top := 130.0
-	var bottom := 78.0
-	var available := Vector2(maxf(1.0, view_size.x - 36.0), maxf(1.0, view_size.y - top - bottom))
-	_tile_size = floor(minf(available.x / float(_board_cols), available.y / float(_board_rows)))
-	_tile_size = maxf(24.0, _tile_size)
-	var board_size := Vector2(_tile_size * _board_cols, _tile_size * _board_rows)
-	_board_rect = Rect2(Vector2(round((view_size.x - board_size.x) * 0.5), top + round((available.y - board_size.y) * 0.5)), board_size)
+	if _board_view_rect.size.x <= 1.0 or _board_view_rect.size.y <= 1.0:
+		_set_board_view_rect(Vector2(18.0, 130.0), Vector2(maxf(1.0, view_size.x - 36.0), maxf(1.0, view_size.y - 208.0)))
+	_fit_tile_size = maxf(4.0, minf(_board_view_rect.size.x / float(_board_cols), _board_view_rect.size.y / float(_board_rows)))
+	var tiny_view: bool = minf(_board_view_rect.size.x, _board_view_rect.size.y) < 520.0
+	var readable_tile_size: float = CAMERA_TINY_READABLE_TILE_SIZE if tiny_view else CAMERA_READABLE_TILE_SIZE
+	var initial_tile_size: float = _fit_tile_size if _fit_tile_size >= readable_tile_size else readable_tile_size
+	initial_tile_size = clampf(initial_tile_size, _fit_tile_size, _camera_max_tile_size())
+	var board_size: Vector2i = Vector2i(_board_cols, _board_rows)
+	var viewport_changed: bool = _last_board_view_size != _board_view_rect.size
+	if not _camera_initialized or _last_camera_board_size != board_size:
+		_camera_center_tiles = Vector2(float(_board_cols) * 0.5, float(_board_rows) * 0.5)
+		_camera_tile_size = initial_tile_size
+		_camera_initialized = true
+		_last_camera_board_size = board_size
+		_last_board_view_size = _board_view_rect.size
+		_board_renderer_full_sync_needed = true
+	elif viewport_changed:
+		_camera_tile_size = minf(_camera_tile_size, _camera_max_tile_size())
+		_last_board_view_size = _board_view_rect.size
+		_board_renderer_full_sync_needed = true
+	_clamp_camera(true)
+	_update_board_rect_from_camera()
+
+
+func _reset_camera_state() -> void:
+	_drag_cell = ""
+	_drag_touch_id = -1
+	_camera_initialized = false
+	_camera_center_tiles = Vector2.ZERO
+	_camera_tile_size = 64.0
+	_last_camera_board_size = Vector2i.ZERO
+	_last_board_view_size = Vector2.ZERO
+	_pan_active = false
+	_pan_touch_id = -1
+	_touch_points.clear()
+	_pinch_active = false
+	_pinch_touch_a = -1
+	_pinch_touch_b = -1
+	_pinch_last_distance = 0.0
+
+
+func _camera_max_tile_size() -> float:
+	if _board_view_rect.size.x <= 1.0 or _board_view_rect.size.y <= 1.0:
+		return maxf(_fit_tile_size, CAMERA_READABLE_TILE_SIZE)
+	var four_tile_size: float = minf(_board_view_rect.size.x, _board_view_rect.size.y) / CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM
+	return maxf(_fit_tile_size, four_tile_size)
+
+
+func _update_board_rect_from_camera() -> void:
+	_tile_size = clampf(_camera_tile_size, 4.0, _camera_max_tile_size())
+	var board_size := Vector2(_tile_size * float(_board_cols), _tile_size * float(_board_rows))
+	var origin := _board_view_rect.get_center() - _camera_center_tiles * _tile_size
+	_board_rect = Rect2(origin, board_size)
+
+
+func _clamp_camera(resize_deadband: bool = true) -> void:
+	_camera_tile_size = minf(_camera_tile_size, _camera_max_tile_size())
+	if resize_deadband:
+		if _camera_tile_size < _fit_tile_size - CAMERA_RESIZE_TILE_EPSILON:
+			_camera_tile_size = _fit_tile_size
+	else:
+		_camera_tile_size = maxf(_camera_tile_size, _fit_tile_size)
+	var visible_tiles := Vector2(_board_view_rect.size.x / _camera_tile_size, _board_view_rect.size.y / _camera_tile_size)
+	if visible_tiles.x >= float(_board_cols):
+		_camera_center_tiles.x = float(_board_cols) * 0.5
+	else:
+		_camera_center_tiles.x = clampf(_camera_center_tiles.x, visible_tiles.x * 0.5, float(_board_cols) - visible_tiles.x * 0.5)
+	if visible_tiles.y >= float(_board_rows):
+		_camera_center_tiles.y = float(_board_rows) * 0.5
+	else:
+		_camera_center_tiles.y = clampf(_camera_center_tiles.y, visible_tiles.y * 0.5, float(_board_rows) - visible_tiles.y * 0.5)
+
+
+func _screen_to_board_point(screen_pos: Vector2) -> Vector2:
+	if _tile_size <= 0.0:
+		return _camera_center_tiles
+	return (screen_pos - _board_rect.position) / _tile_size
+
+
+func _set_camera_tile_size(next_tile_size: float, focal_screen_pos: Vector2) -> void:
+	if not _camera_initialized:
+		return
+	var clamped_size := clampf(next_tile_size, _fit_tile_size, _camera_max_tile_size())
+	if is_equal_approx(clamped_size, _camera_tile_size):
+		return
+	var focal_board_point := _screen_to_board_point(focal_screen_pos)
+	_camera_tile_size = clamped_size
+	_camera_center_tiles = focal_board_point - (focal_screen_pos - _board_view_rect.get_center()) / _camera_tile_size
+	_clamp_camera(false)
+	_update_board_rect_from_camera()
+	_board_renderer_full_sync_needed = true
+	queue_redraw()
+
+
+func _zoom_camera(factor: float, focal_screen_pos: Vector2) -> void:
+	_set_camera_tile_size(_camera_tile_size * factor, focal_screen_pos)
+
+
+func _pan_camera_by_screen_delta(delta: Vector2) -> void:
+	if not _camera_initialized or _tile_size <= 0.0:
+		return
+	_camera_center_tiles -= delta / _tile_size
+	_clamp_camera()
+	_update_board_rect_from_camera()
+	_board_renderer_full_sync_needed = true
+	queue_redraw()
 
 
 func _draw_board() -> void:
-	draw_rect(_board_rect.grow(10.0), Color(0.015, 0.030, 0.035, 0.88), true)
+	draw_rect(_board_view_rect, Color(0.015, 0.030, 0.035, 0.88), true)
 	for y in range(_board_rows):
 		for x in range(_board_cols):
+			if _rocks.has(_tile_key(Vector2i(x, y))):
+				continue
 			var rect := Rect2(_board_rect.position + Vector2(x, y) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
-			var shade := 0.085 if (x + y) % 2 == 0 else 0.105
+			if not _board_view_rect.grow(4.0).intersects(rect):
+				continue
+			var shade: float = 0.085 if (x + y) % 2 == 0 else 0.105
 			draw_rect(rect, Color(shade, shade + 0.035, shade + 0.045, 1.0), true)
 			draw_rect(rect, Color(0.24, 0.42, 0.42, 0.18), false, 1.0)
 	if _drag_cell != "":
 		var tile := _screen_to_tile(_drag_position)
 		if _is_tile_inside(tile) and (_is_tile_empty(tile) or tile == _original_drag_tile):
 			var highlight := Rect2(_board_rect.position + Vector2(tile) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-3.0)
-			draw_rect(highlight, Color(0.45, 1.0, 0.78, 0.20), true)
-			draw_rect(highlight, Color(0.55, 1.0, 0.82, 0.70), false, 3.0)
+			if _board_view_rect.grow(4.0).intersects(highlight):
+				draw_rect(highlight, Color(0.45, 1.0, 0.78, 0.20), true)
+				draw_rect(highlight, Color(0.55, 1.0, 0.82, 0.70), false, 3.0)
 
 
 func _draw_links() -> void:
@@ -693,9 +2002,109 @@ func _draw_links() -> void:
 	for pair in _active_swap_pairs():
 		var a := str(pair[0])
 		var b := str(pair[1])
-		var color := Color(0.35, 1.0, 0.86, 0.68) if _solved else Color(0.30, 0.78, 0.86, 0.42)
+		var color: Color = Color(0.35, 1.0, 0.86, 0.68) if _solved else Color(0.30, 0.78, 0.86, 0.42)
 		draw_line(_tile_center(_get_cell_tile(a)), _tile_center(_get_cell_tile(b)), color, 7.0, true)
 		draw_line(_tile_center(_get_cell_tile(a)), _tile_center(_get_cell_tile(b)), Color(1.0, 1.0, 1.0, 0.18), 2.0, true)
+
+
+func _draw_drag_sticky_connections() -> void:
+	if _drag_cell.is_empty():
+		return
+	if _using_csharp_sim:
+		_draw_drag_recent_flow_connections()
+		_draw_drag_possible_swap_connections()
+		return
+	for pair in _active_swap_pairs():
+		var a := str(pair[0])
+		var b := str(pair[1])
+		if a != _drag_cell and b != _drag_cell:
+			continue
+		var other: String = b if a == _drag_cell else a
+		_draw_drag_elastic_line(_visual_cell_center(_drag_cell), _visual_cell_center(other), Color(0.35, 1.0, 0.86, 1.0), 0.48, false)
+
+
+func _draw_drag_recent_flow_connections() -> void:
+	var flows_value: Variant = _sim_snapshot.get("flows", [])
+	if not flows_value is Array:
+		return
+	var current_tick := float(_sim_snapshot.get("tick", 0))
+	var flows: Array = flows_value as Array
+	for flow_value in flows:
+		if not flow_value is Dictionary:
+			continue
+		var flow := flow_value as Dictionary
+		var source := str(flow.get("sourceCellId", ""))
+		var target := str(flow.get("targetCellId", ""))
+		var resource := str(flow.get("resource", ""))
+		if source != _drag_cell and target != _drag_cell:
+			continue
+		if resource.is_empty():
+			continue
+		var other: String = target if source == _drag_cell else source
+		if other.is_empty():
+			continue
+		var age: float = maxf(0.0, current_tick - float(flow.get("tick", current_tick)))
+		var alpha: float = clampf(1.0 - age / SWAP_VISUAL_TTL_TICKS, 0.0, 1.0)
+		if alpha <= 0.0:
+			continue
+		_draw_drag_elastic_line(_resource_visual_point(_drag_cell, resource), _resource_visual_point(other, resource), _resource_color(resource), 0.30 + alpha * 0.44, true)
+
+
+func _draw_drag_possible_swap_connections() -> void:
+	var possible_value: Variant = _sim_snapshot.get("possibleSwaps", [])
+	if not possible_value is Array:
+		return
+	var possible_swaps: Array = possible_value as Array
+	var drawn_pairs: Dictionary = {}
+	for swap_value in possible_swaps:
+		if not swap_value is Dictionary:
+			continue
+		var swap := swap_value as Dictionary
+		var initiator := str(swap.get("initiator", ""))
+		var counterparty := str(swap.get("counterparty", ""))
+		if initiator != _drag_cell and counterparty != _drag_cell:
+			continue
+		var other: String = counterparty if initiator == _drag_cell else initiator
+		if other.is_empty():
+			continue
+		var pair_key: String = str(_drag_cell, "|", other)
+		var reverse_pair_key: String = str(other, "|", _drag_cell)
+		if drawn_pairs.has(pair_key) or drawn_pairs.has(reverse_pair_key):
+			continue
+		drawn_pairs[pair_key] = true
+		drawn_pairs[reverse_pair_key] = true
+		var resource: String = str(swap.get("counterpartyPaidResource", "")) if initiator == _drag_cell else str(swap.get("initiatorPaidResource", ""))
+		var start: Vector2 = _visual_cell_center(_drag_cell)
+		var finish: Vector2 = _visual_cell_center(other)
+		var color: Color = Color(0.35, 1.0, 0.86, 1.0)
+		if not resource.is_empty():
+			start = _resource_visual_point(_drag_cell, resource)
+			finish = _resource_visual_point(other, resource)
+			color = _resource_color(resource)
+		_draw_drag_elastic_line(start, finish, color, 0.48, false)
+
+
+func _draw_drag_elastic_line(start: Vector2, finish: Vector2, color: Color, alpha: float, active: bool) -> void:
+	var delta: Vector2 = finish - start
+	if delta.length_squared() <= 1.0:
+		return
+	var distance: float = delta.length()
+	var stretch: float = clampf((distance - _tile_size * 0.72) / maxf(_tile_size * 4.0, 1.0), 0.0, 1.0)
+	var direction: Vector2 = delta / distance
+	var normal: Vector2 = direction.orthogonal()
+	var phase: float = Time.get_ticks_msec() / (72.0 if active else 116.0)
+	var wave: float = sin(phase + start.x * 0.013 + finish.y * 0.017) * _tile_size * (0.018 + stretch * 0.030)
+	var offset: Vector2 = normal * wave
+	var line_start: Vector2 = start + direction * _tile_size * 0.04
+	var line_finish: Vector2 = finish - direction * _tile_size * 0.04
+	var outer: Color = color
+	outer.a = alpha * (0.28 if active else 0.20)
+	draw_line(line_start, line_finish, outer, _tile_size * (0.16 if active else 0.12), true)
+	var body: Color = color.lightened(0.18)
+	body.a = alpha * (0.54 + stretch * 0.18)
+	draw_line(line_start + offset, line_finish - offset, body, maxf(3.0, _tile_size * (0.055 if active else 0.040)), true)
+	var highlight: Color = Color(1.0, 1.0, 1.0, alpha * (0.34 if active else 0.22))
+	draw_line(line_start - offset * 0.65, line_finish + offset * 0.65, highlight, 1.8 if active else 1.3, true)
 
 
 func _draw_circuit_flow_groups() -> void:
@@ -831,7 +2240,7 @@ func _draw_circuit_component_halo(cells: Array, color: Color, complete: bool, st
 		var cell := str(cell_value)
 		tile_keys[_component_tile_key(_get_cell_tile(cell))] = true
 
-	var pulse := 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
+	var pulse: float = 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
 	var fill_alpha := (0.13 + pulse * 0.04) * strength
 	var boundary_alpha := (0.56 + pulse * 0.14) * strength
 	var heat_radius := _tile_size * 0.56
@@ -934,7 +2343,7 @@ func _draw_directed_circuit_line(start: Vector2, finish: Vector2, color: Color, 
 	var normal := direction.orthogonal()
 	var line_start := start + direction * _tile_size * 0.30
 	var line_finish := finish - direction * _tile_size * 0.30
-	var pulse := 0.5 + sin(Time.get_ticks_msec() / (90.0 if intense else 150.0) + start.x * 0.02) * 0.5
+	var pulse: float = 0.5 + sin(Time.get_ticks_msec() / (90.0 if intense else 150.0) + start.x * 0.02) * 0.5
 	var broad := color
 	broad.a = (0.12 + alpha * 0.20) if transient else ((0.16 + alpha * 0.18) if not intense else (0.24 + alpha * 0.26))
 	draw_line(line_start, line_finish, broad, _tile_size * (0.28 if transient else (0.34 if not intense else 0.46)), true)
@@ -946,11 +2355,11 @@ func _draw_directed_circuit_line(start: Vector2, finish: Vector2, color: Color, 
 	var core := color.lightened(0.25)
 	core.a = (0.34 + alpha * 0.28) if transient else ((0.32 + alpha * 0.32) if not intense else (0.50 + alpha * 0.44))
 	draw_line(line_start, line_finish, core, maxf(3.0, _tile_size * (0.050 if transient else (0.065 if not intense else 0.090))), true)
-	var spark := Color(1.0, 1.0, 1.0, (0.24 + alpha * 0.24) if transient else (0.28 + alpha * 0.38))
+	var spark: Color = Color(1.0, 1.0, 1.0, (0.24 + alpha * 0.24) if transient else (0.28 + alpha * 0.38))
 	var offset := normal * sin(Time.get_ticks_msec() / 76.0 + finish.y * 0.025) * _tile_size * 0.035
 	draw_line(line_start + offset, line_finish - offset, spark, 1.8 if transient else 2.2, true)
 	var arrow_at := line_start.lerp(line_finish, 0.66 + pulse * 0.12)
-	var arrow_size := _tile_size * (0.15 if transient else 0.18)
+	var arrow_size: float = _tile_size * (0.15 if transient else 0.18)
 	var arrow_color := core
 	arrow_color.a = clampf(core.a + 0.12, 0.0, 1.0)
 	draw_line(arrow_at, arrow_at - direction * arrow_size + normal * arrow_size * 0.58, arrow_color, 2.8, true)
@@ -968,8 +2377,8 @@ func _draw_group_current_line(start: Vector2, finish: Vector2, color: Color, alp
 	draw_line(start, finish, core, maxf(3.0, _tile_size * (0.06 if not intense else 0.09)), true)
 	var delta := finish - start
 	var normal := delta.orthogonal().normalized()
-	var phase := Time.get_ticks_msec() / (70.0 if intense else 115.0)
-	var spark := Color(1.0, 1.0, 1.0, 0.20 + alpha * (0.22 if not intense else 0.46))
+	var phase: float = Time.get_ticks_msec() / (70.0 if intense else 115.0)
+	var spark: Color = Color(1.0, 1.0, 1.0, 0.20 + alpha * (0.22 if not intense else 0.46))
 	var offset := normal * sin(phase + start.x * 0.03 + start.y * 0.02) * _tile_size * 0.045
 	draw_line(start + offset, finish - offset, spark, 1.6 if not intense else 2.4, true)
 
@@ -1097,11 +2506,15 @@ func _draw_hint() -> void:
 
 
 func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
-	var radius := _tile_size * (0.39 if not dragging else 0.43)
+	var radius: float = _tile_size * (0.39 if not dragging else 0.43)
 	var produced_resource := _cell_produced_resource(cell)
 	var color := _resource_color(produced_resource)
+	var kind := _cell_kind(cell)
+	var is_myco := _is_myco_kind(kind)
+	if is_myco:
+		color = Color(0.94, 0.97, 0.94, 1.0)
 	var live_complete: bool = _circuit_alive_now()
-	var glow_alpha := 0.46 if _cell_has_all_needs(cell) else 0.18
+	var glow_alpha: float = 0.46 if _cell_has_all_needs(cell) else 0.18
 	if _using_csharp_sim:
 		glow_alpha = 0.56 if _cell_is_glowing(cell) else 0.16
 	if live_complete:
@@ -1113,10 +2526,12 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 	draw_circle(center, radius * (1.16 + (0.04 if live_complete else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72))
 	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
+	if kind == CELL_KIND_RED_MYCO:
+		_draw_red_myco_ring(center, radius)
 	if live_complete:
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
 		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, 0.28 + solved_pulse * 0.18), 3.0, true)
-	if _using_csharp_sim:
+	if _using_csharp_sim and not is_myco and not produced_resource.is_empty():
 		_draw_fullness_arc(center, radius * 1.07, _display_fullness(cell, produced_resource, _slot_fullness(cell, produced_resource)), color, 6.0)
 	var font := get_theme_default_font()
 	var needed: Array = _needs.get(cell, [])
@@ -1150,9 +2565,22 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		draw_circle(pip_center, pip_radius, pip_color)
 		draw_circle(pip_center, pip_radius, Color(0.01, 0.025, 0.03, 0.82), false, 2.2)
 		draw_circle(pip_center, pip_radius * 0.86, Color(1, 1, 1, 0.44 if met else 0.28), false, 1.4)
-		_draw_fullness_arc(pip_center, pip_radius * 1.12, _display_fullness(cell, need, fullness), pip_color, maxf(2.0, pip_radius * 0.20))
+		var pip_bar_radius := pip_radius * 1.12
+		var pip_bar_width := maxf(2.0, pip_radius * 0.20)
+		_draw_fullness_arc(pip_center, pip_bar_radius, _display_fullness(cell, need, fullness), pip_color, pip_bar_width)
+		if _using_csharp_sim and fullness <= 0.0:
+			_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
 		_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02), Color.WHITE)
-	_draw_resource_mark(font, center, radius, produced_resource, int(radius * 1.48), Color.WHITE)
+	if not is_myco:
+		_draw_resource_mark(font, center, radius, produced_resource, int(radius * 1.48), Color.WHITE)
+
+
+func _draw_red_myco_ring(center: Vector2, radius: float) -> void:
+	var ring_radius := radius * RED_MYCO_RING_RADIUS
+	var segments := _arc_segments(ring_radius)
+	draw_arc(center, ring_radius, 0.0, TAU, segments, RED_MYCO_RING_EDGE_COLOR, maxf(2.0, radius * 0.18), true)
+	draw_arc(center, ring_radius, 0.0, TAU, segments, RED_MYCO_RING_MID_COLOR, maxf(1.6, radius * 0.12), true)
+	draw_arc(center, ring_radius, 0.0, TAU, segments, RED_MYCO_RING_CORE_COLOR, maxf(1.2, radius * 0.055), true)
 
 
 func _draw_need_tether(center: Vector2, pip_center: Vector2, cell_radius: float, pip_radius: float, color: Color) -> void:
@@ -1198,7 +2626,7 @@ func _need_visual_data(
 
 
 func _need_state_data(cell: String, need: String) -> Dictionary:
-	var fullness := _slot_fullness(cell, need) if _using_csharp_sim else 0.0
+	var fullness: float = _slot_fullness(cell, need) if _using_csharp_sim else 0.0
 	var active_partner := _recent_flow_source_for_need(cell, need)
 	var active_alpha := _recent_flow_alpha_for_need(cell, need)
 	if active_partner.is_empty():
@@ -1284,7 +2712,7 @@ func _resource_visual_point(cell: String, resource: String) -> Vector2:
 
 func _need_pip_center_for_resource(cell: String, resource: String, center: Vector2) -> Vector2:
 	var needed: Array = _needs.get(cell, [])
-	var radius := _tile_size * (0.43 if cell == _drag_cell else 0.39)
+	var radius: float = _tile_size * (0.43 if cell == _drag_cell else 0.39)
 	var pip_radius := _need_pip_radius(radius)
 	var used_angles: Array[float] = []
 	for index in range(needed.size()):
@@ -1390,6 +2818,24 @@ func _draw_fullness_arc(center: Vector2, radius: float, fullness: float, color: 
 	draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * amount, segments, arc_color, width, true)
 
 
+func _draw_zero_pip_pulse_arc(center: Vector2, radius: float, width: float) -> void:
+	var alpha := _zero_pip_pulse_alpha()
+	if alpha <= 0.0:
+		return
+	var segments := _fullness_arc_segments(radius)
+	draw_arc(center, radius, -PI * 0.5, PI * 1.5, segments, Color(ZERO_PIP_PULSE_COLOR.r, ZERO_PIP_PULSE_COLOR.g, ZERO_PIP_PULSE_COLOR.b, 0.58 * alpha), width + 1.2, true)
+	draw_arc(center, radius * 1.08, -PI * 0.5, PI * 1.5, segments, Color(ZERO_PIP_PULSE_COLOR.r, ZERO_PIP_PULSE_COLOR.g, ZERO_PIP_PULSE_COLOR.b, 0.22 * alpha), maxf(1.4, width * 0.55), true)
+
+
+func _zero_pip_pulse_alpha() -> float:
+	var phase := int(Time.get_ticks_msec() % ZERO_PIP_PULSE_PERIOD_MSEC)
+	if phase < ZERO_PIP_PULSE_FADE_MSEC:
+		return float(phase) / float(ZERO_PIP_PULSE_FADE_MSEC)
+	if phase < ZERO_PIP_PULSE_FADE_MSEC * 2:
+		return 1.0 - float(phase - ZERO_PIP_PULSE_FADE_MSEC) / float(ZERO_PIP_PULSE_FADE_MSEC)
+	return 0.0
+
+
 func _update_frame_blend() -> void:
 	var now := Time.get_ticks_msec()
 	if _last_draw_msec == 0:
@@ -1436,32 +2882,84 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				_begin_drag(mouse_event.position)
+				if not _begin_drag(mouse_event.position):
+					_begin_camera_pan(mouse_event.position)
 			else:
-				_finish_drag(mouse_event.position)
-	elif event is InputEventMouseMotion and _drag_cell != "":
-		_update_drag((event as InputEventMouseMotion).position)
+				if _drag_cell != "":
+					_finish_drag(mouse_event.position)
+				else:
+					_finish_camera_pan()
+		elif mouse_event.pressed and _board_view_rect.has_point(mouse_event.position):
+			if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_zoom_camera(CAMERA_ZOOM_STEP, mouse_event.position)
+				accept_event()
+			elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_zoom_camera(1.0 / CAMERA_ZOOM_STEP, mouse_event.position)
+				accept_event()
+	elif event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		if _drag_cell != "":
+			_update_drag(motion.position)
+		elif _pan_active and _pan_touch_id == -1:
+			_update_camera_pan(motion.position)
 	elif event is InputEventScreenTouch:
 		var touch_event := event as InputEventScreenTouch
 		if touch_event.pressed:
-			_begin_drag(touch_event.position)
+			_touch_points[touch_event.index] = touch_event.position
 		else:
-			_finish_drag(touch_event.position)
-	elif event is InputEventScreenDrag and _drag_cell != "":
-		_update_drag((event as InputEventScreenDrag).position)
+			_touch_points.erase(touch_event.index)
+		if touch_event.pressed:
+			if _drag_cell != "":
+				accept_event()
+			elif _touch_points.size() >= 2:
+				_start_pinch_from_touches()
+			elif not _begin_drag(touch_event.position, touch_event.index):
+				_begin_camera_pan(touch_event.position, touch_event.index)
+		else:
+			if _drag_cell != "" and touch_event.index == _drag_touch_id:
+				_finish_drag(touch_event.position)
+			if _pinch_active and (touch_event.index == _pinch_touch_a or touch_event.index == _pinch_touch_b):
+				_finish_pinch()
+			if _pan_active and touch_event.index == _pan_touch_id:
+				_finish_camera_pan()
+	elif event is InputEventScreenDrag:
+		var drag_event := event as InputEventScreenDrag
+		_touch_points[drag_event.index] = drag_event.position
+		if _pinch_active:
+			_update_pinch_from_touches()
+		elif _drag_cell != "" and drag_event.index == _drag_touch_id:
+			_update_drag(drag_event.position)
+		elif _pan_active and drag_event.index == _pan_touch_id:
+			_update_camera_pan(drag_event.position)
+		elif _touch_points.size() >= 2:
+			_start_pinch_from_touches()
+	elif event is InputEventMagnifyGesture:
+		var magnify := event as InputEventMagnifyGesture
+		if _board_view_rect.has_point(magnify.position):
+			_zoom_camera(maxf(0.1, magnify.factor), magnify.position)
+			accept_event()
+	elif event is InputEventPanGesture:
+		var pan := event as InputEventPanGesture
+		if _board_view_rect.has_point(pan.position) and _drag_cell == "":
+			_pan_camera_by_screen_delta(-pan.delta)
+			accept_event()
 
 
-func _begin_drag(screen_pos: Vector2) -> void:
+func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
+	if not _board_view_rect.has_point(screen_pos):
+		return false
 	var picked := _cell_at(screen_pos)
 	if picked == "":
-		return
+		return false
 	_drag_cell = picked
+	_drag_touch_id = touch_id
 	_clear_hint()
 	_original_drag_tile = _get_cell_tile(picked)
 	_drag_position = _tile_center(_original_drag_tile)
 	_drag_offset = _drag_position - screen_pos
 	accept_event()
 	queue_redraw()
+	return true
 
 
 func _update_drag(screen_pos: Vector2) -> void:
@@ -1475,6 +2973,7 @@ func _finish_drag(screen_pos: Vector2) -> void:
 		return
 	_drag_position = screen_pos + _drag_offset
 	var tile := _screen_to_tile(_drag_position)
+	var moved := false
 	if _is_tile_inside(tile) and (_is_tile_empty(tile) or tile == _original_drag_tile):
 		if _using_csharp_sim and is_instance_valid(_sim_bridge):
 			var moved_value: Variant = _sim_bridge.call("move_cell", _drag_cell, tile.x, tile.y)
@@ -1482,17 +2981,104 @@ func _finish_drag(screen_pos: Vector2) -> void:
 				var reset_value: Variant = _sim_bridge.call("reset_with_current_layout")
 				if not bool(reset_value):
 					var error_value: Variant = _sim_bridge.call("get_last_error")
+					_sim_status_message = str("Move reset failed: ", error_value)
 					push_warning("Cellular C# sim bridge failed to reset moved layout: %s" % str(error_value))
 				_sim_tick_accum = 0.0
 				_refresh_sim_snapshot()
 				_board_renderer_full_sync_needed = true
+				moved = true
+			else:
+				var move_error_value: Variant = _sim_bridge.call("get_last_error")
+				_sim_status_message = str("Move rejected: ", move_error_value)
+				_hint_text = ""
 		else:
 			_positions[_drag_cell] = tile
 			_board_renderer_full_sync_needed = true
+			moved = true
+	else:
+		_sim_status_message = "Move rejected"
+		_hint_text = ""
 	_drag_cell = ""
+	_drag_touch_id = -1
+	if moved:
+		_sim_status_message = ""
+		_save_puzzle_level_state()
 	_check_solution()
 	accept_event()
 	queue_redraw()
+
+
+func _begin_camera_pan(screen_pos: Vector2, touch_id: int = -1) -> void:
+	if not _board_view_rect.has_point(screen_pos):
+		return
+	_pan_active = true
+	_pan_touch_id = touch_id
+	_pan_last_pos = screen_pos
+	accept_event()
+
+
+func _update_camera_pan(screen_pos: Vector2) -> void:
+	if not _pan_active:
+		return
+	var delta := screen_pos - _pan_last_pos
+	_pan_last_pos = screen_pos
+	_pan_camera_by_screen_delta(delta)
+	accept_event()
+
+
+func _finish_camera_pan() -> void:
+	if not _pan_active:
+		return
+	_pan_active = false
+	_pan_touch_id = -1
+	accept_event()
+
+
+func _start_pinch_from_touches() -> void:
+	if _drag_cell != "" or _touch_points.size() < 2:
+		return
+	var keys := _touch_points.keys()
+	_pinch_touch_a = int(keys[0])
+	_pinch_touch_b = int(keys[1])
+	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO) as Vector2
+	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO) as Vector2
+	_pinch_last_distance = a.distance_to(b)
+	if _pinch_last_distance < CAMERA_PINCH_MIN_DISTANCE:
+		return
+	_pinch_last_center = (a + b) * 0.5
+	_pinch_active = true
+	_pan_active = false
+	_pan_touch_id = -1
+	accept_event()
+
+
+func _update_pinch_from_touches() -> void:
+	if not _pinch_active:
+		return
+	if not _touch_points.has(_pinch_touch_a) or not _touch_points.has(_pinch_touch_b):
+		_finish_pinch()
+		return
+	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO) as Vector2
+	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO) as Vector2
+	var distance := a.distance_to(b)
+	if distance < CAMERA_PINCH_MIN_DISTANCE or _pinch_last_distance < CAMERA_PINCH_MIN_DISTANCE:
+		return
+	var center := (a + b) * 0.5
+	_pan_camera_by_screen_delta(center - _pinch_last_center)
+	_zoom_camera(distance / _pinch_last_distance, center)
+	_pinch_last_center = center
+	_pinch_last_distance = distance
+	accept_event()
+
+
+func _finish_pinch() -> void:
+	if not _pinch_active:
+		return
+	_pinch_active = false
+	_pinch_touch_a = -1
+	_pinch_touch_b = -1
+	_pinch_last_distance = 0.0
+	accept_event()
 
 
 func _cell_at(screen_pos: Vector2) -> String:
@@ -1518,12 +3104,18 @@ func _is_tile_inside(tile: Vector2i) -> bool:
 
 
 func _is_tile_empty(tile: Vector2i) -> bool:
+	if _rocks.has(_tile_key(tile)):
+		return false
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
 		if _get_cell_tile(cell) == tile:
 			return false
 	return true
+
+
+func _tile_key(tile: Vector2i) -> String:
+	return "%d:%d" % [tile.x, tile.y]
 
 
 func _active_swap_pairs() -> Array:
@@ -1544,7 +3136,15 @@ func _can_swap_pair(a: String, b: String) -> bool:
 
 
 func _cells_can_match(a: String, b: String) -> bool:
-	return _cell_needs_resource(a, _cell_produced_resource(b)) and _cell_needs_resource(b, _cell_produced_resource(a))
+	return _cells_have_reciprocal_main_need(a, b)
+
+
+func _cells_have_reciprocal_main_need(a: String, b: String) -> bool:
+	var a_produced := _cell_produced_resource(a)
+	var b_produced := _cell_produced_resource(b)
+	if a_produced.is_empty() or b_produced.is_empty():
+		return false
+	return _cell_needs_resource(a, b_produced) and _cell_needs_resource(b, a_produced)
 
 
 func _cell_needs_resource(cell: String, resource: String) -> bool:
@@ -1692,7 +3292,7 @@ func _adjacent_exchange_partner_for_need(cell: String, need: String) -> String:
 
 func _cell_has_payable_resource_for(cell: String, other: String) -> bool:
 	var produced := _cell_produced_resource(cell)
-	if _cell_accepts_resource(other, produced):
+	if not produced.is_empty() and _cell_accepts_resource(other, produced):
 		return true
 	var state := _get_cell_state(cell)
 	var slots_value: Variant = state.get("slots", [])
@@ -1710,12 +3310,16 @@ func _cell_has_payable_resource_for(cell: String, other: String) -> bool:
 
 
 func _cell_can_offer_resource_to(cell: String, resource: String, other: String) -> bool:
+	if resource.is_empty():
+		return false
 	if _cell_produced_resource(cell) == resource and _cell_accepts_resource(other, resource):
 		return true
 	return _cell_accepts_resource(other, resource) and _slot_offerable_quantity(cell, resource) > 0
 
 
 func _cell_accepts_resource(cell: String, resource: String) -> bool:
+	if resource.is_empty():
+		return false
 	if _cell_produced_resource(cell) == resource:
 		return true
 	if _cell_needs_resource(cell, resource):
@@ -1745,6 +3349,8 @@ func _slot_offerable_quantity(cell: String, resource: String) -> int:
 		if str(slot.get("resource", "")) != resource:
 			continue
 		var quantity := int(slot.get("quantity", 0))
+		if _is_myco_cell(cell):
+			return maxi(0, quantity)
 		var role := str(slot.get("role", ""))
 		if role == "Need" or role == "SourceOutput":
 			quantity -= 1
@@ -1761,7 +3367,9 @@ func _active_component_resources(cell: String) -> Array[String]:
 		if seen.has(current):
 			continue
 		seen[current] = true
-		resources.append(_cell_produced_resource(current))
+		var produced := _cell_produced_resource(current)
+		if not produced.is_empty():
+			resources.append(produced)
 		for other in _cells:
 			if other == current or seen.has(other):
 				continue
@@ -1785,8 +3393,22 @@ func _get_cell_state(cell: String) -> Dictionary:
 
 
 func _cell_produced_resource(cell: String) -> String:
+	if _is_myco_cell(cell):
+		return ""
 	var value: Variant = _produced_by_cell.get(cell, cell)
 	return str(value)
+
+
+func _cell_kind(cell: String) -> String:
+	return str(_cell_kind_by_id.get(cell, CELL_KIND_STANDARD))
+
+
+func _is_myco_kind(kind: String) -> bool:
+	return kind == CELL_KIND_WHITE_MYCO or kind == CELL_KIND_RED_MYCO
+
+
+func _is_myco_cell(cell: String) -> bool:
+	return _is_myco_kind(_cell_kind(cell))
 
 
 func _cell_is_glowing(cell: String) -> bool:
@@ -1845,10 +3467,156 @@ func _cell_has_all_needs(cell: String) -> bool:
 func _find_matching_pairs() -> Array:
 	var strong_group_by_cell := _diagnostic_group_by_cell("strongGroups")
 	var weak_group_by_cell := _diagnostic_group_by_cell("weakGroups")
-	var pairs := _best_solution_hint_pairs(strong_group_by_cell, weak_group_by_cell)
-	if not pairs.is_empty():
-		return pairs
-	return _best_resource_hint_pairs(strong_group_by_cell, weak_group_by_cell)
+	var candidates := _rank_hint_candidates(strong_group_by_cell, weak_group_by_cell)
+	if candidates.is_empty():
+		return []
+	var selected := _select_hint_candidates(candidates)
+	if selected.is_empty():
+		return []
+	return [[str(selected.get("a", "")), str(selected.get("b", ""))]]
+
+
+func _has_myco_cells() -> bool:
+	for cell in _cells:
+		if _is_myco_cell(cell):
+			return true
+	return false
+
+
+func _best_myco_hint_pairs(strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary) -> Array:
+	var pairs: Array = []
+	var best_score := -1000000.0
+	for i in range(_cells.size()):
+		for j in range(i + 1, _cells.size()):
+			var a := _cells[i]
+			var b := _cells[j]
+			if not _is_myco_cell(a) and not _is_myco_cell(b):
+				continue
+			if not _cell_pair_can_hint_match(a, b):
+				continue
+			var score := _hint_pair_score(a, b, strong_group_by_cell, weak_group_by_cell, false)
+			score += 260.0
+			if _is_myco_cell(a) and _is_myco_cell(b):
+				score -= 120.0
+			if score < -999999.0:
+				continue
+			if score > best_score:
+				best_score = score
+				pairs.clear()
+				pairs.append([a, b])
+			elif is_equal_approx(score, best_score):
+				pairs.append([a, b])
+	return pairs
+
+
+func _rank_hint_candidates(strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary) -> Array:
+	var candidates: Array = []
+	var solution_pair_keys: Dictionary = _solution_hint_pair_keys()
+	var seen: Dictionary = {}
+	for i in range(_cells.size()):
+		for j in range(i + 1, _cells.size()):
+			var a: String = _cells[i]
+			var b: String = _cells[j]
+			var pair_key: String = _hint_pair_key(a, b)
+			if seen.has(pair_key):
+				continue
+			seen[pair_key] = true
+			if not _cell_pair_can_hint_match(a, b):
+				continue
+			var solution_pair: bool = bool(solution_pair_keys.get(pair_key, false))
+			var score: float = _hint_pair_score(a, b, strong_group_by_cell, weak_group_by_cell, solution_pair)
+			score += _hint_variety_score(a, b)
+			if score < -999999.0:
+				continue
+			candidates.append({
+				"a": a,
+				"b": b,
+				"key": pair_key,
+				"score": score
+			})
+	candidates.sort_custom(Callable(self, "_compare_hint_candidates"))
+	return candidates
+
+
+func _solution_hint_pair_keys() -> Dictionary:
+	var keys: Dictionary = {}
+	if _solution_positions.is_empty():
+		return keys
+	for i in range(_cells.size()):
+		var a: String = _cells[i]
+		if not _solution_positions.has(a):
+			continue
+		for j in range(i + 1, _cells.size()):
+			var b: String = _cells[j]
+			if not _solution_positions.has(b):
+				continue
+			var a_solution_value: Variant = _solution_positions.get(a, Vector2i.ZERO)
+			var b_solution_value: Variant = _solution_positions.get(b, Vector2i.ZERO)
+			if not a_solution_value is Vector2i or not b_solution_value is Vector2i:
+				continue
+			var a_solution: Vector2i = a_solution_value as Vector2i
+			var b_solution: Vector2i = b_solution_value as Vector2i
+			if a_solution.distance_squared_to(b_solution) == 1:
+				keys[_hint_pair_key(a, b)] = true
+	return keys
+
+
+func _hint_variety_score(a: String, b: String) -> float:
+	var score: float = 0.0
+	var a_myco: bool = _is_myco_cell(a)
+	var b_myco: bool = _is_myco_cell(b)
+	if a_myco or b_myco:
+		score -= 180.0
+	if a_myco and b_myco:
+		score -= 180.0
+	if not a_myco and not b_myco:
+		score += 75.0
+	var key: String = _hint_pair_key(a, b)
+	var recent_index: int = _recent_hint_keys.find(key)
+	if recent_index >= 0:
+		score -= 1000.0 - float(recent_index) * 110.0
+	return score
+
+
+func _select_hint_candidates(candidates: Array) -> Dictionary:
+	if candidates.is_empty():
+		return {}
+	var best_score: float = float((candidates[0] as Dictionary).get("score", -1000000.0))
+	var window: Array = []
+	for candidate_value in candidates:
+		if not candidate_value is Dictionary:
+			continue
+		var candidate: Dictionary = candidate_value as Dictionary
+		var score: float = float(candidate.get("score", -1000000.0))
+		if window.size() >= HINT_TOP_RANDOM_WINDOW:
+			break
+		if best_score - score > HINT_TOP_SCORE_FALLOFF:
+			break
+		window.append(candidate)
+	if window.is_empty():
+		return candidates[0] as Dictionary
+	var selected_index: int = _myco_rng.randi_range(0, window.size() - 1)
+	return window[selected_index] as Dictionary
+
+
+func _compare_hint_candidates(a: Variant, b: Variant) -> bool:
+	var a_candidate: Dictionary = a as Dictionary
+	var b_candidate: Dictionary = b as Dictionary
+	return float(a_candidate.get("score", -1000000.0)) > float(b_candidate.get("score", -1000000.0))
+
+
+func _hint_pair_key(a: String, b: String) -> String:
+	if a < b:
+		return str(a, "::", b)
+	return str(b, "::", a)
+
+
+func _remember_hint_pair(a: String, b: String) -> void:
+	var key: String = _hint_pair_key(a, b)
+	_recent_hint_keys.erase(key)
+	_recent_hint_keys.push_front(key)
+	while _recent_hint_keys.size() > HINT_RECENT_MEMORY:
+		_recent_hint_keys.pop_back()
 
 
 func _best_solution_hint_pairs(strong_group_by_cell: Dictionary, weak_group_by_cell: Dictionary) -> Array:
@@ -1891,7 +3659,7 @@ func _best_resource_hint_pairs(strong_group_by_cell: Dictionary, weak_group_by_c
 		for j in range(i + 1, _cells.size()):
 			var a := _cells[i]
 			var b := _cells[j]
-			if not _cells_can_match(a, b):
+			if not _cell_pair_can_hint_match(a, b):
 				continue
 			var score := _hint_pair_score(a, b, strong_group_by_cell, weak_group_by_cell, false)
 			if score < -999999.0:
@@ -1910,9 +3678,16 @@ func _hint_pair_score(a: String, b: String, strong_group_by_cell: Dictionary, we
 	var b_strong := int(strong_group_by_cell.get(b, -2))
 	if a_strong >= 0 and a_strong == b_strong:
 		return -1000000.0
+	var reciprocal_main_need := _cells_have_reciprocal_main_need(a, b)
+	if not reciprocal_main_need and not _is_myco_cell(a) and not _is_myco_cell(b):
+		return -1000000.0
 	var score := 0.0
 	if solution_pair:
 		score += 1000.0
+	if reciprocal_main_need:
+		score += 520.0
+	elif _is_myco_cell(a) or _is_myco_cell(b):
+		score -= 220.0
 	if _get_cell_tile(a).distance_squared_to(_get_cell_tile(b)) == 1:
 		score += 45.0
 	else:
@@ -1927,11 +3702,38 @@ func _hint_pair_score(a: String, b: String, strong_group_by_cell: Dictionary, we
 		score += 60.0
 	if _pair_has_possible_swap(a, b):
 		score += 100.0
-	if _cells_can_match(a, b):
+	if _cells_can_exchange(a, b):
+		score += 95.0
+	elif _cells_can_match(a, b):
 		score += 80.0
+	score += _exchange_need_score(a, b)
+	score += _exchange_need_score(b, a)
 	score += _missing_need_score(a, _cell_produced_resource(b))
 	score += _missing_need_score(b, _cell_produced_resource(a))
 	return score
+
+
+func _cell_pair_can_hint_match(a: String, b: String) -> bool:
+	if _cells_have_reciprocal_main_need(a, b):
+		return true
+	if not _is_myco_cell(a) and not _is_myco_cell(b):
+		return false
+	if _using_csharp_sim:
+		return _pair_has_possible_swap(a, b) or _cells_can_exchange(a, b)
+	return _cells_can_match(a, b)
+
+
+func _cells_can_exchange(a: String, b: String) -> bool:
+	return _cell_has_payable_resource_for(a, b) and _cell_has_payable_resource_for(b, a)
+
+
+func _exchange_need_score(receiver: String, giver: String) -> float:
+	var best := 0.0
+	for need_value in _needs.get(receiver, []):
+		var need := str(need_value)
+		if _cell_can_offer_resource_to(giver, need, receiver):
+			best = maxf(best, (1.0 - _slot_fullness(receiver, need)) * 70.0)
+	return best
 
 
 func _missing_need_score(cell: String, resource: String) -> float:
@@ -1993,14 +3795,6 @@ func _clear_hint() -> void:
 	_board_renderer_full_sync_needed = true
 
 
-func _toggle_circuit_overlay() -> void:
-	_circuit_overlay_enabled = not _circuit_overlay_enabled
-	if is_instance_valid(_circuit_button):
-		_circuit_button.text = "Circuit" if _circuit_overlay_enabled else "Circuit Off"
-	_board_renderer_full_sync_needed = true
-	queue_redraw()
-
-
 func _count_met_needs() -> int:
 	var count := 0
 	for cell in _cells:
@@ -2018,6 +3812,7 @@ func _check_solution() -> void:
 		var was_solved := _solved
 		_solved = bool(_sim_snapshot.get("won", false))
 		if _solved and not was_solved and Global.has_method("record_cellular_puzzle_level_complete"):
+			_save_level_high_velocity_if_dirty()
 			Global.record_cellular_puzzle_level_complete(_level_number)
 		_update_level_text()
 		return
@@ -2029,6 +3824,7 @@ func _check_solution() -> void:
 	if all_met and not _solved:
 		_solved = true
 		if Global.has_method("record_cellular_puzzle_level_complete"):
+			_save_level_high_velocity_if_dirty()
 			Global.record_cellular_puzzle_level_complete(_level_number)
 	_update_level_text()
 
@@ -2041,18 +3837,27 @@ func _resource_color(resource: String) -> Color:
 
 
 func _on_back_pressed() -> void:
+	_save_puzzle_level_state()
+	_save_current_level_progress()
 	get_tree().change_scene_to_file("res://scenes/title_screen.tscn")
 
 
 func _on_reset_pressed() -> void:
-	_load_level(_level_number)
+	_save_level_high_velocity_if_dirty()
+	_clear_saved_puzzle_level_state(_level_number)
+	_load_level(_level_number, _level_number <= Global.cellular_puzzle_highest_level)
 	queue_redraw()
 
 
 func _on_last_pressed() -> void:
+	_save_puzzle_level_state()
 	var last_level := maxi(1, _level_number - 1)
-	Global.cellular_puzzle_current_level = last_level
-	_load_level(last_level)
+	var record_progress := last_level <= Global.cellular_puzzle_highest_level
+	if record_progress:
+		Global.cellular_puzzle_current_level = last_level
+		if Global.has_method("save_cellular_progress"):
+			Global.save_cellular_progress()
+	_load_level(last_level, record_progress)
 	_layout_hud()
 	queue_redraw()
 
@@ -2069,6 +3874,7 @@ func _on_hint_pressed() -> void:
 	var pair: Array = pairs[_hint_cursor % pairs.size()]
 	_hint_cursor += 1
 	_hint_pair = [str(pair[0]), str(pair[1])]
+	_remember_hint_pair(_hint_pair[0], _hint_pair[1])
 	_hint_text = str("Hint: connect ", _cell_hint_mark(_hint_pair[0]), " with ", _cell_hint_mark(_hint_pair[1]))
 	_board_renderer_full_sync_needed = true
 	_update_level_text()
@@ -2082,13 +3888,18 @@ func _cell_hint_mark(cell: String) -> String:
 	return cell
 
 
-func _on_next_pressed() -> void:
+func _on_next_pressed(diagnostic_bypass: bool = false) -> void:
+	var record_progress := _can_go_next()
+	if not record_progress and not diagnostic_bypass:
+		return
+	_save_puzzle_level_state()
 	var next_level := _level_number + 1
-	Global.cellular_puzzle_current_level = next_level
-	if next_level > Global.cellular_puzzle_highest_level:
-		Global.cellular_puzzle_highest_level = next_level
+	if record_progress:
+		Global.cellular_puzzle_current_level = next_level
+		if next_level > Global.cellular_puzzle_highest_level:
+			Global.cellular_puzzle_highest_level = next_level
 		if Global.has_method("save_cellular_progress"):
 			Global.save_cellular_progress()
-	_load_level(next_level)
+	_load_level(next_level, record_progress)
 	_layout_hud()
 	queue_redraw()

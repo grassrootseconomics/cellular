@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+export SESSION="${SESSION:-cellular-shape-first-021-200}"
+export WORKERS="${WORKERS:-15}"
+export LEVEL_START="${LEVEL_START:-21}"
+export LEVEL_END="${LEVEL_END:-200}"
+export LAYOUT_CANDIDATES="${LAYOUT_CANDIDATES:-512}"
+export SOLUTION_TICKS="${SOLUTION_TICKS:-900}"
+export SOURCE_RATE="${SOURCE_RATE:-32}"
+export MAX_SWAP_QUANTITY_PER_EDGE="${MAX_SWAP_QUANTITY_PER_EDGE:-8}"
+export WIN_DURATION_TICKS="${WIN_DURATION_TICKS:-3}"
+export REQUIRED_ALIVE_TICKS_AT_END="${REQUIRED_ALIVE_TICKS_AT_END:-0}"
+export SHAPE_FIRST_SUSTAINED_TICKS="${SHAPE_FIRST_SUSTAINED_TICKS:-0}"
+export EVENT_CAPACITY="${EVENT_CAPACITY:-1048576}"
+export HEARTBEAT_SECONDS="${HEARTBEAT_SECONDS:-60}"
+export PROGRESS_STRIDE="${PROGRESS_STRIDE:-128}"
+
+JOB="${1:-shape-first-021-200}"
+exec bash scripts/start_shape_first_exact_batch_tmux.sh "$JOB"

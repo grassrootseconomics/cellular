@@ -1,0 +1,2 @@
+level,status,candidates_evaluated,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,failure_category,output
+11,fail,225,-1,18.00,15018,9412,0,insufficient source/engine settings,sim/solutions/puzzle-level011-preview/level-011

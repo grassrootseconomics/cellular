@@ -23,7 +23,7 @@
         { "resource": "E", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "C", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "C", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     },
     {
@@ -37,7 +37,7 @@
         { "resource": "C", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "E", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "E", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     },
     {
@@ -51,7 +51,7 @@
         { "resource": "D", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "A", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "A", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     },
     {
@@ -65,7 +65,7 @@
         { "resource": "B", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "F", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "F", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     },
     {
@@ -79,7 +79,7 @@
         { "resource": "F", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "B", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "B", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     },
     {
@@ -93,7 +93,7 @@
         { "resource": "A", "role": "Need", "quantity": 0 }
       ],
       "sources": [
-        { "resource": "D", "quantityPerTick": 4, "intervalTicks": 1 }
+        { "resource": "D", "quantityPerTick": 32, "intervalTicks": 1 }
       ]
     }
   ],

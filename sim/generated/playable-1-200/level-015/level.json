@@ -1,0 +1,512 @@
+{
+  "levelNumber": 15,
+  "mode": "Puzzle",
+  "difficulty": "Level 15: 21 cells, duplicate producers, red myco, rocks",
+  "generationSeed": 1015,
+  "resources": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O"
+  ],
+  "cells": [
+    {
+      "id": "cell-l-001",
+      "kind": "Standard",
+      "producedResource": "L",
+      "needs": [
+        "D",
+        "M",
+        "H"
+      ]
+    },
+    {
+      "id": "cell-m-001",
+      "kind": "Standard",
+      "producedResource": "M",
+      "needs": [
+        "L",
+        "O",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-o-001",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "M",
+        "B",
+        "L"
+      ]
+    },
+    {
+      "id": "cell-b-001",
+      "kind": "Standard",
+      "producedResource": "B",
+      "needs": [
+        "O",
+        "C",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-c-001",
+      "kind": "Standard",
+      "producedResource": "C",
+      "needs": [
+        "B",
+        "A",
+        "O"
+      ]
+    },
+    {
+      "id": "red-myco-001",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "C",
+        "A",
+        "O",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-f-001",
+      "kind": "Standard",
+      "producedResource": "F",
+      "needs": [
+        "C",
+        "N",
+        "E"
+      ]
+    },
+    {
+      "id": "cell-n-001",
+      "kind": "Standard",
+      "producedResource": "N",
+      "needs": [
+        "F",
+        "E",
+        "C"
+      ]
+    },
+    {
+      "id": "cell-e-001",
+      "kind": "Standard",
+      "producedResource": "E",
+      "needs": [
+        "N",
+        "D",
+        "F"
+      ]
+    },
+    {
+      "id": "cell-d-001",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "E",
+        "I",
+        "N"
+      ]
+    },
+    {
+      "id": "cell-i-001",
+      "kind": "Standard",
+      "producedResource": "I",
+      "needs": [
+        "D",
+        "M",
+        "E"
+      ]
+    },
+    {
+      "id": "red-myco-002",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "D",
+        "E",
+        "M",
+        "J"
+      ]
+    },
+    {
+      "id": "cell-a-001",
+      "kind": "Standard",
+      "producedResource": "A",
+      "needs": [
+        "M",
+        "G",
+        "I"
+      ]
+    },
+    {
+      "id": "cell-g-001",
+      "kind": "Standard",
+      "producedResource": "G",
+      "needs": [
+        "A",
+        "J",
+        "D"
+      ]
+    },
+    {
+      "id": "cell-j-001",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "G",
+        "O",
+        "A"
+      ]
+    },
+    {
+      "id": "cell-o-002",
+      "kind": "Standard",
+      "producedResource": "O",
+      "needs": [
+        "J",
+        "K",
+        "G"
+      ]
+    },
+    {
+      "id": "cell-k-001",
+      "kind": "Standard",
+      "producedResource": "K",
+      "needs": [
+        "O",
+        "B",
+        "J"
+      ]
+    },
+    {
+      "id": "red-myco-003",
+      "kind": "RedMyco",
+      "producedResource": "",
+      "needs": [
+        "B",
+        "N",
+        "J",
+        "M"
+      ]
+    },
+    {
+      "id": "cell-j-002",
+      "kind": "Standard",
+      "producedResource": "J",
+      "needs": [
+        "M",
+        "H",
+        "K"
+      ]
+    },
+    {
+      "id": "cell-h-001",
+      "kind": "Standard",
+      "producedResource": "H",
+      "needs": [
+        "J",
+        "D",
+        "L"
+      ]
+    },
+    {
+      "id": "cell-d-002",
+      "kind": "Standard",
+      "producedResource": "D",
+      "needs": [
+        "H",
+        "L",
+        "J"
+      ]
+    }
+  ],
+  "startingLayout": {
+    "width": 8,
+    "height": 7,
+    "cells": [
+      {
+        "cellId": "cell-j-002",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 1,
+        "y": 6
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 7,
+        "y": 1
+      },
+      {
+        "cellId": "cell-h-001",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "cellId": "cell-l-001",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "cellId": "cell-d-002",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-003",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "cellId": "cell-n-001",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "cellId": "cell-o-001",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "cell-o-002",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "cellId": "cell-j-001",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 6,
+        "y": 0
+      },
+      {
+        "cellId": "cell-m-001",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 3,
+        "y": 6
+      }
+    ],
+    "rocks": [
+      {
+        "x": 3,
+        "y": 0
+      },
+      {
+        "x": 3,
+        "y": 4
+      },
+      {
+        "x": 0,
+        "y": 4
+      },
+      {
+        "x": 1,
+        "y": 2
+      },
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 4,
+        "y": 0
+      },
+      {
+        "x": 4,
+        "y": 6
+      }
+    ],
+    "ascii": "#*I##.C.\n..L...H*\n.#J.EM..\nDO...D.N\n#..#..OB\nF.*J.G..\n.A.K#..."
+  },
+  "solutionLayout": {
+    "width": 5,
+    "height": 5,
+    "cells": [
+      {
+        "cellId": "cell-l-001",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "cellId": "cell-m-001",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "cellId": "cell-o-001",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "cellId": "cell-b-001",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "cellId": "cell-c-001",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "cellId": "red-myco-001",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "cellId": "cell-f-001",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "cellId": "cell-n-001",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "cellId": "cell-e-001",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "cellId": "cell-d-001",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "cellId": "cell-i-001",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "cellId": "red-myco-002",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "cellId": "cell-a-001",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "cellId": "cell-g-001",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "cellId": "cell-j-001",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "cellId": "cell-o-002",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "cellId": "cell-k-001",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "cellId": "red-myco-003",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "cellId": "cell-j-002",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "cellId": "cell-h-001",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "cellId": "cell-d-002",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "rocks": [],
+    "ascii": "L....\nMOBC*\nDDENF\nHI*AG\nJ*KOJ"
+  },
+  "solverSummary": {
+    "won": false,
+    "acceptedNearWin": false,
+    "needAttempt": 0,
+    "candidateIndex": -1,
+    "candidateCount": 0,
+    "ticksPerCandidate": 0,
+    "glowingCells": 0,
+    "totalSwaps": 0,
+    "totalReactions": 0,
+    "activeCellsInLastWindow": 0,
+    "strainPenalty": 0,
+    "finalScore": 0,
+    "adjacentPairs": 32,
+    "winDurationTicks": 3,
+    "requiredAliveTicksAtEnd": 0,
+    "finalSustainedTicks": 0,
+    "stableAtEnd": false
+  }
+}

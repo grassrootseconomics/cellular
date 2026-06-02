@@ -1,3 +1,20 @@
-GEBA
-FDHJ
-CI..
+.. .. .. .. ## ..
+.. .. ## A1 H1 *1
+.. .. ## H2 D1 I1
+.. .. .. B1 G1 F1
+.. .. .. E1 *2 C1
+.. .. .. .. ## ..
+
+Legend:
+*1: red-myco-001; red-myco; needs I,H,A,D
+*2: red-myco-002; red-myco; needs C,G,H,D
+A1: cell-a-001; produces A; needs H,I,B
+B1: cell-b-001; produces B; needs G,H,E
+C1: cell-c-001; produces C; needs F,G,D
+D1: cell-d-001; produces D; needs I,F,H
+E1: cell-e-001; produces E; needs C,G,B
+F1: cell-f-001; produces F; needs D,C,I
+G1: cell-g-001; produces G; needs E,B,D
+H1: cell-h-001; produces H; needs B,A,G
+H2: cell-h-002; produces H; needs I,A,D
+I1: cell-i-001; produces I; needs H,D,F

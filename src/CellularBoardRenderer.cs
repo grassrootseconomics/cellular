@@ -9,6 +9,10 @@ public partial class CellularBoardRenderer : Control
     private const float ReactionVisualTtlTicks = 10.0f;
     private const float PipAngleSmooth = 0.22f;
     private const float PipOffsetSmooth = 0.24f;
+    private const int MaxVisibleFlowLines = 192;
+    private const ulong ZeroPipPulsePeriodMsec = 3_000;
+    private const ulong ZeroPipPulseFadeMsec = 1_000;
+    private static readonly Color ZeroPipPulseColor = new(1.0f, 0.04f, 0.02f, 1.0f);
 
     private static readonly string[] ResourceLetters =
     [
@@ -37,23 +41,39 @@ public partial class CellularBoardRenderer : Control
         new(0.24f, 0.80f, 0.56f, 1.0f)
     ];
 
+    private const float RedMycoRingRadius = 0.54f;
+    private static readonly Color RedMycoRingEdgeColor = new(0.86f, 0.02f, 0.04f, 0.16f);
+    private static readonly Color RedMycoRingMidColor = new(0.92f, 0.04f, 0.06f, 0.44f);
+    private static readonly Color RedMycoRingCoreColor = new(0.70f, 0.00f, 0.02f, 0.88f);
+
     private const string NeedStateMissing = "missing";
     private const string NeedStateAvailable = "available";
     private const string NeedStateActive = "active";
     private const string NeedStateSatisfied = "satisfied";
+    private const string CellKindStandard = "Standard";
+    private const string CellKindWhiteMyco = "WhiteMyco";
+    private const string CellKindRedMyco = "RedMyco";
 
     private readonly List<string> _cells = [];
     private readonly Dictionary<string, Vector2I> _positions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _producedByCell = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _cellKinds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<string>> _needs = new(StringComparer.Ordinal);
+    private readonly HashSet<Vector2I> _rocks = [];
     private readonly Dictionary<string, CellVisualState> _cellStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _pipAngles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _pipOffsets = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _pipPartners = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _displayFullness = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RecentFlowVisual> _recentFlowByNeed = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _recentSwapPartnerByNeed = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _possibleSwapPartnerByNeed = new(StringComparer.Ordinal);
+    private readonly List<RecentFlowLineVisual> _visibleRecentFlows = [];
+    private readonly List<float> _usedNeedAngles = [];
 
     private GdDictionary _snapshot = new();
     private Rect2 _boardRect;
+    private Rect2 _boardViewportRect;
     private float _tileSize = 64.0f;
     private int _boardCols = 8;
     private int _boardRows = 8;
@@ -69,6 +89,17 @@ public partial class CellularBoardRenderer : Control
     private int _resourceMarkMode;
     private ulong _lastDrawMsec;
     private float _frameBlend = 1.0f;
+    private bool _visualProfileEnabled;
+    private int _visualProfilePrintEvery = 120;
+    private int _visualProfileFrames;
+    private ulong _visualProfileFrameUsec;
+    private ulong _visualProfileMaxFrameUsec;
+    private ulong _visualProfileBoardUsec;
+    private ulong _visualProfileCircuitUsec;
+    private ulong _visualProfileFlowsUsec;
+    private ulong _visualProfileStickyUsec;
+    private ulong _visualProfileHintUsec;
+    private ulong _visualProfileCellsUsec;
 
     public override void _Ready()
     {
@@ -81,6 +112,11 @@ public partial class CellularBoardRenderer : Control
     public void SetRenderState(GdDictionary state)
     {
         _boardRect = GetRect2(state, "boardRect", _boardRect);
+        _boardViewportRect = GetRect2(state, "boardViewportRect", _boardRect);
+        if (_boardViewportRect.Size.X <= 1.0f || _boardViewportRect.Size.Y <= 1.0f)
+        {
+            _boardViewportRect = _boardRect;
+        }
         _tileSize = GetFloat(state, "tileSize", _tileSize);
         _boardCols = GetInt(state, "boardCols", _boardCols);
         _boardRows = GetInt(state, "boardRows", _boardRows);
@@ -92,6 +128,13 @@ public partial class CellularBoardRenderer : Control
         _dragPosition = GetVector2(state, "dragPosition", Vector2.Zero);
         _originalDragTile = GetVector2I(state, "originalDragTile", Vector2I.Zero);
         _resourceMarkMode = GetInt(state, "resourceMarkMode", _resourceMarkMode);
+        var profileWasEnabled = _visualProfileEnabled;
+        _visualProfileEnabled = GetBool(state, "visualProfileEnabled", _visualProfileEnabled);
+        _visualProfilePrintEvery = Math.Max(1, GetInt(state, "visualProfilePrintEvery", _visualProfilePrintEvery));
+        if (_visualProfileEnabled && !profileWasEnabled)
+        {
+            ResetVisualProfile();
+        }
 
         _hintA = "";
         _hintB = "";
@@ -104,10 +147,13 @@ public partial class CellularBoardRenderer : Control
 
         ReadCells(state);
         ReadPositions(state);
+        ReadRocks(state);
         ReadProduced(state);
+        ReadCellKinds(state);
         ReadNeeds(state);
         _snapshot = GetDictionary(state, "snapshot");
         ReadCellStates();
+        RebuildSnapshotIndexes();
 
         QueueRedraw();
     }
@@ -126,13 +172,17 @@ public partial class CellularBoardRenderer : Control
 
     public override void _Draw()
     {
+        if (_visualProfileEnabled)
+        {
+            DrawProfiled();
+            return;
+        }
+
         UpdateFrameBlend();
         DrawBoard();
-        if (!_fastDragMode)
-        {
-            DrawCircuitFlowGroups();
-            DrawRecentFlows();
-        }
+        DrawCircuitFlowGroups();
+        DrawRecentFlows();
+        DrawDragStickyConnections();
 
         DrawHint();
 
@@ -152,14 +202,119 @@ public partial class CellularBoardRenderer : Control
         }
     }
 
+    private void DrawProfiled()
+    {
+        var frameStart = Time.GetTicksUsec();
+        UpdateFrameBlend();
+        var sectionStart = Time.GetTicksUsec();
+        DrawBoard();
+        _visualProfileBoardUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        DrawCircuitFlowGroups();
+        _visualProfileCircuitUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        DrawRecentFlows();
+        _visualProfileFlowsUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        DrawDragStickyConnections();
+        _visualProfileStickyUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        DrawHint();
+        _visualProfileHintUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        foreach (var cell in _cells)
+        {
+            if (cell == _dragCell)
+            {
+                continue;
+            }
+
+            DrawCell(cell, TileCenter(GetCellTile(cell)), dragging: false);
+        }
+
+        if (!string.IsNullOrEmpty(_dragCell))
+        {
+            DrawCell(_dragCell, _dragPosition, dragging: true);
+        }
+        _visualProfileCellsUsec += Time.GetTicksUsec() - sectionStart;
+
+        var frameUsec = Time.GetTicksUsec() - frameStart;
+        _visualProfileFrameUsec += frameUsec;
+        _visualProfileMaxFrameUsec = Math.Max(_visualProfileMaxFrameUsec, frameUsec);
+        _visualProfileFrames++;
+        if (_visualProfileFrames >= _visualProfilePrintEvery)
+        {
+            PrintVisualProfile();
+            ResetVisualProfile();
+        }
+    }
+
+    private void PrintVisualProfile()
+    {
+        if (_visualProfileFrames <= 0)
+        {
+            return;
+        }
+
+        var frames = Math.Max(1, _visualProfileFrames);
+        GD.Print(
+            "[cellular-visual-profile] ",
+            "frames=", frames,
+            " cells=", _cells.Count,
+            " visible_flows=", _visibleRecentFlows.Count,
+            " indexed_possible=", _possibleSwapPartnerByNeed.Count,
+            " avg_ms=", UsecToMs(_visualProfileFrameUsec / (ulong)frames),
+            " max_ms=", UsecToMs(_visualProfileMaxFrameUsec),
+            " board_ms=", UsecToMs(_visualProfileBoardUsec / (ulong)frames),
+            " circuit_ms=", UsecToMs(_visualProfileCircuitUsec / (ulong)frames),
+            " flows_ms=", UsecToMs(_visualProfileFlowsUsec / (ulong)frames),
+            " sticky_ms=", UsecToMs(_visualProfileStickyUsec / (ulong)frames),
+            " hint_ms=", UsecToMs(_visualProfileHintUsec / (ulong)frames),
+            " cells_ms=", UsecToMs(_visualProfileCellsUsec / (ulong)frames));
+    }
+
+    private void ResetVisualProfile()
+    {
+        _visualProfileFrames = 0;
+        _visualProfileFrameUsec = 0;
+        _visualProfileMaxFrameUsec = 0;
+        _visualProfileBoardUsec = 0;
+        _visualProfileCircuitUsec = 0;
+        _visualProfileFlowsUsec = 0;
+        _visualProfileStickyUsec = 0;
+        _visualProfileHintUsec = 0;
+        _visualProfileCellsUsec = 0;
+    }
+
+    private static string UsecToMs(ulong usec) => (usec / 1000.0).ToString("0.###");
+
     private void DrawBoard()
     {
-        DrawRect(_boardRect.Grow(10.0f), new Color(0.015f, 0.030f, 0.035f, 0.88f), filled: true);
-        for (var y = 0; y < _boardRows; y++)
+        DrawRect(_boardViewportRect, new Color(0.015f, 0.030f, 0.035f, 0.88f), filled: true);
+        var minX = VisibleMinX();
+        var maxX = VisibleMaxX();
+        var minY = VisibleMinY();
+        var maxY = VisibleMaxY();
+        for (var y = minY; y <= maxY; y++)
         {
-            for (var x = 0; x < _boardCols; x++)
+            for (var x = minX; x <= maxX; x++)
             {
-                var rect = new Rect2(_boardRect.Position + new Vector2(x, y) * _tileSize, new Vector2(_tileSize, _tileSize)).Grow(-2.0f);
+                if (_rocks.Contains(new Vector2I(x, y)))
+                {
+                    continue;
+                }
+
+                var rect = TileRect(new Vector2I(x, y)).Grow(-2.0f);
+                if (!RectIntersectsViewport(rect, 2.0f))
+                {
+                    continue;
+                }
+
                 var shade = (x + y) % 2 == 0 ? 0.085f : 0.105f;
                 DrawRect(rect, new Color(shade, shade + 0.035f, shade + 0.045f, 1.0f), filled: true);
                 DrawRect(rect, new Color(0.24f, 0.42f, 0.42f, 0.18f), filled: false, width: 1.0f);
@@ -174,7 +329,12 @@ public partial class CellularBoardRenderer : Control
         var tile = ScreenToTile(_dragPosition);
         if (IsTileInside(tile) && (IsTileEmpty(tile) || tile == _originalDragTile))
         {
-            var highlight = new Rect2(_boardRect.Position + new Vector2(tile.X, tile.Y) * _tileSize, new Vector2(_tileSize, _tileSize)).Grow(-3.0f);
+            var highlight = TileRect(tile).Grow(-3.0f);
+            if (!RectIntersectsViewport(highlight, 4.0f))
+            {
+                return;
+            }
+
             DrawRect(highlight, new Color(0.45f, 1.0f, 0.78f, 0.20f), filled: true);
             DrawRect(highlight, new Color(0.55f, 1.0f, 0.82f, 0.70f), filled: false, width: 3.0f);
         }
@@ -301,24 +461,36 @@ public partial class CellularBoardRenderer : Control
             var right = new Vector2I(tile.X + 1, tile.Y);
             if (tiles.Contains(right))
             {
-                DrawLine(center, TileCenter(right), heat, connectorWidth, antialiased: true);
+                var rightCenter = TileCenter(right);
+                if (LineIntersectsViewport(center, rightCenter, connectorWidth))
+                {
+                    DrawLine(center, rightCenter, heat, connectorWidth, antialiased: true);
+                }
             }
 
             var down = new Vector2I(tile.X, tile.Y + 1);
             if (tiles.Contains(down))
             {
-                DrawLine(center, TileCenter(down), heat, connectorWidth, antialiased: true);
+                var downCenter = TileCenter(down);
+                if (LineIntersectsViewport(center, downCenter, connectorWidth))
+                {
+                    DrawLine(center, downCenter, heat, connectorWidth, antialiased: true);
+                }
             }
         }
 
         foreach (var tile in tiles)
         {
-            DrawCircle(TileCenter(tile), heatRadius, heat);
+            var center = TileCenter(tile);
+            if (PointIntersectsViewport(center, heatRadius))
+            {
+                DrawCircle(center, heatRadius, heat);
+            }
         }
 
         foreach (var tile in tiles)
         {
-            var origin = _boardRect.Position + new Vector2(tile.X, tile.Y) * _tileSize;
+            var origin = TileRect(tile).Position;
             var topLeft = origin;
             var topRight = origin + new Vector2(_tileSize, 0.0f);
             var bottomLeft = origin + new Vector2(0.0f, _tileSize);
@@ -348,6 +520,11 @@ public partial class CellularBoardRenderer : Control
 
     private void DrawComponentBoundarySegment(Vector2 start, Vector2 finish, Color color, float alpha, float width)
     {
+        if (!LineIntersectsViewport(start, finish, width + 9.0f))
+        {
+            return;
+        }
+
         DrawLine(start, finish, color with { A = alpha * 0.32f }, width + 9.0f, antialiased: true);
         DrawLine(start, finish, new Color(0.0f, 0.07f, 0.08f, alpha * 0.50f), width + 3.0f, antialiased: true);
         DrawLine(start, finish, color.Lightened(0.30f) with { A = alpha }, width, antialiased: true);
@@ -365,6 +542,11 @@ public partial class CellularBoardRenderer : Control
         foreach (var cell in blocked)
         {
             var center = VisualCellCenter(cell);
+            if (!PointIntersectsViewport(center, _tileSize * 0.62f))
+            {
+                continue;
+            }
+
             DrawCircle(center, _tileSize * 0.56f, new Color(1.0f, 0.40f, 0.18f, 0.08f + pulse * 0.05f));
         DrawArc(center, _tileSize * 0.47f, -Mathf.Pi * 0.15f, Mathf.Tau * 0.82f, ArcSegments(_tileSize * 0.47f), new Color(1.0f, 0.72f, 0.28f, 0.22f + pulse * 0.12f), 2.5f, antialiased: true);
         }
@@ -382,6 +564,11 @@ public partial class CellularBoardRenderer : Control
         var normal = direction.Orthogonal();
         var lineStart = start + direction * _tileSize * 0.30f;
         var lineFinish = finish - direction * _tileSize * 0.30f;
+        if (!LineIntersectsViewport(lineStart, lineFinish, _tileSize * 0.50f))
+        {
+            return;
+        }
+
         var pulse = 0.5f + Mathf.Sin(Time.GetTicksMsec() / (intense ? 90.0f : 150.0f) + start.X * 0.02f) * 0.5f;
         var broad = color with
         {
@@ -413,7 +600,50 @@ public partial class CellularBoardRenderer : Control
             return;
         }
 
+        foreach (var flow in _visibleRecentFlows)
+        {
+            if (flow.Alpha <= 0.0f)
+            {
+                continue;
+            }
+
+            var sourcePoint = ResourceVisualPoint(flow.SourceCell, flow.Resource);
+            var targetPoint = ResourceVisualPoint(flow.TargetCell, flow.Resource);
+            if (!LineIntersectsViewport(sourcePoint, targetPoint, _tileSize * 0.20f))
+            {
+                continue;
+            }
+
+            var color = ResourceColor(flow.Resource);
+            DrawElectricFlowLine(sourcePoint, targetPoint, color, flow.Alpha);
+            var t = Mathf.Clamp(flow.AgeTicks / 2.4f, 0.0f, 1.0f);
+            var particlePoint = sourcePoint.Lerp(targetPoint, t);
+            if (PointIntersectsViewport(particlePoint, _tileSize * 0.08f))
+            {
+                DrawSwapParticle(particlePoint, flow.Resource, flow.Alpha);
+            }
+        }
+    }
+
+    private void DrawDragStickyConnections()
+    {
+        if (string.IsNullOrEmpty(_dragCell) || !_usingCsharpSim)
+        {
+            return;
+        }
+
+        DrawDragRecentFlowConnections();
+        DrawDragPossibleSwapConnections();
+    }
+
+    private void DrawDragRecentFlowConnections()
+    {
         var flows = GetArray(_snapshot, "flows");
+        if (flows.Count == 0)
+        {
+            return;
+        }
+
         var currentTick = GetFloat(_snapshot, "tick", 0.0f);
         foreach (var flowVariant in flows)
         {
@@ -421,7 +651,13 @@ public partial class CellularBoardRenderer : Control
             var source = GetString(flow, "sourceCellId", "");
             var target = GetString(flow, "targetCellId", "");
             var resource = GetString(flow, "resource", "");
-            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target) || string.IsNullOrEmpty(resource))
+            if ((source != _dragCell && target != _dragCell) || string.IsNullOrEmpty(resource))
+            {
+                continue;
+            }
+
+            var other = source == _dragCell ? target : source;
+            if (string.IsNullOrEmpty(other))
             {
                 continue;
             }
@@ -433,17 +669,92 @@ public partial class CellularBoardRenderer : Control
                 continue;
             }
 
-            var sourcePoint = ResourceVisualPoint(source, resource);
-            var targetPoint = ResourceVisualPoint(target, resource);
-            var color = ResourceColor(resource);
-            DrawElectricFlowLine(sourcePoint, targetPoint, color, alpha);
-            var t = Mathf.Clamp(age / 2.4f, 0.0f, 1.0f);
-            DrawSwapParticle(sourcePoint.Lerp(targetPoint, t), resource, alpha);
+            var start = ResourceVisualPoint(_dragCell, resource);
+            var finish = ResourceVisualPoint(other, resource);
+            DrawDragElasticLine(start, finish, ResourceColor(resource), 0.30f + alpha * 0.44f, active: true);
         }
+    }
+
+    private void DrawDragPossibleSwapConnections()
+    {
+        var swaps = GetArray(_snapshot, "possibleSwaps");
+        if (swaps.Count == 0)
+        {
+            return;
+        }
+
+        var drawnPairs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var swapVariant in swaps)
+        {
+            var swap = swapVariant.AsGodotDictionary();
+            var initiator = GetString(swap, "initiator", "");
+            var counterparty = GetString(swap, "counterparty", "");
+            if (initiator != _dragCell && counterparty != _dragCell)
+            {
+                continue;
+            }
+
+            var other = initiator == _dragCell ? counterparty : initiator;
+            if (string.IsNullOrEmpty(other))
+            {
+                continue;
+            }
+
+            var pairKey = string.CompareOrdinal(_dragCell, other) < 0 ? $"{_dragCell}\0{other}" : $"{other}\0{_dragCell}";
+            if (!drawnPairs.Add(pairKey))
+            {
+                continue;
+            }
+
+            var resource = initiator == _dragCell
+                ? GetString(swap, "counterpartyPaidResource", "")
+                : GetString(swap, "initiatorPaidResource", "");
+            var color = string.IsNullOrEmpty(resource) ? new Color(0.35f, 1.0f, 0.86f, 1.0f) : ResourceColor(resource);
+            var start = string.IsNullOrEmpty(resource) ? VisualCellCenter(_dragCell) : ResourceVisualPoint(_dragCell, resource);
+            var finish = string.IsNullOrEmpty(resource) ? VisualCellCenter(other) : ResourceVisualPoint(other, resource);
+            DrawDragElasticLine(start, finish, color, 0.48f, active: false);
+        }
+    }
+
+    private void DrawDragElasticLine(Vector2 start, Vector2 finish, Color color, float alpha, bool active)
+    {
+        var delta = finish - start;
+        if (delta.LengthSquared() <= 1.0f)
+        {
+            return;
+        }
+
+        var distance = delta.Length();
+        var stretch = Mathf.Clamp((distance - _tileSize * 0.72f) / Mathf.Max(_tileSize * 4.0f, 1.0f), 0.0f, 1.0f);
+        var direction = delta / distance;
+        var normal = direction.Orthogonal();
+        var phase = Time.GetTicksMsec() / (active ? 72.0f : 116.0f);
+        var wave = Mathf.Sin(phase + start.X * 0.013f + finish.Y * 0.017f) * _tileSize * (0.018f + stretch * 0.030f);
+        var offset = normal * wave;
+        var lineStart = start + direction * _tileSize * 0.04f;
+        var lineFinish = finish - direction * _tileSize * 0.04f;
+        if (!LineIntersectsViewport(lineStart, lineFinish, _tileSize * 0.24f))
+        {
+            return;
+        }
+
+        var outer = color with { A = alpha * (active ? 0.28f : 0.20f) };
+        DrawLine(lineStart, lineFinish, outer, _tileSize * (active ? 0.16f : 0.12f), antialiased: true);
+
+        var body = color.Lightened(0.18f) with { A = alpha * (0.54f + stretch * 0.18f) };
+        DrawLine(lineStart + offset, lineFinish - offset, body, Mathf.Max(3.0f, _tileSize * (active ? 0.055f : 0.040f)), antialiased: true);
+
+        var highlight = new Color(1.0f, 1.0f, 1.0f, alpha * (active ? 0.34f : 0.22f));
+        DrawLine(lineStart - offset * 0.65f, lineFinish + offset * 0.65f, highlight, active ? 1.8f : 1.3f, antialiased: true);
     }
 
     private void DrawSwapParticle(Vector2 position, string resource, float alpha)
     {
+        if (!PointIntersectsViewport(position, _tileSize * 0.10f))
+        {
+            return;
+        }
+
         var color = ResourceColor(resource) with { A = Mathf.Clamp(alpha, 0.0f, 1.0f) };
         var radius = Mathf.Max(3.0f, _tileSize * 0.055f);
         DrawCircle(position, radius, color);
@@ -454,6 +765,10 @@ public partial class CellularBoardRenderer : Control
     {
         var delta = finish - start;
         if (delta.LengthSquared() <= 1.0f)
+        {
+            return;
+        }
+        if (!LineIntersectsViewport(start, finish, _tileSize * 0.16f))
         {
             return;
         }
@@ -478,6 +793,11 @@ public partial class CellularBoardRenderer : Control
 
         var a = VisualCellCenter(_hintA);
         var b = VisualCellCenter(_hintB);
+        if (!LineIntersectsViewport(a, b, _tileSize * 0.60f))
+        {
+            return;
+        }
+
         var hintColor = new Color(1.0f, 0.92f, 0.24f, 0.86f);
         DrawLine(a, b, new Color(1.0f, 0.92f, 0.24f, 0.34f), 9.0f, antialiased: true);
         DrawLine(a, b, hintColor, 3.0f, antialiased: true);
@@ -488,9 +808,15 @@ public partial class CellularBoardRenderer : Control
     private void DrawCell(string cell, Vector2 center, bool dragging)
     {
         var radius = _tileSize * (dragging ? 0.43f : 0.39f);
+        if (!PointIntersectsViewport(center, radius * 1.95f))
+        {
+            return;
+        }
+
+        var kind = CellKindFor(cell);
+        var isMyco = IsMycoKind(kind);
         var produced = CellProducedResource(cell);
-        var color = ResourceColor(produced);
-        var detailed = !_fastDragMode || dragging;
+        var color = isMyco ? new Color(0.94f, 0.97f, 0.94f, 1.0f) : ResourceColor(produced);
         var liveComplete = CircuitAliveNow();
         var glowAlpha = _usingCsharpSim ? (CellIsGlowing(cell) ? 0.56f : 0.16f) : (CellHasAllNeeds(cell) ? 0.46f : 0.18f);
         if (liveComplete)
@@ -508,28 +834,31 @@ public partial class CellularBoardRenderer : Control
         DrawCircle(center, radius * (1.16f + (liveComplete ? 0.04f : 0.0f)), new Color(color.R, color.G, color.B, glowAlpha * 0.28f));
         DrawCircle(center, radius, new Color(color.R, color.G, color.B, 0.72f));
         DrawArc(center, radius * 0.96f, 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.92f, 1.0f, 0.95f, 0.68f), 3.0f, antialiased: true);
-
-        var font = GetThemeDefaultFont();
-        if (!detailed)
+        if (kind == CellKindRedMyco)
         {
-            DrawSimpleNeedDots(cell, center, radius);
-            DrawFastResourceMark(font, center, radius, produced, Mathf.RoundToInt(radius * 1.36f), Colors.White);
-            return;
+            DrawRedMycoRing(center, radius);
         }
 
+        var font = GetThemeDefaultFont();
         if (liveComplete)
         {
             var solvedPulse = 0.5f + Mathf.Sin(Time.GetTicksMsec() / 160.0f) * 0.5f;
             DrawArc(center, radius * (1.07f + solvedPulse * 0.03f), 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.62f, 1.0f, 0.88f, 0.28f + solvedPulse * 0.18f), 3.0f, antialiased: true);
         }
 
-        if (_usingCsharpSim)
+        if (_usingCsharpSim && !isMyco && !string.IsNullOrEmpty(produced))
         {
             DrawFullnessArc(center, radius * 1.07f, DisplayedFullness(cell, produced, SlotFullness(cell, produced)), color, 6.0f);
         }
 
         var needed = _needs.GetValueOrDefault(cell) ?? [];
-        var usedAngles = new List<float>(needed.Count);
+        var usedAngles = _usedNeedAngles;
+        usedAngles.Clear();
+        if (usedAngles.Capacity < needed.Count)
+        {
+            usedAngles.Capacity = needed.Count;
+        }
+
         for (var i = 0; i < needed.Count; i++)
         {
             var need = needed[i];
@@ -558,11 +887,29 @@ public partial class CellularBoardRenderer : Control
             DrawCircle(pipCenter, pipRadius, pipColor);
             DrawArc(pipCenter, pipRadius, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(0.01f, 0.025f, 0.03f, 0.82f), 2.2f, antialiased: true);
             DrawArc(pipCenter, pipRadius * 0.86f, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(1.0f, 1.0f, 1.0f, met ? 0.44f : 0.28f), 1.4f, antialiased: true);
-            DrawFullnessArc(pipCenter, pipRadius * 1.12f, DisplayedFullness(cell, need, visual.Fullness), pipColor, Mathf.Max(2.0f, pipRadius * 0.20f));
-            DrawResourceMark(font, pipCenter, pipRadius, need, Mathf.RoundToInt(pipRadius * 1.02f), Colors.White);
+            var pipBarRadius = pipRadius * 1.12f;
+            var pipBarWidth = Mathf.Max(2.0f, pipRadius * 0.20f);
+            DrawFullnessArc(pipCenter, pipBarRadius, DisplayedFullness(cell, need, visual.Fullness), pipColor, pipBarWidth);
+            if (_usingCsharpSim && visual.Fullness <= 0.0f)
+            {
+                DrawZeroPipPulseArc(pipCenter, pipBarRadius, pipBarWidth);
+            }
+            DrawFastResourceMark(font, pipCenter, pipRadius, need, Mathf.RoundToInt(pipRadius * 1.02f), Colors.White);
         }
 
-        DrawResourceMark(font, center, radius, produced, Mathf.RoundToInt(radius * 1.48f), Colors.White);
+        if (!isMyco)
+        {
+            DrawResourceMark(font, center, radius, produced, Mathf.RoundToInt(radius * 1.48f), Colors.White);
+        }
+    }
+
+    private void DrawRedMycoRing(Vector2 center, float radius)
+    {
+        var ringRadius = radius * RedMycoRingRadius;
+        var segments = ArcSegments(ringRadius);
+        DrawArc(center, ringRadius, 0.0f, Mathf.Tau, segments, RedMycoRingEdgeColor, Mathf.Max(2.0f, radius * 0.18f), antialiased: true);
+        DrawArc(center, ringRadius, 0.0f, Mathf.Tau, segments, RedMycoRingMidColor, Mathf.Max(1.6f, radius * 0.12f), antialiased: true);
+        DrawArc(center, ringRadius, 0.0f, Mathf.Tau, segments, RedMycoRingCoreColor, Mathf.Max(1.2f, radius * 0.055f), antialiased: true);
     }
 
     private void DrawSimpleNeedDots(string cell, Vector2 center, float cellRadius)
@@ -707,6 +1054,35 @@ public partial class CellularBoardRenderer : Control
         }
 
         DrawArc(center, radius, -Mathf.Pi * 0.5f, -Mathf.Pi * 0.5f + Mathf.Tau * amount, segments, color.Lightened(0.26f) with { A = 0.92f }, width, antialiased: true);
+    }
+
+    private void DrawZeroPipPulseArc(Vector2 center, float radius, float width)
+    {
+        var alpha = ZeroPipPulseAlpha();
+        if (alpha <= 0.0f)
+        {
+            return;
+        }
+
+        var segments = FullnessArcSegments(radius);
+        DrawArc(center, radius, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = 0.58f * alpha }, width + 1.2f, antialiased: true);
+        DrawArc(center, radius * 1.08f, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = 0.22f * alpha }, Mathf.Max(1.4f, width * 0.55f), antialiased: true);
+    }
+
+    private static float ZeroPipPulseAlpha()
+    {
+        var phase = Time.GetTicksMsec() % ZeroPipPulsePeriodMsec;
+        if (phase < ZeroPipPulseFadeMsec)
+        {
+            return phase / (float)ZeroPipPulseFadeMsec;
+        }
+
+        if (phase < ZeroPipPulseFadeMsec * 2)
+        {
+            return 1.0f - (phase - ZeroPipPulseFadeMsec) / (float)ZeroPipPulseFadeMsec;
+        }
+
+        return 0.0f;
     }
 
     private void UpdateFrameBlend()
@@ -1010,17 +1386,9 @@ public partial class CellularBoardRenderer : Control
             return "";
         }
 
-        var flows = GetArray(_snapshot, "flows");
-        for (var i = flows.Count - 1; i >= 0; i--)
-        {
-            var flow = flows[i].AsGodotDictionary();
-            if (GetString(flow, "targetCellId", "") == cell && GetString(flow, "resource", "") == need)
-            {
-                return GetString(flow, "sourceCellId", "");
-            }
-        }
-
-        return "";
+        return _recentFlowByNeed.TryGetValue(NeedLookupKey(cell, need), out var flow)
+            ? flow.SourceCell
+            : "";
     }
 
     private float RecentFlowAlphaForNeed(string cell, string need)
@@ -1030,21 +1398,9 @@ public partial class CellularBoardRenderer : Control
             return 0.0f;
         }
 
-        var flows = GetArray(_snapshot, "flows");
-        var currentTick = GetFloat(_snapshot, "tick", 0.0f);
-        for (var i = flows.Count - 1; i >= 0; i--)
-        {
-            var flow = flows[i].AsGodotDictionary();
-            if (GetString(flow, "targetCellId", "") != cell || GetString(flow, "resource", "") != need)
-            {
-                continue;
-            }
-
-            var age = Mathf.Max(0.0f, currentTick - GetFloat(flow, "tick", currentTick));
-            return Mathf.Clamp(1.0f - age / SwapVisualTtlTicks, 0.0f, 1.0f);
-        }
-
-        return 0.0f;
+        return _recentFlowByNeed.TryGetValue(NeedLookupKey(cell, need), out var flow)
+            ? flow.Alpha
+            : 0.0f;
     }
 
     private string RecentSwapPartnerForNeed(string cell, string need)
@@ -1054,26 +1410,7 @@ public partial class CellularBoardRenderer : Control
             return "";
         }
 
-        var swaps = GetArray(_snapshot, "swaps");
-        for (var i = swaps.Count - 1; i >= 0; i--)
-        {
-            var swap = swaps[i].AsGodotDictionary();
-            var initiator = GetString(swap, "initiator", "");
-            var counterparty = GetString(swap, "counterparty", "");
-            var initiatorReceived = GetString(swap, "counterpartyPaidResource", "");
-            var counterpartyReceived = GetString(swap, "initiatorPaidResource", "");
-            if (cell == initiator && need == initiatorReceived)
-            {
-                return counterparty;
-            }
-
-            if (cell == counterparty && need == counterpartyReceived)
-            {
-                return initiator;
-            }
-        }
-
-        return "";
+        return _recentSwapPartnerByNeed.GetValueOrDefault(NeedLookupKey(cell, need), "");
     }
 
     private string PossibleSwapPartnerForNeed(string cell, string need)
@@ -1083,26 +1420,7 @@ public partial class CellularBoardRenderer : Control
             return "";
         }
 
-        var swaps = GetArray(_snapshot, "possibleSwaps");
-        foreach (var swapVariant in swaps)
-        {
-            var swap = swapVariant.AsGodotDictionary();
-            var initiator = GetString(swap, "initiator", "");
-            var counterparty = GetString(swap, "counterparty", "");
-            var initiatorReceived = GetString(swap, "counterpartyPaidResource", "");
-            var counterpartyReceived = GetString(swap, "initiatorPaidResource", "");
-            if (cell == initiator && need == initiatorReceived)
-            {
-                return counterparty;
-            }
-
-            if (cell == counterparty && need == counterpartyReceived)
-            {
-                return initiator;
-            }
-        }
-
-        return "";
+        return _possibleSwapPartnerByNeed.GetValueOrDefault(NeedLookupKey(cell, need), "");
     }
 
     private string AdjacentReciprocalPartnerForNeed(string cell, string need)
@@ -1144,7 +1462,7 @@ public partial class CellularBoardRenderer : Control
     private bool CellHasPayableResourceFor(string cell, string other)
     {
         var produced = CellProducedResource(cell);
-        if (CellAcceptsResource(other, produced))
+        if (!string.IsNullOrEmpty(produced) && CellAcceptsResource(other, produced))
         {
             return true;
         }
@@ -1193,6 +1511,11 @@ public partial class CellularBoardRenderer : Control
         }
 
         var quantity = slot.Quantity;
+        if (IsMycoCell(cell))
+        {
+            return Math.Max(0, quantity);
+        }
+
         if (slot.Role is "Need" or "SourceOutput")
         {
             quantity -= 1;
@@ -1265,6 +1588,27 @@ public partial class CellularBoardRenderer : Control
 
     private Vector2 TileCenter(Vector2I tile) => _boardRect.Position + (new Vector2(tile.X, tile.Y) + new Vector2(0.5f, 0.5f)) * _tileSize;
 
+    private Rect2 TileRect(Vector2I tile) => new(_boardRect.Position + new Vector2(tile.X, tile.Y) * _tileSize, new Vector2(_tileSize, _tileSize));
+
+    private int VisibleMinX() => Mathf.Clamp(Mathf.FloorToInt((_boardViewportRect.Position.X - _boardRect.Position.X) / Mathf.Max(_tileSize, 1.0f)) - 1, 0, Math.Max(0, _boardCols - 1));
+
+    private int VisibleMaxX() => Mathf.Clamp(Mathf.CeilToInt((_boardViewportRect.Position.X + _boardViewportRect.Size.X - _boardRect.Position.X) / Mathf.Max(_tileSize, 1.0f)) + 1, 0, Math.Max(0, _boardCols - 1));
+
+    private int VisibleMinY() => Mathf.Clamp(Mathf.FloorToInt((_boardViewportRect.Position.Y - _boardRect.Position.Y) / Mathf.Max(_tileSize, 1.0f)) - 1, 0, Math.Max(0, _boardRows - 1));
+
+    private int VisibleMaxY() => Mathf.Clamp(Mathf.CeilToInt((_boardViewportRect.Position.Y + _boardViewportRect.Size.Y - _boardRect.Position.Y) / Mathf.Max(_tileSize, 1.0f)) + 1, 0, Math.Max(0, _boardRows - 1));
+
+    private bool RectIntersectsViewport(Rect2 rect, float grow = 0.0f) => _boardViewportRect.Grow(grow).Intersects(rect, true);
+
+    private bool PointIntersectsViewport(Vector2 point, float radius) => _boardViewportRect.Grow(radius).HasPoint(point);
+
+    private bool LineIntersectsViewport(Vector2 start, Vector2 finish, float grow)
+    {
+        var min = new Vector2(Mathf.Min(start.X, finish.X), Mathf.Min(start.Y, finish.Y));
+        var max = new Vector2(Mathf.Max(start.X, finish.X), Mathf.Max(start.Y, finish.Y));
+        return RectIntersectsViewport(new Rect2(min, max - min).Grow(grow), 0.0f);
+    }
+
     private Vector2I ScreenToTile(Vector2 screenPosition)
     {
         var local = screenPosition - _boardRect.Position;
@@ -1275,6 +1619,11 @@ public partial class CellularBoardRenderer : Control
 
     private bool IsTileEmpty(Vector2I tile)
     {
+        if (_rocks.Contains(tile))
+        {
+            return false;
+        }
+
         foreach (var cell in _cells)
         {
             if (cell == _dragCell)
@@ -1291,7 +1640,22 @@ public partial class CellularBoardRenderer : Control
         return true;
     }
 
-    private string CellProducedResource(string cell) => _producedByCell.GetValueOrDefault(cell, cell);
+    private string CellProducedResource(string cell) =>
+        IsMycoCell(cell) ? "" : _producedByCell.GetValueOrDefault(cell, cell);
+
+    private string CellKindFor(string cell)
+    {
+        if (_cellKinds.TryGetValue(cell, out var kind))
+        {
+            return kind;
+        }
+
+        return _cellStates.TryGetValue(cell, out var state) ? state.Kind : CellKindStandard;
+    }
+
+    private bool IsMycoCell(string cell) => IsMycoKind(CellKindFor(cell));
+
+    private static bool IsMycoKind(string kind) => kind is CellKindWhiteMyco or CellKindRedMyco;
 
     private Color ResourceColor(string resource)
     {
@@ -1368,6 +1732,19 @@ public partial class CellularBoardRenderer : Control
         }
     }
 
+    private void ReadRocks(GdDictionary state)
+    {
+        _rocks.Clear();
+        var rocks = GetDictionary(state, "rocks");
+        foreach (var keyVariant in rocks.Keys)
+        {
+            if (TryParseTileKey(keyVariant.AsString(), out var tile))
+            {
+                _rocks.Add(tile);
+            }
+        }
+    }
+
     private void ReadProduced(GdDictionary state)
     {
         _producedByCell.Clear();
@@ -1375,6 +1752,16 @@ public partial class CellularBoardRenderer : Control
         foreach (var keyVariant in produced.Keys)
         {
             _producedByCell[keyVariant.AsString()] = produced[keyVariant].AsString();
+        }
+    }
+
+    private void ReadCellKinds(GdDictionary state)
+    {
+        _cellKinds.Clear();
+        var kinds = GetDictionary(state, "cellKinds");
+        foreach (var keyVariant in kinds.Keys)
+        {
+            _cellKinds[keyVariant.AsString()] = kinds[keyVariant].AsString();
         }
     }
 
@@ -1408,8 +1795,11 @@ public partial class CellularBoardRenderer : Control
                 continue;
             }
 
+            var kind = GetString(cell, "kind", CellKindStandard);
+            _cellKinds.TryAdd(id, kind);
             var state = new CellVisualState
             {
+                Kind = kind,
                 Glowing = GetBool(cell, "glowing", false)
             };
             foreach (var slotVariant in GetArray(cell, "slots"))
@@ -1430,6 +1820,93 @@ public partial class CellularBoardRenderer : Control
             _cellStates[id] = state;
         }
     }
+
+    private void RebuildSnapshotIndexes()
+    {
+        _recentFlowByNeed.Clear();
+        _recentSwapPartnerByNeed.Clear();
+        _possibleSwapPartnerByNeed.Clear();
+        _visibleRecentFlows.Clear();
+        if (!_usingCsharpSim)
+        {
+            return;
+        }
+
+        var currentTick = GetFloat(_snapshot, "tick", 0.0f);
+        var flows = GetArray(_snapshot, "flows");
+        var visibleFlowKeys = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = flows.Count - 1; i >= 0; i--)
+        {
+            var flow = flows[i].AsGodotDictionary();
+            var target = GetString(flow, "targetCellId", "");
+            var source = GetString(flow, "sourceCellId", "");
+            var resource = GetString(flow, "resource", "");
+            if (string.IsNullOrEmpty(target) || string.IsNullOrEmpty(source) || string.IsNullOrEmpty(resource))
+            {
+                continue;
+            }
+
+            var age = Mathf.Max(0.0f, currentTick - GetFloat(flow, "tick", currentTick));
+            var alpha = Mathf.Clamp(1.0f - age / SwapVisualTtlTicks, 0.0f, 1.0f);
+
+            var lineKey = NeedLookupKey(NeedLookupKey(source, target), resource);
+            if (alpha > 0.0f && _visibleRecentFlows.Count < MaxVisibleFlowLines && visibleFlowKeys.Add(lineKey))
+            {
+                _visibleRecentFlows.Add(new RecentFlowLineVisual(source, target, resource, age, alpha));
+            }
+
+            var key = NeedLookupKey(target, resource);
+            if (!_recentFlowByNeed.ContainsKey(key))
+            {
+                _recentFlowByNeed[key] = new RecentFlowVisual(source, alpha);
+            }
+        }
+
+        var swaps = GetArray(_snapshot, "swaps");
+        for (var i = swaps.Count - 1; i >= 0; i--)
+        {
+            var swap = swaps[i].AsGodotDictionary();
+            IndexSwapPartner(_recentSwapPartnerByNeed, swap, overwrite: false);
+        }
+
+        var possibleSwaps = GetArray(_snapshot, "possibleSwaps");
+        foreach (var swapVariant in possibleSwaps)
+        {
+            IndexSwapPartner(_possibleSwapPartnerByNeed, swapVariant.AsGodotDictionary(), overwrite: false);
+        }
+    }
+
+    private static void IndexSwapPartner(Dictionary<string, string> index, GdDictionary swap, bool overwrite)
+    {
+        var initiator = GetString(swap, "initiator", "");
+        var counterparty = GetString(swap, "counterparty", "");
+        if (string.IsNullOrEmpty(initiator) || string.IsNullOrEmpty(counterparty))
+        {
+            return;
+        }
+
+        var initiatorReceived = GetString(swap, "counterpartyPaidResource", "");
+        if (!string.IsNullOrEmpty(initiatorReceived))
+        {
+            var key = NeedLookupKey(initiator, initiatorReceived);
+            if (overwrite || !index.ContainsKey(key))
+            {
+                index[key] = counterparty;
+            }
+        }
+
+        var counterpartyReceived = GetString(swap, "initiatorPaidResource", "");
+        if (!string.IsNullOrEmpty(counterpartyReceived))
+        {
+            var key = NeedLookupKey(counterparty, counterpartyReceived);
+            if (overwrite || !index.ContainsKey(key))
+            {
+                index[key] = initiator;
+            }
+        }
+    }
+
+    private static string NeedLookupKey(string cell, string resource) => $"{cell}\0{resource}";
 
     private static List<string> StringsFromArray(GdArray array)
     {
@@ -1464,6 +1941,24 @@ public partial class CellularBoardRenderer : Control
     private static Vector2I GetVector2I(GdDictionary dictionary, string key, Vector2I fallback) =>
         dictionary.ContainsKey(key) ? dictionary[key].AsVector2I() : fallback;
 
+    private static bool TryParseTileKey(string key, out Vector2I tile)
+    {
+        tile = Vector2I.Zero;
+        var separator = key.IndexOf(':', StringComparison.Ordinal);
+        if (separator <= 0 || separator + 1 >= key.Length)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(key[..separator], out var x) || !int.TryParse(key[(separator + 1)..], out var y))
+        {
+            return false;
+        }
+
+        tile = new Vector2I(x, y);
+        return true;
+    }
+
     private static GdArray GetArray(GdDictionary dictionary, string key) =>
         dictionary.ContainsKey(key) ? dictionary[key].AsGodotArray() : [];
 
@@ -1472,12 +1967,17 @@ public partial class CellularBoardRenderer : Control
 
     private sealed class CellVisualState
     {
+        public string Kind { get; init; } = CellKindStandard;
         public bool Glowing { get; init; }
 
         public Dictionary<string, SlotVisualState> Slots { get; } = new(StringComparer.Ordinal);
     }
 
     private sealed record SlotVisualState(string Role, int Quantity, float Fullness);
+
+    private sealed record RecentFlowVisual(string SourceCell, float Alpha);
+
+    private sealed record RecentFlowLineVisual(string SourceCell, string TargetCell, string Resource, float AgeTicks, float Alpha);
 
     private sealed record NeedVisual(
         string State,

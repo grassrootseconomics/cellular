@@ -1,3 +1,31 @@
-RPQEOBA
-NJKCFDG
-HISML..
+.. .. .. .. E1 I1 K1 *1
+.. .. .. ## A1 O1 G1 *2
+## .. *3 P1 O2 H1 I2 C1
+.. .. J1 M1 N1 ## P2 ..
+.. .. ## D1 F1 .. .. ..
+.. ## .. B1 L1 ## .. ..
+.. ## .. .. .. .. .. ..
+
+Legend:
+*1: red-myco-001; red-myco; needs O,H,M,G
+*2: red-myco-002; red-myco; needs I,O,G,H
+*3: red-myco-003; red-myco; needs O,P,D,M
+A1: cell-a-001; produces A; needs E,O,H
+B1: cell-b-001; produces B; needs D,L,F
+C1: cell-c-001; produces C; needs O,P,I
+D1: cell-d-001; produces D; needs F,B,M
+E1: cell-e-001; produces E; needs I,O,A
+F1: cell-f-001; produces F; needs M,D,L
+G1: cell-g-001; produces G; needs H,K,I
+H1: cell-h-001; produces H; needs I,G,O
+I1: cell-i-001; produces I; needs O,E,K
+I2: cell-i-002; produces I; needs P,H,C
+J1: cell-j-001; produces J; needs M,P,N
+K1: cell-k-001; produces K; needs G,O,H
+L1: cell-l-001; produces L; needs B,F,D
+M1: cell-m-001; produces M; needs N,J,D
+N1: cell-n-001; produces N; needs O,M,J
+O1: cell-o-001; produces O; needs K,I,G
+O2: cell-o-002; produces O; needs H,N,A
+P1: cell-p-001; produces P; needs J,O,M
+P2: cell-p-002; produces P; needs C,I,H

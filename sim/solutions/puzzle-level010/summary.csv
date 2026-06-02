@@ -1,0 +1,2 @@
+level,status,candidates_evaluated,first_win_tick,best_10_tick_flow,total_swaps,total_reactions,sustained_ticks,failure_category,output
+10,pass,1,11,14.30,156,86,3,won,sim/solutions/puzzle-level010/level-010

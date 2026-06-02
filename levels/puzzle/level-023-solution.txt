@@ -1,0 +1,32 @@
+T1 W1 J1 L1 X1 M1 K1 O1 G1
+N1 .. C1 U1 .. .. .. .. Q1
+R1 A1 .. Y1 Z1 E1 S1 V1 I1
+.. F1 P1 H1 .. .. .. D1 B1
+
+Legend:
+A1: cell-a; produces A; needs N,R,F
+B1: cell-b; produces B; needs D,I,V
+C1: cell-c; produces C; needs U,L,J
+D1: cell-d; produces D; needs S,V,B
+E1: cell-e; produces E; needs S,Y,Z
+F1: cell-f; produces F; needs P,R,A
+G1: cell-g; produces G; needs Q,I,O
+H1: cell-h; produces H; needs P,Y,F
+I1: cell-i; produces I; needs D,Q,B
+J1: cell-j; produces J; needs W,C,U
+K1: cell-k; produces K; needs M,G,O
+L1: cell-l; produces L; needs U,X,M
+M1: cell-m; produces M; needs K,X,O
+N1: cell-n; produces N; needs T,W,R
+O1: cell-o; produces O; needs K,G,Q
+P1: cell-p; produces P; needs A,H,F
+Q1: cell-q; produces Q; needs G,I,B
+R1: cell-r; produces R; needs A,T,N
+S1: cell-s; produces S; needs E,Z,V
+T1: cell-t; produces T; needs N,W,J
+U1: cell-u; produces U; needs C,X,L
+V1: cell-v; produces V; needs D,E,S
+W1: cell-w; produces W; needs T,C,J
+X1: cell-x; produces X; needs M,K,L
+Y1: cell-y; produces Y; needs Z,H,P
+Z1: cell-z; produces Z; needs Y,E,H

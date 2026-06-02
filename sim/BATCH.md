@@ -201,6 +201,65 @@ The single-character `solution-map.txt` becomes ambiguous once generated
 resource names pass `Z` and switch to names like `R26`. Use `level.json` or
 `solution-fixture.json` as the authoritative layout for higher levels.
 
+## Shipped-Level Solution Search
+
+Use this when shipped starting fixtures already exist and the task is to search
+for a spatially valid winning layout without regenerating the level resources,
+needs, rocks, or engine settings.
+
+```bash
+dotnet run --project sim/CellularSim.Examples -- \
+  --solve-puzzle-levels \
+  --from-level 1 \
+  --to-level 22 \
+  --levels-dir levels/puzzle \
+  --save-dir sim/solutions/puzzle
+```
+
+Defaults are `--solution-ticks 900`, `--candidate-limit 10000`,
+`--beam-size 512`, and `--progress-stride 250`. The solver writes
+`solution-fixture.json`, `solution-map.txt`, `results.txt`, and
+`candidates.csv` under `sim/solutions/puzzle/level-NNN/`, plus a top-level
+`summary.csv`.
+
+For interactive review, add `--stop-on-failure` so the command does not advance
+past the first unsolved level.
+
+Detached remote search uses the same command through the batch wrapper:
+
+```bash
+scripts/start_puzzle_solution_search_tmux.sh solution-search-001-022
+```
+
+Common range overrides:
+
+```bash
+LEVEL_START=23 LEVEL_END=100 WORKERS=15 \
+scripts/start_puzzle_solution_search_tmux.sh solution-search-023-100
+```
+
+## Playable-Only Fill
+
+Use this when a level needs a valid starting fixture but does not yet need a
+found winning solution. This does not run the solver search and does not write
+solution fixtures for the generated placeholder levels.
+
+```bash
+dotnet run --no-restore --project sim/CellularSim.Examples -- \
+  --generate-playable-puzzle-levels \
+  --from-level 1 \
+  --to-level 200 \
+  --source-rate 12 \
+  --save-dir sim/generated \
+  --ship-dir levels/puzzle
+```
+
+The command skips existing shipped `levels/puzzle/level-NNN.json` files by
+default, writes generated `starting-fixture.json` and `starting-map.txt` files
+under `sim/generated/level-NNN/`, and ships the starting fixture to
+`levels/puzzle/level-NNN.json`. Use `--overwrite` only for ranges that should
+replace existing playable-only starts.
+
 Monitor:
 
 ```bash
@@ -283,6 +342,76 @@ need graphs, not more blind layouts.
 
 Do not use `--allow-near-win` for shipped puzzle levels.
 
+## Shape-First Exact Levels 19-200
+
+The opt-in shape-first generator builds a compact connected target solution,
+derives local needs from that target, validates the solution fixture in the C#
+sim, and ships only levels that reach the same latched win state used by the
+Godot Puzzle scene. By default this means `win.durationTicks`, not a long
+stable-at-end soak.
+
+Local smoke run:
+
+```bash
+dotnet run --project sim/CellularSim.Examples -- --generate-puzzle-level \
+  --generation-strategy shape-first-exact \
+  --from-level 19 --to-level 22 \
+  --save-dir sim/generated/playable-19-200-v2
+```
+
+Remote/full range:
+
+```bash
+dotnet run --project sim/CellularSim.Examples -- --generate-puzzle-level \
+  --generation-strategy shape-first-exact \
+  --from-level 19 --to-level 200 \
+  --layout-candidates 512 \
+  --save-dir sim/generated/playable-19-200-v2
+```
+
+Use `--shape-first-sustained-ticks 200` only for an optional stricter soak
+batch where the circuit must also still be alive at the end of validation.
+
+Detached remote batch for levels 21-200 with 15 workers:
+
+```bash
+cd /root/cellular
+git pull --ff-only
+scripts/start_shape_first_levels_021_200_tmux.sh shape-first-021-200
+```
+
+This launches `cellular-shape-first-021-200`, splits levels 21-200 into 15
+worker ranges, writes per-worker generated artifacts under
+`sim/batches/shape-first-021-200/workers/worker-NN/`, and ships each validated
+win into `levels/puzzle/`. Defaults match the current live-game tuning:
+
+- `SOURCE_RATE=32`
+- `MAX_SWAP_QUANTITY_PER_EDGE=8`
+- `WIN_DURATION_TICKS=3`
+- `SHAPE_FIRST_SUSTAINED_TICKS=0`
+- `LAYOUT_CANDIDATES=512`
+- `SOLUTION_TICKS=900`
+
+Monitor the run:
+
+```bash
+tail -f sim/batches/shape-first-021-200/shape-first-021-200.log
+tmux attach -t cellular-shape-first-021-200
+cat sim/batches/shape-first-021-200/summary.csv
+```
+
+If the run is interrupted or summaries need to be rebuilt after rsync:
+
+```bash
+scripts/collect_shape_first_exact_batch.sh sim/batches/shape-first-021-200
+```
+
+Each level writes `level.json`, `starting-fixture.json`, `solution-fixture.json`,
+`starting-map.txt`, `solution-map.txt`, `results.txt`, and
+`construction-proof.txt`. Validated wins are copied into `levels/puzzle/` using
+the shipped fixture, starting map, solution fixture, solution map, and
+definition filenames.
+
 ## Rsync Back
 
 From the local machine:
@@ -299,6 +428,29 @@ For the level 23-100 batch:
 rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
   root@128.140.120.36:/root/cellular/sim/batches/stable-levels-023-100-200/ \
   /home/wor/src/cellular/sim/batches/stable-levels-023-100-200/
+```
+
+For the shape-first levels 21-200 batch, bring back the worker artifacts and a
+review copy of the shipped puzzle directory:
+
+```bash
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
+  root@128.140.120.36:/root/cellular/sim/batches/shape-first-021-200/ \
+  /home/wor/src/cellular/sim/batches/shape-first-021-200/
+
+mkdir -p /home/wor/src/cellular/sim/batches/shape-first-021-200/shipped-levels
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519" \
+  root@128.140.120.36:/root/cellular/levels/puzzle/ \
+  /home/wor/src/cellular/sim/batches/shape-first-021-200/shipped-levels/
+```
+
+Review first, then copy approved shipped fixtures into the local game:
+
+```bash
+cd /home/wor/src/cellular
+scripts/collect_shape_first_exact_batch.sh sim/batches/shape-first-021-200
+cat sim/batches/shape-first-021-200/summary.csv
+rsync -av sim/batches/shape-first-021-200/shipped-levels/ levels/puzzle/
 ```
 
 Review locally before replacing shipped levels:
@@ -325,6 +477,7 @@ Stop a running batch:
 
 ```bash
 tmux kill-session -t cellular-levels-200
+tmux kill-session -t cellular-shape-first-021-200
 ```
 
 Start a second batch under a different tmux session:

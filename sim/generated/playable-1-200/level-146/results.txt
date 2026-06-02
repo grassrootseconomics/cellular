@@ -1,0 +1,200 @@
+Puzzle solver summary
+  playable only: True
+  won: False
+  accepted near win: False
+  need attempt: 0
+  candidate index: -1
+  candidates evaluated in winning attempt: 0
+  ticks per candidate: 0
+  win duration ticks: 3
+  required alive ticks at end: 0
+  final sustained ticks: 0
+  stable at end: False
+  glowing cells: 0/178
+  swaps: 0
+  reactions: 0
+  active cells in last window: 0
+  touching pairs: 265
+  strain penalty: -0
+  final score: 0
+
+Cells
+  cell-b-001: produces B; needs C, V, S
+  cell-v-001: produces V; needs B, P, C
+  cell-p-001: produces P; needs V, W, B
+  cell-w-001: produces W; needs P, T, V
+  cell-t-001: produces T; needs W, X, P
+  red-myco-001: red myco; needs D, U, S, X
+  cell-b-002: produces B; needs S, I, T
+  cell-i-001: produces I; needs B, X, K
+  cell-i-002: produces I; needs K, B, P
+  cell-k-001: produces K; needs I, P, T
+  cell-p-002: produces P; needs K, T, I
+  red-myco-002: red myco; needs Q, T, J, V
+  cell-x-001: produces X; needs T, J, P
+  cell-j-001: produces J; needs X, W, T
+  cell-w-002: produces W; needs J, Q, X
+  cell-q-001: produces Q; needs W, T, J
+  cell-t-002: produces T; needs Q, L, W
+  red-myco-003: red myco; needs L, U, W, C
+  cell-t-003: produces T; needs L, B, Y
+  cell-b-003: produces B; needs T, Y, C
+  cell-y-001: produces Y; needs B, Z, T
+  cell-z-001: produces Z; needs Y, G, B
+  cell-g-001: produces G; needs Z, Y, F
+  red-myco-004: red myco; needs M, W, Z, G
+  cell-f-001: produces F; needs M, B, G
+  cell-b-004: produces B; needs F, C, M
+  cell-c-001: produces C; needs B, H, F
+  cell-h-001: produces H; needs C, G, B
+  cell-g-002: produces G; needs H, L, C
+  red-myco-005: red myco; needs L, C, N, Y
+  cell-s-001: produces S; needs L, A, G
+  cell-a-001: produces A; needs S, D, C
+  cell-d-001: produces D; needs A, S, B
+  cell-s-002: produces S; needs D, B, A
+  cell-b-005: produces B; needs S, C, D
+  red-myco-006: red myco; needs K, Z, C, L
+  cell-r-001: produces R; needs L, T, B
+  cell-t-004: produces T; needs R, N, L
+  cell-n-001: produces N; needs T, J, R
+  cell-j-002: produces J; needs N, Z, T
+  cell-z-002: produces Z; needs J, Y, N
+  red-myco-007: red myco; needs E, A, Y, N
+  cell-u-001: produces U; needs N, G, Z
+  cell-g-003: produces G; needs U, F, A
+  cell-f-002: produces F; needs G, V, U
+  cell-v-002: produces V; needs F, L, G
+  cell-l-001: produces L; needs V, R, F
+  red-myco-008: red myco; needs R, J, C, D
+  cell-n-002: produces N; needs J, X, L
+  cell-x-002: produces X; needs N, C, D
+  cell-c-002: produces C; needs X, P, N
+  cell-p-003: produces P; needs C, H, X
+  cell-h-002: produces H; needs P, N, C
+  red-myco-009: red myco; needs N, P, H, J
+  cell-p-004: produces P; needs J, V, H
+  cell-v-003: produces V; needs P, H, R
+  cell-h-003: produces H; needs V, R, P
+  cell-r-002: produces R; needs H, A, V
+  cell-a-002: produces A; needs R, D, H
+  red-myco-010: red myco; needs U, C, F, D
+  cell-d-002: produces D; needs F, R, A
+  cell-r-003: produces R; needs D, F, C
+  cell-f-003: produces F; needs R, A, D
+  cell-a-003: produces A; needs F, R, C
+  cell-r-004: produces R; needs A, B, F
+  red-myco-011: red myco; needs A, G, C, B
+  cell-e-001: produces E; needs C, Z, R
+  cell-z-003: produces Z; needs E, G, C
+  cell-g-004: produces G; needs Z, P, E
+  cell-p-005: produces P; needs G, T, Z
+  cell-t-005: produces T; needs P, Q, G
+  red-myco-012: red myco; needs T, Q, J, V
+  cell-w-003: produces W; needs V, Z, T
+  cell-z-004: produces Z; needs W, A, J
+  cell-a-004: produces A; needs Z, J, W
+  cell-j-003: produces J; needs A, N, Z
+  cell-n-003: produces N; needs J, L, A
+  red-myco-013: red myco; needs D, T, P, L
+  cell-r-005: produces R; needs D, A, N
+  cell-a-005: produces A; needs R, H, P
+  cell-h-004: produces H; needs A, S, R
+  cell-s-003: produces S; needs H, U, A
+  cell-u-002: produces U; needs S, X, H
+  red-myco-014: red myco; needs R, U, X, P
+  cell-y-002: produces Y; needs R, A, U
+  cell-a-006: produces A; needs Y, G, X
+  cell-g-005: produces G; needs A, R, Y
+  cell-r-006: produces R; needs G, H, A
+  cell-h-005: produces H; needs R, C, G
+  red-myco-015: red myco; needs L, T, C, Q
+  cell-w-004: produces W; needs C, E, H
+  cell-e-002: produces E; needs W, L, M
+  cell-l-002: produces L; needs E, W, S
+  cell-e-003: produces E; needs L, S, U
+  cell-s-004: produces S; needs E, N, L
+  red-myco-016: red myco; needs Z, N, U, A
+  cell-v-004: produces V; needs Z, J, S
+  cell-j-004: produces J; needs V, B, Z
+  cell-b-006: produces B; needs J, L, V
+  cell-l-003: produces L; needs B, C, J
+  cell-c-003: produces C; needs L, U, B
+  red-myco-017: red myco; needs P, L, N, U
+  cell-t-006: produces T; needs U, J, C
+  cell-j-005: produces J; needs T, W, N
+  cell-w-005: produces W; needs J, T, O
+  cell-j-006: produces J; needs W, O, T
+  cell-o-001: produces O; needs J, E, W
+  red-myco-018: red myco; needs E, C, T, J
+  cell-k-002: produces K; needs T, G, O
+  cell-g-006: produces G; needs K, J, T
+  cell-j-007: produces J; needs G, B, K
+  cell-b-007: produces B; needs J, K, G
+  cell-k-003: produces K; needs B, T, J
+  red-myco-019: red myco; needs X, T, U, V
+  cell-d-003: produces D; needs T, R, K
+  cell-r-007: produces R; needs D, Y, X
+  cell-y-003: produces Y; needs R, A, D
+  cell-a-007: produces A; needs Y, L, R
+  cell-l-004: produces L; needs A, D, Y
+  red-myco-020: red myco; needs U, Q, W, D
+  cell-d-004: produces D; needs Q, K, L
+  cell-k-004: produces K; needs D, R, L
+  cell-r-008: produces R; needs K, L, D
+  cell-l-005: produces L; needs R, E, K
+  cell-e-004: produces E; needs L, M, R
+  red-myco-021: red myco; needs H, M, Z, Y
+  cell-e-005: produces E; needs H, I, C
+  cell-i-003: produces I; needs E, C, H
+  cell-c-004: produces C; needs I, J, E
+  cell-j-008: produces J; needs C, L, I
+  cell-l-006: produces L; needs J, M, C
+  red-myco-022: red myco; needs M, C, R, U
+  cell-m-001: produces M; needs U, R, L
+  cell-r-009: produces R; needs M, F, U
+  cell-f-004: produces F; needs R, M, D
+  cell-m-002: produces M; needs F, D, R
+  cell-d-005: produces D; needs M, T, F
+  red-myco-023: red myco; needs T, X, Y, W
+  cell-f-005: produces F; needs Y, M, D
+  cell-m-003: produces M; needs F, D, X
+  cell-d-006: produces D; needs M, P, F
+  cell-p-006: produces P; needs D, K, M
+  cell-k-005: produces K; needs P, D, V
+  red-myco-024: red myco; needs P, N, W, G
+  cell-v-005: produces V; needs G, Z, K
+  cell-z-005: produces Z; needs V, F, W
+  cell-f-006: produces F; needs Z, V, K
+  cell-v-006: produces V; needs F, K, Z
+  cell-k-006: produces K; needs V, Y, F
+  red-myco-025: red myco; needs S, D, J, Y
+  cell-a-008: produces A; needs S, P, K
+  cell-p-007: produces P; needs A, U, Y
+  cell-u-003: produces U; needs P, A, M
+  cell-a-009: produces A; needs U, M, P
+  cell-m-004: produces M; needs A, C, U
+  red-myco-026: red myco; needs O, W, F, C
+  cell-p-008: produces P; needs W, F, M
+  cell-f-007: produces F; needs P, R, O
+  cell-r-010: produces R; needs F, Q, P
+  cell-q-002: produces Q; needs R, P, F
+  cell-p-009: produces P; needs Q, Z, R
+  red-myco-027: red myco; needs L, F, N, Z
+  cell-l-007: produces L; needs Z, R, P
+  cell-r-011: produces R; needs L, E, Z
+  cell-e-006: produces E; needs R, I, L
+  cell-i-004: produces I; needs E, J, R
+  cell-j-009: produces J; needs I, G, E
+  red-myco-028: red myco; needs M, G, J, U
+  cell-t-007: produces T; needs J, X, O
+  cell-x-003: produces X; needs T, O, U
+  cell-o-002: produces O; needs X, V, T
+  cell-v-007: produces V; needs O, B, X
+  cell-b-008: produces B; needs V, U, O
+  red-myco-029: red myco; needs P, C, S, U
+  cell-x-004: produces X; needs S, O, B
+  cell-o-003: produces O; needs X, S, C
+  cell-s-005: produces S; needs O, C, X
+  cell-c-005: produces C; needs S, B, O
+

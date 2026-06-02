@@ -38,6 +38,13 @@ func reset_with_current_layout() -> bool:
 	return bool(_bridge.call("reset_with_current_layout"))
 
 
+func add_myco_cell(kind: String, id: String, x: int, y: int, needs: Array) -> bool:
+	if not is_instance_valid(_bridge) or not _bridge.has_method("add_myco_cell"):
+		_last_error = "Cellular C# bridge does not expose add_myco_cell. Build Cellular.csproj and restart Godot."
+		return false
+	return bool(_bridge.call("add_myco_cell", kind, id, x, y, needs))
+
+
 func tick_many(count: int) -> void:
 	if is_instance_valid(_bridge) and _bridge.has_method("tick_many"):
 		_bridge.call("tick_many", count)

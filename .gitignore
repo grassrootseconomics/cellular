@@ -1,7 +1,11 @@
 .godot/
 tmp/
 build/
+android/build/
+android/.gradle/
 .setup/
 bin/
 obj/
 sim/batches/
+sim/generated/
+sim/solutions/

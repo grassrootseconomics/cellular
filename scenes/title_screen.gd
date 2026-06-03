@@ -10,7 +10,8 @@ const TITLE_CELL_RENDERER_Z := 42
 const TITLE_CELL_ENTER_DURATION := 2.15
 const TITLE_CELL_SPAWN_DELAY := 0.17
 const TITLE_CELL_IDLE_START := 2.45
-const TITLE_CELL_VISUAL_SCALE := 1.44
+const TITLE_CELL_VISUAL_SCALE := 1.728
+const TITLE_CELL_ROW_SPACING_SCALE := 1.65
 const TITLE_CELL_FINAL_IDS := [
 	"title-c",
 	"title-e",
@@ -319,11 +320,12 @@ func _style_title_menu_stat_label(label: Label, font_size: int) -> void:
 	if not is_instance_valid(label):
 		return
 	_style_title_info_label(label, font_size)
+	label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	label.add_theme_stylebox_override("normal", _make_title_menu_stat_label_style())
 	label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.64, 1.0))
 	label.add_theme_color_override("font_outline_color", Color(0.025, 0.08, 0.035, 0.98))
 	label.add_theme_constant_override("outline_size", 3)
-	label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, 28.0)
+	label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, 26.0)
 
 
 func _hide_title_menu_stat_label(label: Label) -> void:
@@ -339,7 +341,8 @@ func _show_title_menu_stat_label(label: Label) -> void:
 		return
 	label.visible = true
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.custom_minimum_size = Vector2(180.0, 26.0)
+	label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	label.custom_minimum_size = Vector2(0.0, 24.0)
 
 
 func _get_title_menu_box() -> VBoxContainer:
@@ -795,7 +798,7 @@ func _title_ease_sine(t: float) -> float:
 func _title_cell_position(cell_id: String, title_rect: Rect2, tile_size: float) -> Vector2:
 	var final_index := _title_cell_final_index(cell_id)
 	var spawn_index := _title_cell_spawn_index(cell_id)
-	var spacing := tile_size * 0.82
+	var spacing := tile_size * 0.82 * TITLE_CELL_ROW_SPACING_SCALE
 	var row_width := spacing * float(TITLE_CELL_FINAL_IDS.size() - 1)
 	var target := Vector2(
 		title_rect.get_center().x - row_width * 0.5 + float(final_index) * spacing,

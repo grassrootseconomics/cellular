@@ -12,6 +12,8 @@ Cellular must handle thousands of cells on low-end computers. The sim core shoul
 - Reaction tracking reuses a list.
 - Score and win scans avoid LINQ allocation in the tick path.
 - Event buffers are bounded by `EngineOptions.EventCapacity`.
+- Godot bridge snapshots copy the event buffer once per visual snapshot and reuse that copy for swaps, flows, reactions, and circuit diagnostics.
+- Recent visual-event and circuit-diagnostic scans start from the recent tail of the ordered event snapshot instead of walking the full bounded buffer.
 - Generated scenarios can create repeatable 100+ cell maps for backend inspection without Godot.
 - Offline puzzle generation can search many small candidate layouts before a level is shipped.
 

@@ -219,13 +219,14 @@ public partial class CellularSimBridge : Node
         snapshot["score"] = _engine.Score.TotalScore;
         snapshot["width"] = _engine.World.Width;
         snapshot["height"] = _engine.World.Height;
+        var events = _engine.Events;
         snapshot["rocks"] = BuildRocksSnapshot(_engine);
         snapshot["cells"] = BuildCellsSnapshot(_loaded, _engine);
-        snapshot["swaps"] = BuildRecentSwapsSnapshot(_loaded, _engine);
-        snapshot["flows"] = BuildRecentFlowsSnapshot(_loaded, _engine);
-        snapshot["reactions"] = BuildRecentReactionsSnapshot(_engine);
+        snapshot["swaps"] = BuildRecentSwapsSnapshot(_loaded, _engine, events);
+        snapshot["flows"] = BuildRecentFlowsSnapshot(_loaded, _engine, events);
+        snapshot["reactions"] = BuildRecentReactionsSnapshot(_engine, events);
         snapshot["possibleSwaps"] = BuildPossibleSwapsSnapshot(_loaded, _engine);
-        snapshot["circuitDiagnostics"] = BuildCircuitDiagnosticsSnapshot(_loaded, _engine);
+        snapshot["circuitDiagnostics"] = BuildCircuitDiagnosticsSnapshot(_loaded, _engine, events);
         return snapshot;
     }
 
@@ -272,12 +273,16 @@ public partial class CellularSimBridge : Node
         return slots;
     }
 
-    private static GdArray BuildRecentSwapsSnapshot(FixtureLoadResult loaded, CellularEngine engine)
+    private static GdArray BuildRecentSwapsSnapshot(
+        FixtureLoadResult loaded,
+        CellularEngine engine,
+        IReadOnlyList<SimEvent> events)
     {
         var swaps = new GdArray();
         var minTick = engine.CurrentTick - RecentEventWindowTicks;
-        foreach (var simEvent in engine.Events)
+        for (var i = RecentStartIndex(events, minTick); i < events.Count; i++)
         {
+            var simEvent = events[i];
             if (simEvent is not SwapEvent swap || swap.Tick < minTick)
             {
                 continue;
@@ -304,12 +309,13 @@ public partial class CellularSimBridge : Node
         return swaps;
     }
 
-    private static GdArray BuildRecentReactionsSnapshot(CellularEngine engine)
+    private static GdArray BuildRecentReactionsSnapshot(CellularEngine engine, IReadOnlyList<SimEvent> events)
     {
         var reactions = new GdArray();
         var minTick = engine.CurrentTick - RecentEventWindowTicks;
-        foreach (var simEvent in engine.Events)
+        for (var i = RecentStartIndex(events, minTick); i < events.Count; i++)
         {
+            var simEvent = events[i];
             if (simEvent is ReactionEvent reaction && reaction.Tick >= minTick)
             {
                 reactions.Add(new GdDictionary
@@ -323,12 +329,16 @@ public partial class CellularSimBridge : Node
         return reactions;
     }
 
-    private static GdArray BuildRecentFlowsSnapshot(FixtureLoadResult loaded, CellularEngine engine)
+    private static GdArray BuildRecentFlowsSnapshot(
+        FixtureLoadResult loaded,
+        CellularEngine engine,
+        IReadOnlyList<SimEvent> events)
     {
         var flows = new GdArray();
         var minTick = engine.CurrentTick - RecentEventWindowTicks;
-        foreach (var simEvent in engine.Events)
+        for (var i = RecentStartIndex(events, minTick); i < events.Count; i++)
         {
+            var simEvent = events[i];
             if (simEvent is not FlowEvent flow || flow.Tick < minTick)
             {
                 continue;
@@ -348,9 +358,32 @@ public partial class CellularSimBridge : Node
         return flows;
     }
 
-    private static GdDictionary BuildCircuitDiagnosticsSnapshot(FixtureLoadResult loaded, CellularEngine engine)
+    private static int RecentStartIndex(IReadOnlyList<SimEvent> events, long minTick)
     {
-        var diagnostics = CircuitDiagnostics.Build(engine);
+        for (var i = events.Count - 1; i >= 0; i--)
+        {
+            if (events[i].Tick < minTick)
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private static GdDictionary BuildCircuitDiagnosticsSnapshot(
+        FixtureLoadResult loaded,
+        CellularEngine engine,
+        IReadOnlyList<SimEvent> events)
+    {
+        var diagnostics = CircuitDiagnostics.Build(
+            engine.World,
+            engine.Options,
+            events,
+            engine.CurrentTick,
+            engine.Circuit.IsAliveThisTick,
+            engine.Circuit.IsWon,
+            engine.Circuit.SustainedTicks);
         return new GdDictionary
         {
             ["alive"] = diagnostics.IsAlive,

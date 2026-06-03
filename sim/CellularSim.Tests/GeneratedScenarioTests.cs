@@ -41,7 +41,7 @@ public sealed class GeneratedScenarioTests
         foreach (var cell in generated.Loaded.World.Cells)
         {
             Assert.Equal(SwapPoolState.MaxSlots, cell.Pool.Slots.Count);
-            Assert.Single(cell.Pool.Slots.Where(slot => slot.Role == PoolSlotRole.SourceOutput));
+            Assert.Single(cell.Pool.Slots, slot => slot.Role == PoolSlotRole.SourceOutput);
             Assert.Equal(3, cell.Pool.Slots.Count(slot => slot.Role == PoolSlotRole.Need));
             Assert.Single(cell.Sources);
             Assert.False(generated.Loaded.World.HasRockAt(cell.Position));

@@ -1,11 +1,6 @@
-[gd_scene load_steps=7 format=3 uid="uid://bldumq1sorlww"]
+[gd_scene load_steps=2 format=3 uid="uid://bldumq1sorlww"]
 
 [ext_resource type="Script" path="res://scenes/title_screen.gd" id="1_owrpj"]
-[ext_resource type="Texture2D" uid="uid://nm116edtoqj" path="res://graphics/soil_end.jpeg" id="2_8cwuh"]
-[ext_resource type="Texture2D" uid="uid://cs87sc1knnnbq" path="res://graphics/social.png" id="3_tenq1"]
-[ext_resource type="Texture2D" uid="uid://qeph5x6totjj" path="res://icon.svg" id="3_vd4ur"]
-[ext_resource type="Texture2D" uid="uid://curkwa3t2cvv3" path="res://graphics/farmer.png" id="4_1n8o6"]
-[ext_resource type="Texture2D" uid="uid://cypit7l2enax4" path="res://graphics/rhizomorphic.png" id="4_knllo"]
 
 [node name="TitleScreen" type="Control"]
 layout_mode = 3
@@ -29,35 +24,6 @@ offset_right = 283.5
 offset_bottom = 229.5
 grow_horizontal = 2
 grow_vertical = 2
-
-[node name="BG" type="Sprite2D" parent="CenterContainer"]
-position = Vector2(306.5, 233.5)
-scale = Vector2(2.48807, 2.48807)
-texture = ExtResource("3_tenq1")
-
-[node name="BG2" type="Sprite2D" parent="CenterContainer"]
-visible = false
-position = Vector2(306.5, 233.5)
-scale = Vector2(2.48807, 2.48807)
-texture = ExtResource("3_tenq1")
-
-[node name="shroom" type="Sprite2D" parent="CenterContainer"]
-visible = false
-position = Vector2(88.5, -73.4999)
-scale = Vector2(0.30561, 0.30561)
-texture = ExtResource("3_vd4ur")
-
-[node name="farmer" type="Sprite2D" parent="CenterContainer"]
-visible = false
-position = Vector2(449.5, -84.5)
-scale = Vector2(2.03894, 2.03894)
-texture = ExtResource("4_1n8o6")
-
-[node name="SmallShroom" type="Sprite2D" parent="CenterContainer"]
-visible = false
-position = Vector2(269.5, 541.5)
-scale = Vector2(0.629555, 0.629555)
-texture = ExtResource("4_knllo")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
 layout_mode = 2

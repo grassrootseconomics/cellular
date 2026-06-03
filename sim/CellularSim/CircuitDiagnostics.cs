@@ -66,11 +66,26 @@ public static class CircuitDiagnostics
 
         var edgeAccumulators = new Dictionary<(string Source, string Target), EdgeAccumulator>();
         var seenResources = new HashSet<ResourceId>();
-        foreach (var simEvent in events)
+        if (events is IReadOnlyList<SimEvent> eventList)
+        {
+            for (var i = RecentStartIndex(eventList, sinceTick); i < eventList.Count; i++)
+            {
+                ProcessEvent(eventList[i]);
+            }
+        }
+        else
+        {
+            foreach (var simEvent in events)
+            {
+                ProcessEvent(simEvent);
+            }
+        }
+
+        void ProcessEvent(SimEvent simEvent)
         {
             if (simEvent is not FlowEvent flow || flow.Tick < sinceTick)
             {
-                continue;
+                return;
             }
 
             seenResources.Add(flow.Resource);
@@ -115,6 +130,19 @@ public static class CircuitDiagnostics
             weakGroups,
             nonGlowing,
             missingResources);
+    }
+
+    private static int RecentStartIndex(IReadOnlyList<SimEvent> events, long sinceTick)
+    {
+        for (var i = events.Count - 1; i >= 0; i--)
+        {
+            if (events[i].Tick < sinceTick)
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
     }
 
     private static IReadOnlyList<string> BuildNonGlowingRequiredCells(GridWorld world, IReadOnlyList<string> requiredCells)

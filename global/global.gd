@@ -496,6 +496,13 @@ func save_high_score() -> void:
 	cfg.save(HIGH_SCORE_SAVE_PATH)
 
 
+func reset_arcade_progress() -> void:
+	high_score = 0
+	last_score = 0
+	last_rank_key = 0
+	save_high_score()
+
+
 func load_cellular_progress() -> void:
 	var cfg := ConfigFile.new()
 	var err := cfg.load(CELLULAR_PROGRESS_SAVE_PATH)

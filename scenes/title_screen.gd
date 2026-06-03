@@ -11,7 +11,7 @@ const TITLE_CELL_ENTER_DURATION := 2.15
 const TITLE_CELL_SPAWN_DELAY := 0.17
 const TITLE_CELL_IDLE_START := 2.45
 const TITLE_CELL_VISUAL_SCALE := 1.728
-const TITLE_CELL_ROW_SPACING_SCALE := 1.65
+const TITLE_CELL_ROW_SPACING_SCALE := 1.617
 const TITLE_CELL_FINAL_IDS := [
 	"title-c",
 	"title-e",
@@ -418,7 +418,7 @@ func _ensure_puzzle_reset_confirm_panel() -> void:
 
 	_puzzle_reset_confirm_title = Label.new()
 	_puzzle_reset_confirm_title.name = "ResetPuzzleProgressTitle"
-	_puzzle_reset_confirm_title.text = "Restart Puzzle Progress"
+	_puzzle_reset_confirm_title.text = "Reset Progress"
 	_puzzle_reset_confirm_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_puzzle_reset_confirm_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_puzzle_reset_confirm_panel.add_child(_puzzle_reset_confirm_title)
@@ -515,10 +515,7 @@ func _hide_puzzle_reset_confirm_panel() -> void:
 
 func _title_puzzle_flow_text() -> String:
 	var highest_puzzle_level := clampi(maxi(1, Global.cellular_puzzle_highest_level), 1, Global.CELLULAR_PUZZLE_FINAL_LEVEL)
-	var highest_level_flow := 0
-	if Global.has_method("get_cellular_puzzle_level_high_velocity"):
-		highest_level_flow = int(Global.get_cellular_puzzle_level_high_velocity(highest_puzzle_level))
-	return str("Highest Puzzle Level: ", highest_puzzle_level, " (Flow ", Global.format_score_value(highest_level_flow), ")")
+	return str("Highest Puzzle Level: ", highest_puzzle_level)
 
 
 func _title_arcade_cells_cleared_text() -> String:
@@ -1161,14 +1158,6 @@ func _ensure_responsive_background_nodes() -> void:
 		_title_art_background.queue_free()
 		_title_art_background = null
 	move_child(_title_soil_background, 0)
-	_hide_legacy_background_nodes()
-
-
-func _hide_legacy_background_nodes() -> void:
-	for path in ["CenterContainer/BG", "CenterContainer/BG2"]:
-		var bg := get_node_or_null(path) as Sprite2D
-		if is_instance_valid(bg):
-			bg.visible = false
 
 
 func _layout_responsive_background(view_size: Vector2) -> void:
@@ -1311,43 +1300,13 @@ func _apply_responsive_layout() -> void:
 		regen_label.add_theme_constant_override("shadow_offset_x", 0)
 		regen_label.add_theme_constant_override("shadow_offset_y", 0)
 		regen_label.add_theme_font_size_override("font_size", maxi(1, title_font_size))
-	var shroom: Sprite2D = get_node_or_null("CenterContainer/shroom") as Sprite2D
-	var farmer: Sprite2D = get_node_or_null("CenterContainer/farmer") as Sprite2D
-	var small_shroom: Sprite2D = get_node_or_null("CenterContainer/SmallShroom") as Sprite2D
-	if is_instance_valid(shroom):
-		shroom.visible = false
-		shroom.scale = Vector2(0.24, 0.24) if compact else Vector2(0.30561, 0.30561)
-		if tiny:
-			shroom.scale = Vector2(0.20, 0.20)
-		shroom.position = Vector2(86.0, -62.0) if compact else Vector2(88.5, -73.4999)
-	if is_instance_valid(farmer):
-		farmer.visible = false
-		farmer.scale = Vector2(1.64, 1.64) if compact else Vector2(2.03894, 2.03894)
-		if tiny:
-			farmer.scale = Vector2(1.48, 1.48)
-		farmer.position = Vector2(454.0, -70.0) if compact else Vector2(449.5, -84.5)
-	if is_instance_valid(small_shroom):
-		small_shroom.visible = false
-		small_shroom.scale = Vector2(0.48, 0.48) if compact else Vector2(0.629555, 0.629555)
-		if tiny:
-			small_shroom.scale = Vector2(0.42, 0.42)
-		small_shroom.position = Vector2(270.0, 522.0) if compact else Vector2(269.5, 541.5)
 	_update_title_score_widgets(view_size, compact, tiny)
 	_sync_title_cell_renderer()
 	if is_instance_valid(title):
 		var title_height = 122.0 if tiny else (134.0 if compact else 160.0)
 		var fallback_top = 22.0 if compact else 68.0
 		var vertical_bias = 100.0 if compact else 70.0
-		if is_instance_valid(shroom) and shroom.visible and is_instance_valid(farmer) and farmer.visible:
-			var shroom_y = shroom.global_position.y
-			var farmer_y = farmer.global_position.y
-			var midpoint_y = (shroom_y + farmer_y) * 0.5
-			var parent_control = title.get_parent() as Control
-			var parent_global_y = parent_control.global_position.y if is_instance_valid(parent_control) else 0.0
-			var local_midpoint_y = midpoint_y - parent_global_y
-			title.offset_top = maxf(safe_rect.position.y, round(local_midpoint_y - title_height * 0.5 + vertical_bias))
-		else:
-			title.offset_top = maxf(safe_rect.position.y, fallback_top + vertical_bias)
+		title.offset_top = maxf(safe_rect.position.y, fallback_top + vertical_bias)
 		title.offset_bottom = title.offset_top + title_height
 	var version_label: Label = $VersionLabel
 	if is_instance_valid(version_label):
@@ -1456,6 +1415,8 @@ func _on_reset_puzzle_progress_confirmed() -> void:
 	_hide_puzzle_reset_confirm_panel()
 	if Global.has_method("reset_cellular_puzzle_progress"):
 		Global.reset_cellular_puzzle_progress()
+	if Global.has_method("reset_arcade_progress"):
+		Global.reset_arcade_progress()
 	_refresh_cellular_title_stats()
 	_request_title_layout_refresh(2)
 

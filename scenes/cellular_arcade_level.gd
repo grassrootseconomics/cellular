@@ -91,6 +91,10 @@ var _score_pulse_elapsed := SCORE_PULSE_SECONDS
 var _high_score_pulse_elapsed := HIGH_SCORE_PULSE_SECONDS
 var _high_score_sparkle_nonce := 0
 var _inventory_fresh_start_msec_by_id: Dictionary = {}
+var _visual_profile_enabled := false
+var _visual_profile_print_every := 120
+var _visual_profile_duration_seconds := 0.0
+var _visual_profile_elapsed := 0.0
 
 var _menu_button: Button = null
 var _restart_button: Button = null
@@ -124,6 +128,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _visual_profile_enabled:
+		_visual_profile_elapsed += maxf(delta, 0.0)
+		queue_redraw()
+		if _visual_profile_duration_seconds > 0.0 and _visual_profile_elapsed >= _visual_profile_duration_seconds:
+			print(str("[cellular-arcade-profile] complete elapsed=", _visual_profile_elapsed, " score=", _score, " cells=", _board_cell_ids.size()))
+			get_tree().quit()
+			return
 	if _game_over:
 		return
 	var score_pulse_active := _advance_score_pulse(delta)
@@ -180,6 +191,12 @@ func _parse_arcade_args() -> void:
 		if arg.begins_with("--arcade-seed="):
 			_rng.seed = int(arg.trim_prefix("--arcade-seed="))
 			_seeded = true
+		elif arg == "--arcade-visual-profile":
+			_visual_profile_enabled = true
+		elif arg.begins_with("--arcade-profile-print-every="):
+			_visual_profile_print_every = maxi(1, int(arg.trim_prefix("--arcade-profile-print-every=")))
+		elif arg.begins_with("--arcade-profile-duration="):
+			_visual_profile_duration_seconds = maxf(0.0, float(arg.trim_prefix("--arcade-profile-duration=")))
 
 
 func _try_create_board_renderer() -> void:
@@ -1503,8 +1520,8 @@ func _sync_board_renderer() -> void:
 		"clearEffectProgress": _clear_effect_progress(),
 		"clearEffectScale": _clear_effect_scale(),
 		"resourceMarkMode": 0,
-		"visualProfileEnabled": false,
-		"visualProfilePrintEvery": 120
+		"visualProfileEnabled": _visual_profile_enabled,
+		"visualProfilePrintEvery": _visual_profile_print_every
 	}
 	_board_renderer.call("set_render_state", state)
 	_board_renderer_full_sync_needed = false

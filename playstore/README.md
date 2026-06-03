@@ -1,13 +1,13 @@
 # Play Store Materials
 
-This directory is copied legacy material from the previous Social Soil project.
+This directory contains draft Cellular Play Store materials plus some older placeholder assets. It is not submission-ready until the release checklist is complete.
 
-It is not current Cellular release documentation and should not be submitted to Google Play. Cellular does not have a release-ready Godot build, store listing, privacy policy, screenshots, or package metadata yet.
+Use [../PUBLISHING.md](../PUBLISHING.md) as the authoritative publication checklist before submitting anything to Google Play.
 
 Before any Cellular release:
 
-- replace all Social Soil names and assets,
-- review Android package IDs and export presets,
-- prepare a new privacy policy,
-- capture new screenshots from the Cellular game,
-- verify the final data and permissions behavior.
+- replace stale placeholder copy and screenshots,
+- confirm Android package id and export preset metadata,
+- prepare a final privacy policy,
+- capture fresh screenshots from the current Cellular game,
+- verify the final data, permissions, and Play Console App content answers.

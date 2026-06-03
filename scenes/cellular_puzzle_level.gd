@@ -294,12 +294,6 @@ func _create_hud() -> void:
 	_hint_button.pressed.connect(_on_hint_pressed)
 	add_child(_hint_button)
 
-	_info_button = Button.new()
-	_info_button.name = "InfoButton"
-	_info_button.text = "i"
-	_info_button.pressed.connect(_on_info_pressed)
-	add_child(_info_button)
-
 	_zoom_out_button = Button.new()
 	_zoom_out_button.name = "ZoomOutButton"
 	_zoom_out_button.text = "-"
@@ -451,7 +445,6 @@ func _layout_hud() -> void:
 	_style_button(_back_button)
 	_style_button(_reset_button)
 	_style_button(_hint_button)
-	_style_compact_button(_info_button)
 	_style_compact_button(_zoom_out_button)
 	_style_compact_button(_zoom_in_button)
 	_style_button(_last_button)
@@ -508,8 +501,8 @@ func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
 	var button_h: float = 44.0
 	var button_y: float = safe_rect.position.y + round((top_height - button_h) * 0.5)
 	_update_next_button_state()
-	var wide_controls: Array = [_hint_button, _info_button, _zoom_out_button, _zoom_in_button, _last_button, _next_button]
-	var wide_widths: Array = [84.0, 46.0, 46.0, 46.0, 88.0, 88.0]
+	var wide_controls: Array = [_hint_button, _zoom_out_button, _zoom_in_button, _last_button, _next_button]
+	var wide_widths: Array = [84.0, 46.0, 46.0, 88.0, 88.0]
 	var row_available_width: float = maxf(1.0, safe_rect.size.x - _portrait_button_row_side_buffer(safe_rect) * 2.0)
 	var use_two_rows: bool = _portrait_button_row_total_width(wide_controls, wide_widths, 12.0) > row_available_width
 	var bottom_height: float = 102.0 if use_two_rows else 58.0
@@ -521,7 +514,7 @@ func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
 		_set_control_rect(_level_label, safe_rect.position + Vector2(104.0 + margin, 6.0), Vector2(maxf(1.0, safe_rect.size.x - 208.0 - margin * 2.0), 46.0))
 		_style_label(_level_label, 28, Color(0.92, 1.0, 0.96, 1.0))
 	if use_two_rows:
-		_layout_portrait_button_row([_hint_button, _info_button, _zoom_out_button, _zoom_in_button], [84.0, 46.0, 46.0, 46.0], safe_rect.position.y + safe_rect.size.y - bottom_height + 5.0, safe_rect)
+		_layout_portrait_button_row([_hint_button, _zoom_out_button, _zoom_in_button], [84.0, 46.0, 46.0], safe_rect.position.y + safe_rect.size.y - bottom_height + 5.0, safe_rect)
 		_layout_portrait_button_row([_last_button, _next_button], [88.0, 88.0], safe_rect.position.y + safe_rect.size.y - 48.0, safe_rect)
 	else:
 		_layout_portrait_button_row(wide_controls, wide_widths, safe_rect.position.y + safe_rect.size.y - bottom_height + round((bottom_height - button_h) * 0.5), safe_rect)
@@ -639,7 +632,7 @@ func _layout_hud_landscape(safe_rect: Rect2, margin: float) -> void:
 		_set_control_rect(_flow_label, safe_rect.position + Vector2(98.0 + margin, 31.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 20.0))
 		_style_label(_flow_label, 14, Color(1.0, 0.86, 0.36, 1.0))
 	_update_next_button_state()
-	var controls: Array = [_reset_button, _hint_button, _info_button, _zoom_in_button, _zoom_out_button, _last_button, _next_button]
+	var controls: Array = [_reset_button, _hint_button, _zoom_in_button, _zoom_out_button, _last_button, _next_button]
 	var rail_x: float = safe_rect.position.x + safe_rect.size.x - rail_width + 7.0
 	var rail_y: float = safe_rect.position.y + top_height + 4.0
 	var gap: float = 6.0

@@ -30,6 +30,7 @@ Run the Godot project manually from the .NET build of Godot. The main scene is `
 - [DESIGN.md](DESIGN.md): design philosophy and mechanic guardrails.
 - [GODOT_NET.md](GODOT_NET.md): Godot .NET architecture and bridge contract.
 - [LEVELS.md](LEVELS.md): puzzle/arcade level generation and solver artifacts.
+- [PUBLISHING.md](PUBLISHING.md): web and Play Store release checklist.
 - [VISUAL_MVP.md](VISUAL_MVP.md): simple token visuals and future liquid-cell direction.
 - [PLANS.md](PLANS.md): current milestone, status, and next work.
 - [sim/POOLS.md](sim/POOLS.md): pool, slot, swap, and reaction semantics.

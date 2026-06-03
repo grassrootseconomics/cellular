@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXPORT_DIR="${1:-"$ROOT_DIR/web"}"
 TMP_DIR="$ROOT_DIR/tmp/web-gdscript-project"
 GODOT_BIN="${GODOT_BIN:-godot}"
-CELLULAR_WEB_PWA="${CELLULAR_WEB_PWA:-0}"
+CELLULAR_WEB_LOCAL_TEST="${CELLULAR_WEB_LOCAL_TEST:-0}"
+CELLULAR_WEB_PWA="${CELLULAR_WEB_PWA:-1}"
 GODOT_VERSION="$("$GODOT_BIN" --version 2>/dev/null || true)"
 
 if [[ "$GODOT_VERSION" == *".mono."* || "$GODOT_VERSION" == *"mono"* ]]; then
@@ -30,8 +31,19 @@ EOF
   exit 1
 fi
 
+if [[ "$CELLULAR_WEB_LOCAL_TEST" == "1" || "$CELLULAR_WEB_LOCAL_TEST" == "true" || "$CELLULAR_WEB_LOCAL_TEST" == "yes" || "$CELLULAR_WEB_LOCAL_TEST" == "on" ]]; then
+  CELLULAR_WEB_PWA=0
+fi
+
 if [[ "$GODOT_VERSION" != 4.6.3* ]]; then
   echo "Warning: project is targeting Godot 4.6.3; exporting with $GODOT_BIN ($GODOT_VERSION)." >&2
+fi
+
+echo "Exporting Cellular Web in release mode with $GODOT_BIN ($GODOT_VERSION)."
+if [[ "$CELLULAR_WEB_PWA" == "1" || "$CELLULAR_WEB_PWA" == "true" || "$CELLULAR_WEB_PWA" == "yes" || "$CELLULAR_WEB_PWA" == "on" ]]; then
+  echo "PWA/service-worker output: enabled"
+else
+  echo "PWA/service-worker output: disabled for local testing"
 fi
 
 rm -rf "$TMP_DIR"
@@ -171,7 +183,7 @@ Local PWA/service-worker output is disabled for easier browser testing.
 If this origin previously showed the offline page, clear the old browser service worker once:
   http://127.0.0.1:8060/?cellular-clear-service-worker=1
 
-For release PWA output, rerun with:
-  CELLULAR_WEB_PWA=1 bash scripts/export_web_gdscript.sh
+For local browser testing without PWA/service-worker output, rerun with:
+  CELLULAR_WEB_LOCAL_TEST=1 bash scripts/export_web_gdscript.sh
 EOF
 fi

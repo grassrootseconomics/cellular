@@ -82,15 +82,7 @@ public sealed class CircuitDiagnosticsTests
     [Fact]
     public void LevelSeventeenWinningLayout_ReportsOneStrongCircuitGroup()
     {
-        var loaded = LoadLevelSeventeenLayout(
-            ".. .. .. .. .. .. .. ..",
-            "## N1 Q1 ## .. .. .. ##",
-            ".. B1 D1 P1 .. .. .. ..",
-            "L1 C1 D2 A1 ## .. .. ..",
-            "E1 H1 A2 I1 ## .. .. ..",
-            "## K1 F1 G1 *1 .. ## ..",
-            ".. O1 J1 M1 *3 .. .. ..",
-            ".. *2 K2 *4 .. .. ## ..");
+        var loaded = FixtureLoader.LoadFromFile(RepoFile("levels", "puzzle", "level-017-solution.json"));
         loaded.Options.EventCapacity = 65_536;
         var engine = new CellularEngine(loaded.World, loaded.Options);
 

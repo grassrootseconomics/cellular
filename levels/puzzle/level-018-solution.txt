@@ -1,9 +1,9 @@
 ## ## .. .. ## .. .. ..
 .. .. .. .. .. .. .. ..
-## A1 C1 O1 *3 P2 ## ..
-.. D1 *1 I1 J3 K1 .. ..
+## A1 C1 O1 *1 P1 ## ..
+.. D1 *2 I1 J1 K1 .. ..
 .. Q1 B1 G1 N1 J2 .. ##
-*2 R1 P1 H1 F1 .. ## ##
+*3 R1 P2 H1 F1 .. ## ##
 *4 E1 M1 L1 G2 .. .. ..
 .. .. .. .. .. .. .. ..
 
@@ -22,14 +22,14 @@ G1: cell-g-001; produces G; needs N,H,I
 G2: cell-g-002; produces G; needs H,F,L
 H1: cell-h-001; produces H; needs G,L,P
 I1: cell-i-001; produces I; needs G,O,J
-J2: cell-j-002; produces J; needs N,F,K
-J3: cell-j-003; produces J; needs O,N,I
+J1: cell-j-002; produces J; needs N,F,K
+J2: cell-j-003; produces J; needs O,N,I
 K1: cell-k-001; produces K; needs P,J,N
 L1: cell-l-001; produces L; needs H,P,G
 M1: cell-m-001; produces M; needs E,P,R
 N1: cell-n-001; produces N; needs F,J,G
 O1: cell-o-001; produces O; needs N,C,A
-P1: cell-p-001; produces P; needs M,H,B
-P2: cell-j-001; produces P; needs K,N,D
+P1: cell-j-001; produces P; needs K,N,D
+P2: cell-p-001; produces P; needs M,H,B
 Q1: cell-q-001; produces Q; needs D,B,R
 R1: cell-r-001; produces R; needs B,E,Q

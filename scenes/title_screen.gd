@@ -4,33 +4,43 @@ const TITLE_COMPACT_SHORT_EDGE := 640.0
 const TITLE_TINY_SHORT_EDGE := 500.0
 const GE_LOGO_PATH := "res://graphics/ge-logo-horizontal-text.png"
 const TITLE_CELLULAR_BACKGROUND_PATH := "res://graphics/cellular-lapace.png"
-const TITLE_PREDATOR_BIRD_SOUND_PATH := "res://audio/cardinal.mp3"
-const TITLE_TUKTUK_ENGINE_SOUND_PATH := "res://audio/tuktuk-engine-loop.wav"
-const TITLE_BASKET_LAND_SOUND_PATH := "res://audio/squelch_slayer.wav"
 const TITLE_SCORE_STAR_COUNT := 12
-const TITLE_BIRD_FRAME_PATHS := [
-	"res://graphics/bird1.png",
-	"res://graphics/bird2.png",
-	"res://graphics/bird3.png",
-	"res://graphics/bird4.png"
+const TITLE_CELL_RENDERER_PATH := "res://src/CellularBoardRenderer.cs"
+const TITLE_CELL_RENDERER_Z := 42
+const TITLE_CELL_ENTER_DURATION := 2.15
+const TITLE_CELL_SPAWN_DELAY := 0.17
+const TITLE_CELL_IDLE_START := 2.45
+const TITLE_CELL_VISUAL_SCALE := 1.44
+const TITLE_CELL_FINAL_IDS := [
+	"title-c",
+	"title-e",
+	"title-l-1",
+	"title-l-2",
+	"title-u",
+	"title-l-3",
+	"title-a",
+	"title-r"
 ]
-const TITLE_TUKTUK_TEXTURE_PATH := "res://graphics/tuktuk.png"
-const TITLE_BASKET_TEXTURE_PATH := "res://graphics/basket.png"
-const TITLE_BIRD_FLYBY_SECONDS := 4.8
-const TITLE_BASKET_DROP_SECONDS := 1.05
-const TITLE_BASKET_DROP_LAND_T := 0.72
-const TITLE_TUKTUK_FLYBY_SECONDS := 4.2
-const TITLE_FLYBY_WAIT_SECONDS := 1.5
-const TITLE_PREDATOR_BIRD_ACTIVE_VOLUME_DB := -6.0
-const TITLE_PREDATOR_BIRD_DISTANT_VOLUME_DB := -24.0
-const TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB := -48.0
-const TITLE_TUKTUK_ENGINE_ACTIVE_VOLUME_DB := -9.0
-const TITLE_TUKTUK_ENGINE_DISTANT_VOLUME_DB := -25.0
-const TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB := -48.0
-const TITLE_BASKET_LAND_VOLUME_DB := -16.0
-const TITLE_FLYBY_FOCUS_RADIUS := 90.0
-const TITLE_FLYBY_APPROACH_FADE_DB_PER_SEC := 10.0
-const TITLE_FLYBY_DEPART_FADE_DB_PER_SEC := 44.0
+const TITLE_CELL_SPAWN_IDS := [
+	"title-r",
+	"title-a",
+	"title-l-3",
+	"title-u",
+	"title-l-2",
+	"title-l-1",
+	"title-e",
+	"title-c"
+]
+const TITLE_CELL_LETTERS := {
+	"title-c": "C",
+	"title-e": "E",
+	"title-l-1": "L",
+	"title-l-2": "L",
+	"title-u": "U",
+	"title-l-3": "L",
+	"title-a": "A",
+	"title-r": "R"
+}
 const TITLE_SAFE_EDGE_MARGIN_DEFAULT := 12.0
 const TITLE_SAFE_EDGE_MARGIN_COMPACT := 10.0
 const TITLE_SAFE_EDGE_MARGIN_TINY := 8.0
@@ -43,8 +53,31 @@ const TITLE_MOBILE_SAFE_SIDE_FALLBACK_LANDSCAPE_MAX := 76.0
 const TITLE_MOBILE_SAFE_BOTTOM_FALLBACK_MIN := 18.0
 const TITLE_MOBILE_SAFE_BOTTOM_FALLBACK_MAX := 40.0
 
+
+class TiledTitleBackground:
+	extends Control
+
+	var title_texture: Texture2D = null
+
+	func set_title_texture(texture: Texture2D) -> void:
+		title_texture = texture
+		queue_redraw()
+
+	func _draw() -> void:
+		if not is_instance_valid(title_texture):
+			return
+		var tile_size := title_texture.get_size()
+		tile_size.x = maxf(tile_size.x, 1.0)
+		tile_size.y = maxf(tile_size.y, 1.0)
+		var cols := int(ceil(size.x / tile_size.x)) + 1
+		var rows := int(ceil(size.y / tile_size.y)) + 1
+		for y in range(rows):
+			for x in range(cols):
+				draw_texture(title_texture, Vector2(tile_size.x * x, tile_size.y * y))
+
+
 var _ge_logo_texture: Texture2D = null
-var _title_soil_background: TextureRect = null
+var _title_soil_background: TiledTitleBackground = null
 var _title_art_background: TextureRect = null
 var _title_pending_layout_frames := 0
 var _last_score_label: Label = null
@@ -55,28 +88,8 @@ var _title_score_star_layer: Control = null
 var _title_score_stars: Array[Label] = []
 var _title_score_sparkle_target: Label = null
 var _title_score_sparkle_time := 0.0
-var _title_flyby_layer: Node2D = null
-var _title_bird_sprite: AnimatedSprite2D = null
-var _title_bird_basket_sprite: Sprite2D = null
-var _title_tuktuk_node: Node2D = null
-var _title_tuktuk_basket_sprite: Sprite2D = null
-var _title_flyby_running := false
-var _title_flyby_phase := ""
-var _title_flyby_elapsed := 0.0
-var _title_bird_start_pos := Vector2.ZERO
-var _title_bird_drop_pos := Vector2.ZERO
-var _title_bird_exit_pos := Vector2.ZERO
-var _title_basket_drop_start_pos := Vector2.ZERO
-var _title_basket_rest_pos := Vector2.ZERO
-var _title_tuktuk_start_pos := Vector2.ZERO
-var _title_tuktuk_pickup_pos := Vector2.ZERO
-var _title_tuktuk_exit_pos := Vector2.ZERO
-var _title_tuktuk_pickup_seconds := 0.0
-var _title_tuktuk_exit_seconds := 0.0
-var _title_basket_land_sound_played := false
-var _title_predator_bird_sound_player: AudioStreamPlayer = null
-var _title_tuktuk_engine_sound_player: AudioStreamPlayer = null
-var _title_basket_land_sound_player: AudioStreamPlayer = null
+var _title_cell_renderer: Control = null
+var _title_cell_animation_time := 0.0
 var _title_quit_button: Button = null
 var _title_quit_requested := false
 var _puzzle_progress_label: Label = null
@@ -155,6 +168,23 @@ func _make_title_score_panel_style() -> StyleBoxFlat:
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.36)
 	style.shadow_size = 5
 	style.shadow_offset = Vector2(0, 2)
+	return style
+
+
+func _make_title_menu_stat_label_style() -> StyleBoxFlat:
+	var style := _make_title_score_panel_style()
+	style.bg_color = Color(0.035, 0.105, 0.075, 0.78)
+	style.border_color = Color(1.0, 0.86, 0.32, 0.84)
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 2
+	style.content_margin_bottom = 3
+	style.shadow_size = 3
+	style.shadow_offset = Vector2(0, 1)
 	return style
 
 
@@ -285,12 +315,31 @@ func _style_title_info_label(label: Label, font_size: int) -> void:
 	label.add_theme_constant_override("outline_size", 3)
 
 
+func _style_title_menu_stat_label(label: Label, font_size: int) -> void:
+	if not is_instance_valid(label):
+		return
+	_style_title_info_label(label, font_size)
+	label.add_theme_stylebox_override("normal", _make_title_menu_stat_label_style())
+	label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.64, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(0.025, 0.08, 0.035, 0.98))
+	label.add_theme_constant_override("outline_size", 3)
+	label.custom_minimum_size.y = maxf(label.custom_minimum_size.y, 28.0)
+
+
 func _hide_title_menu_stat_label(label: Label) -> void:
 	if not is_instance_valid(label):
 		return
 	label.visible = false
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.custom_minimum_size = Vector2.ZERO
+
+
+func _show_title_menu_stat_label(label: Label) -> void:
+	if not is_instance_valid(label):
+		return
+	label.visible = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.custom_minimum_size = Vector2(180.0, 26.0)
 
 
 func _get_title_menu_box() -> VBoxContainer:
@@ -307,7 +356,7 @@ func _ensure_cellular_title_widgets() -> void:
 		_puzzle_progress_label = Label.new()
 		_puzzle_progress_label.name = "PuzzleProgressLabel"
 		menu_box.add_child(_puzzle_progress_label)
-	_hide_title_menu_stat_label(_puzzle_progress_label)
+	_show_title_menu_stat_label(_puzzle_progress_label)
 	if not is_instance_valid(_puzzle_reset_button):
 		_puzzle_reset_button = menu_box.get_node_or_null("ResetPuzzleButton") as Button
 	if not is_instance_valid(_puzzle_reset_button):
@@ -323,21 +372,21 @@ func _ensure_cellular_title_widgets() -> void:
 		_arcade_high_score_label = Label.new()
 		_arcade_high_score_label.name = "ArcadeHighScoreLabel"
 		menu_box.add_child(_arcade_high_score_label)
-	_hide_title_menu_stat_label(_arcade_high_score_label)
+	_show_title_menu_stat_label(_arcade_high_score_label)
 	var ordered_names := [
 		"RegenerationLabel",
 		"Tutorial",
 		"PuzzleProgressLabel",
-		"ResetPuzzleButton",
 		"ChallengeButton",
 		"ArcadeHighScoreLabel",
-		"LinkButton"
+		"LinkButton",
+		"ResetPuzzleButton"
 	]
 	for index in range(ordered_names.size()):
 		var child := menu_box.get_node_or_null(ordered_names[index])
 		if is_instance_valid(child):
 			menu_box.move_child(child, index)
-	_puzzle_reset_button.text = "Reset Puzzle Progress"
+	_puzzle_reset_button.text = "Reset Progress"
 	_style_title_secondary_button(_puzzle_reset_button)
 	_refresh_cellular_title_stats()
 
@@ -461,9 +510,21 @@ func _hide_puzzle_reset_confirm_panel() -> void:
 		_puzzle_reset_confirm_overlay.visible = false
 
 
+func _title_puzzle_flow_text() -> String:
+	var highest_puzzle_level := clampi(maxi(1, Global.cellular_puzzle_highest_level), 1, Global.CELLULAR_PUZZLE_FINAL_LEVEL)
+	var highest_level_flow := 0
+	if Global.has_method("get_cellular_puzzle_level_high_velocity"):
+		highest_level_flow = int(Global.get_cellular_puzzle_level_high_velocity(highest_puzzle_level))
+	return str("Highest Puzzle Level: ", highest_puzzle_level, " (Flow ", Global.format_score_value(highest_level_flow), ")")
+
+
+func _title_arcade_cells_cleared_text() -> String:
+	return str("Most Cells Cleared: ", Global.format_score_value(Global.high_score))
+
+
 func _refresh_cellular_title_stats() -> void:
-	var puzzle_progress_text := str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
-	var arcade_high_score_text := str("Arcade High Score: ", Global.format_score_value(Global.high_score))
+	var puzzle_progress_text := _title_puzzle_flow_text()
+	var arcade_high_score_text := _title_arcade_cells_cleared_text()
 	if is_instance_valid(_puzzle_progress_label):
 		_puzzle_progress_label.text = puzzle_progress_text
 	if is_instance_valid(_arcade_high_score_label):
@@ -634,52 +695,17 @@ func _get_title_menu_column_rect(view_size: Vector2, fallback_width: float) -> R
 
 func _update_title_score_widgets(view_size: Vector2, compact: bool, tiny: bool) -> void:
 	_ensure_title_score_widgets()
-	var has_puzzle_progress = true
-	var has_arcade_high_score = true
-	var show_scores = has_puzzle_progress or has_arcade_high_score
-	var safe_rect := _get_title_padded_safe_view_rect(compact, tiny)
-	var safe_panel_max_width: float = maxf(1.0, minf(720.0, safe_rect.size.x))
-	var safe_panel_min_width: float = minf(220.0, safe_panel_max_width)
-	var fallback_panel_width: float = clampf(safe_rect.size.x - 32.0, safe_panel_min_width, safe_panel_max_width)
-	var menu_rect: Rect2 = _get_title_menu_column_rect(view_size, fallback_panel_width)
-	var score_center_x: float = menu_rect.get_center().x
-	var max_panel_width: float = maxf(safe_panel_min_width, minf(safe_panel_max_width, safe_rect.size.x - 32.0))
-	var desired_panel_width: float = 300.0 if tiny else (360.0 if compact else 410.0)
-	var panel_width: float = clampf(maxf(menu_rect.size.x, desired_panel_width), safe_panel_min_width, max_panel_width)
-	var label_width: float = maxf(minf(200.0, panel_width), panel_width - 20.0)
-	var stat_height: float = 42.0 if tiny else (48.0 if compact else 54.0)
-	var stat_size: Vector2 = Vector2(label_width, stat_height)
-	var basket_center: Vector2 = _get_title_basket_score_anchor(view_size, compact)
-	var score_y: float = basket_center.y + _get_title_basket_score_gap(compact, tiny)
-	var score_gap: float = _get_title_score_gap()
-	var stat_font_size := 20 if tiny else (22 if compact else 24)
-	_style_title_score_label(_last_score_label, stat_font_size)
-	_style_title_score_label(_high_score_label, stat_font_size)
 	if is_instance_valid(_last_score_label):
-		_last_score_label.visible = has_puzzle_progress
-		_last_score_label.custom_minimum_size = stat_size
-		_last_score_label.size = stat_size
-		_last_score_label.text = str("Highest Puzzle Level: ", maxi(1, Global.cellular_puzzle_highest_level))
+		_last_score_label.visible = false
 	if is_instance_valid(_high_score_label):
-		_high_score_label.visible = has_arcade_high_score
-		_high_score_label.custom_minimum_size = stat_size
-		_high_score_label.size = stat_size
-		_high_score_label.text = str("Arcade High Score: ", Global.format_score_value(Global.high_score))
-	if is_instance_valid(_last_score_label):
-		var last_y: float = score_y
-		_last_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - stat_size.x * 0.5), round(last_y)), stat_size, safe_rect)
-		if has_puzzle_progress:
-			score_y = last_y + stat_size.y + score_gap
-	if is_instance_valid(_high_score_label):
-		var high_y: float = score_y
-		_high_score_label.position = _clamp_title_control_position_to_rect(Vector2(round(score_center_x - stat_size.x * 0.5), round(high_y)), stat_size, safe_rect)
-	_layout_title_score_panel(_last_score_panel, _last_score_label, has_puzzle_progress)
-	_layout_title_score_panel(_high_score_panel, _high_score_label, has_arcade_high_score)
+		_high_score_label.visible = false
+	_layout_title_score_panel(_last_score_panel, _last_score_label, false)
+	_layout_title_score_panel(_high_score_panel, _high_score_label, false)
 	_title_score_sparkle_target = null
-	if show_scores and has_arcade_high_score and int(Global.high_score) > 0:
-		_title_score_sparkle_target = _high_score_label
-	elif show_scores and has_puzzle_progress:
-		_title_score_sparkle_target = _last_score_label
+	if int(Global.high_score) > 0 and is_instance_valid(_arcade_high_score_label):
+		_title_score_sparkle_target = _arcade_high_score_label
+	elif is_instance_valid(_puzzle_progress_label):
+		_title_score_sparkle_target = _puzzle_progress_label
 	_update_title_score_sparkles(0.0)
 
 
@@ -710,209 +736,199 @@ func _update_title_score_sparkles(delta: float) -> void:
 		star.position = center + Vector2(cos(orbit) * radius_x, sin(orbit) * radius_y) - star.size * 0.5
 
 
-func _make_title_bird_frames() -> SpriteFrames:
-	var frames := SpriteFrames.new()
-	if not frames.has_animation(&"default"):
-		frames.add_animation(&"default")
-	frames.set_animation_loop(&"default", true)
-	frames.set_animation_speed(&"default", 5.0)
-	for path in TITLE_BIRD_FRAME_PATHS:
-		var texture: Resource = load(str(path))
-		if texture is Texture2D:
-			frames.add_frame(&"default", texture as Texture2D)
-	return frames
-
-
-func _load_title_looping_audio_stream(asset_path: String) -> AudioStream:
-	if not ResourceLoader.exists(asset_path):
-		push_warning("Missing title looping audio stream: %s" % asset_path)
-		return null
-	var stream: AudioStream = load(asset_path) as AudioStream
-	if stream == null:
-		push_warning("Could not load title looping audio stream: %s" % asset_path)
-		return null
-	if stream is AudioStreamWAV:
-		var wav_stream := stream as AudioStreamWAV
-		wav_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		wav_stream.loop_begin = 0
-		var loop_end := int(round(wav_stream.get_length() * float(wav_stream.mix_rate)))
-		if loop_end > 0:
-			wav_stream.loop_end = loop_end
-	elif stream is AudioStreamMP3:
-		var mp3_stream := stream as AudioStreamMP3
-		mp3_stream.loop = true
-	return stream
-
-
-func _stop_title_audio_players(players: Array, free_players: bool = false) -> void:
-	for player in players:
-		if not is_instance_valid(player):
-			continue
-		player.stop()
-		player.stream = null
-		if free_players:
-			if player.get_parent() != null:
-				player.get_parent().remove_child(player)
-			player.free()
-
-
-func _ensure_title_loop_player(player_name: String, asset_path: String, silent_volume_db: float) -> AudioStreamPlayer:
-	var existing := get_node_or_null(player_name) as AudioStreamPlayer
-	if is_instance_valid(existing):
-		return existing
-	var stream: AudioStream = _load_title_looping_audio_stream(asset_path)
-	if stream == null:
-		return null
-	var player := AudioStreamPlayer.new()
-	player.name = player_name
-	player.stream = stream
-	player.volume_db = silent_volume_db
-	add_child(player)
-	return player
-
-
-func _ensure_title_predator_bird_sound_player() -> AudioStreamPlayer:
-	if is_instance_valid(_title_predator_bird_sound_player):
-		return _title_predator_bird_sound_player
-	_title_predator_bird_sound_player = _ensure_title_loop_player("TitlePredatorBirdLoop", TITLE_PREDATOR_BIRD_SOUND_PATH, TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB)
-	return _title_predator_bird_sound_player
-
-
-func _ensure_title_tuktuk_engine_sound_player() -> AudioStreamPlayer:
-	if is_instance_valid(_title_tuktuk_engine_sound_player):
-		return _title_tuktuk_engine_sound_player
-	_title_tuktuk_engine_sound_player = _ensure_title_loop_player("TitleTuktukEngineLoop", TITLE_TUKTUK_ENGINE_SOUND_PATH, TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB)
-	return _title_tuktuk_engine_sound_player
-
-
-func _ensure_title_basket_land_sound_player() -> AudioStreamPlayer:
-	if is_instance_valid(_title_basket_land_sound_player):
-		return _title_basket_land_sound_player
-	var stream: AudioStream = load(TITLE_BASKET_LAND_SOUND_PATH) as AudioStream
-	if stream == null:
-		return null
-	var player: AudioStreamPlayer = AudioStreamPlayer.new()
-	player.name = "TitleBasketLandSound"
-	player.stream = stream
-	player.volume_db = TITLE_BASKET_LAND_VOLUME_DB
-	add_child(player)
-	_title_basket_land_sound_player = player
-	return _title_basket_land_sound_player
-
-
-func _can_run_title_flyby_audio() -> bool:
-	return DisplayServer.get_name() != "headless"
-
-
-func _play_title_basket_land_sound() -> void:
-	if not _can_run_title_flyby_audio():
+func _ensure_title_cell_renderer() -> void:
+	if is_instance_valid(_title_cell_renderer):
 		return
-	var player: AudioStreamPlayer = _ensure_title_basket_land_sound_player()
-	if not is_instance_valid(player):
+	if not ResourceLoader.exists(TITLE_CELL_RENDERER_PATH):
 		return
-	player.volume_db = TITLE_BASKET_LAND_VOLUME_DB
-	player.stop()
-	player.play()
-
-
-func _get_title_flyby_target_volume(pos: Vector2, active_db: float, distant_db: float) -> float:
-	var view_size: Vector2 = get_viewport_rect().size
-	var listener_pos := view_size * 0.5
-	var audible_radius: float = maxf(maxf(view_size.x, view_size.y) * 0.58, TITLE_FLYBY_FOCUS_RADIUS + 1.0)
-	var fade_range: float = maxf(audible_radius - TITLE_FLYBY_FOCUS_RADIUS, 1.0)
-	var dist: float = listener_pos.distance_to(pos)
-	var closeness: float = clampf(1.0 - ((dist - TITLE_FLYBY_FOCUS_RADIUS) / fade_range), 0.0, 1.0)
-	var shaped: float = closeness * closeness * (3.0 - 2.0 * closeness)
-	return lerpf(distant_db, active_db, shaped)
-
-
-func _move_title_loop_volume(player: AudioStreamPlayer, target_db: float, silent_db: float, delta: float) -> void:
-	if not is_instance_valid(player):
+	var renderer_script: Resource = load(TITLE_CELL_RENDERER_PATH)
+	if renderer_script == null or not renderer_script is Script:
 		return
-	if not player.playing and target_db > silent_db + 0.1:
-		player.volume_db = silent_db
-		player.play()
-	var fade_rate := TITLE_FLYBY_APPROACH_FADE_DB_PER_SEC
-	if target_db < player.volume_db:
-		fade_rate = TITLE_FLYBY_DEPART_FADE_DB_PER_SEC
-	player.volume_db = move_toward(player.volume_db, target_db, fade_rate * maxf(delta, 0.0))
-	if player.playing and target_db <= silent_db + 0.1 and player.volume_db <= silent_db + 0.1:
-		player.stop()
-
-
-func _update_title_flyby_audio(delta: float) -> void:
-	if not _can_run_title_flyby_audio():
+	var instance: Variant = (renderer_script as Script).new()
+	if not instance is Control:
 		return
-	var bird_target_db := TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB
-	if is_instance_valid(_title_bird_sprite) and _title_bird_sprite.visible and str(_title_flyby_phase).begins_with("bird"):
-		bird_target_db = _get_title_flyby_target_volume(_title_bird_sprite.global_position, TITLE_PREDATOR_BIRD_ACTIVE_VOLUME_DB, TITLE_PREDATOR_BIRD_DISTANT_VOLUME_DB)
-	if bird_target_db > TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB + 0.1 or is_instance_valid(_title_predator_bird_sound_player):
-		_move_title_loop_volume(_ensure_title_predator_bird_sound_player(), bird_target_db, TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB, delta)
-	var tuktuk_target_db := TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB
-	if is_instance_valid(_title_tuktuk_node) and _title_tuktuk_node.visible and str(_title_flyby_phase).begins_with("tuktuk"):
-		tuktuk_target_db = _get_title_flyby_target_volume(_title_tuktuk_node.global_position, TITLE_TUKTUK_ENGINE_ACTIVE_VOLUME_DB, TITLE_TUKTUK_ENGINE_DISTANT_VOLUME_DB)
-	if tuktuk_target_db > TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB + 0.1 or is_instance_valid(_title_tuktuk_engine_sound_player):
-		_move_title_loop_volume(_ensure_title_tuktuk_engine_sound_player(), tuktuk_target_db, TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB, delta)
+	_title_cell_renderer = instance as Control
+	_title_cell_renderer.name = "TitleCellWordRenderer"
+	_title_cell_renderer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_title_cell_renderer.z_as_relative = false
+	_title_cell_renderer.z_index = TITLE_CELL_RENDERER_Z
+	_title_cell_renderer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_title_cell_renderer.offset_left = 0.0
+	_title_cell_renderer.offset_top = 0.0
+	_title_cell_renderer.offset_right = 0.0
+	_title_cell_renderer.offset_bottom = 0.0
+	add_child(_title_cell_renderer)
 
 
-func _ensure_title_flyby_nodes() -> void:
-	if not is_instance_valid(_title_flyby_layer):
-		_title_flyby_layer = Node2D.new()
-		_title_flyby_layer.name = "TitleFlybys"
-		_title_flyby_layer.z_as_relative = false
-		_title_flyby_layer.z_index = 44
-		add_child(_title_flyby_layer)
-	if not is_instance_valid(_title_bird_sprite):
-		_title_bird_sprite = AnimatedSprite2D.new()
-		_title_bird_sprite.name = "TitleBird"
-		_title_bird_sprite.sprite_frames = _make_title_bird_frames()
-		_title_bird_sprite.animation = &"default"
-		_title_bird_sprite.scale = Vector2(1.25, 1.25)
-		_title_bird_sprite.visible = false
-		_title_flyby_layer.add_child(_title_bird_sprite)
-		_title_bird_basket_sprite = Sprite2D.new()
-		_title_bird_basket_sprite.name = "BeakBasket"
-		var bird_basket_texture: Resource = load(TITLE_BASKET_TEXTURE_PATH)
-		if bird_basket_texture is Texture2D:
-			_title_bird_basket_sprite.texture = bird_basket_texture as Texture2D
-		_title_bird_basket_sprite.position = Vector2(34.0, 4.0)
-		_title_bird_basket_sprite.scale = Vector2(0.44, 0.44)
-		_title_bird_basket_sprite.z_index = 1
-		_title_bird_basket_sprite.visible = false
-		_title_bird_sprite.add_child(_title_bird_basket_sprite)
-	if not is_instance_valid(_title_tuktuk_node):
-		_title_tuktuk_node = Node2D.new()
-		_title_tuktuk_node.name = "TitleTuktuk"
-		_title_tuktuk_node.scale = Vector2(1.18, 1.18)
-		_title_tuktuk_node.visible = false
-		_title_flyby_layer.add_child(_title_tuktuk_node)
-		var tuktuk_sprite := Sprite2D.new()
-		tuktuk_sprite.name = "Sprite2D"
-		var tuktuk_texture: Resource = load(TITLE_TUKTUK_TEXTURE_PATH)
-		if tuktuk_texture is Texture2D:
-			tuktuk_sprite.texture = tuktuk_texture as Texture2D
-		_title_tuktuk_node.add_child(tuktuk_sprite)
-		_title_tuktuk_basket_sprite = Sprite2D.new()
-		_title_tuktuk_basket_sprite.name = "CarriedBasket"
-		var basket_texture: Resource = load(TITLE_BASKET_TEXTURE_PATH)
-		if basket_texture is Texture2D:
-			_title_tuktuk_basket_sprite.texture = basket_texture as Texture2D
-		_title_tuktuk_basket_sprite.position = Vector2(-28.0, -8.0)
-		_title_tuktuk_basket_sprite.scale = Vector2(0.72, 0.72)
-		_title_tuktuk_basket_sprite.visible = false
-		_title_tuktuk_node.add_child(_title_tuktuk_basket_sprite)
-
-
-func _get_title_bird_flyby_y(view_size: Vector2) -> float:
+func _get_title_cell_rect() -> Rect2:
 	var title_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
 	if is_instance_valid(title_label):
-		var title_rect = title_label.get_global_rect()
-		return maxf(32.0, title_rect.position.y - 30.0)
-	return view_size.y * 0.16
+		var rect := title_label.get_global_rect()
+		if rect.size.x > 1.0 and rect.size.y > 1.0:
+			return rect
+	var view_size := get_viewport_rect().size
+	return Rect2(Vector2(view_size.x * 0.5 - 340.0, view_size.y * 0.12), Vector2(680.0, 120.0))
 
 
-func _get_title_basket_sprite() -> Sprite2D:
-	return get_node_or_null("CenterContainer/Basket") as Sprite2D
+func _title_cell_letter(cell_id: String) -> String:
+	return str(TITLE_CELL_LETTERS.get(cell_id, ""))
+
+
+func _title_cell_spawn_index(cell_id: String) -> int:
+	return maxi(TITLE_CELL_SPAWN_IDS.find(cell_id), 0)
+
+
+func _title_cell_final_index(cell_id: String) -> int:
+	return maxi(TITLE_CELL_FINAL_IDS.find(cell_id), 0)
+
+
+func _title_cell_tile_size(title_rect: Rect2) -> float:
+	var width_limited := title_rect.size.x / 9.7
+	var height_limited := title_rect.size.y / 1.42
+	return clampf(minf(width_limited, height_limited), 32.0, 84.0)
+
+
+func _title_ease_sine(t: float) -> float:
+	return 0.5 - 0.5 * cos(clampf(t, 0.0, 1.0) * PI)
+
+
+func _title_cell_position(cell_id: String, title_rect: Rect2, tile_size: float) -> Vector2:
+	var final_index := _title_cell_final_index(cell_id)
+	var spawn_index := _title_cell_spawn_index(cell_id)
+	var spacing := tile_size * 0.82
+	var row_width := spacing * float(TITLE_CELL_FINAL_IDS.size() - 1)
+	var target := Vector2(
+		title_rect.get_center().x - row_width * 0.5 + float(final_index) * spacing,
+		title_rect.get_center().y + tile_size * 0.02
+	)
+	var delay := float(spawn_index) * TITLE_CELL_SPAWN_DELAY
+	var local_time := _title_cell_animation_time - delay
+	var start := Vector2(
+		-tile_size * (1.45 + float(spawn_index) * 0.32),
+		target.y + sin(float(spawn_index) * 1.37) * tile_size * 0.18
+	)
+	if local_time <= 0.0:
+		return start
+	var t := clampf(local_time / TITLE_CELL_ENTER_DURATION, 0.0, 1.0)
+	if t < 1.0:
+		var remaining := 1.0 - t
+		var pos := target - (target - start) * remaining * remaining * remaining
+		pos.x += sin(t * PI * 3.6 + float(spawn_index) * 0.18) * tile_size * 0.24 * remaining
+		pos.y += sin(t * PI * 2.1 + float(spawn_index) * 0.63) * tile_size * 0.11 * remaining
+		return pos
+	var settle_time := local_time - TITLE_CELL_ENTER_DURATION
+	var collision := sin(settle_time * 7.8 + float(final_index) * 0.82) * exp(-settle_time * 1.65) * tile_size * 0.10
+	var idle_time := maxf(local_time - TITLE_CELL_IDLE_START, 0.0)
+	var idle := sin(idle_time * 1.85 + float(final_index) * 0.57) * tile_size * 0.016
+	return target + Vector2(collision + idle, sin(idle_time * 1.35 + float(final_index)) * tile_size * 0.010)
+
+
+func _title_cell_scale(cell_id: String) -> float:
+	var spawn_index := _title_cell_spawn_index(cell_id)
+	var local_time := _title_cell_animation_time - float(spawn_index) * TITLE_CELL_SPAWN_DELAY
+	var appear := clampf(local_time / 0.45, 0.0, 1.0)
+	var settle := maxf(local_time - TITLE_CELL_ENTER_DURATION, 0.0)
+	var bounce := sin(settle * 8.0 + float(_title_cell_final_index(cell_id))) * exp(-settle * 1.8) * 0.045
+	var idle := sin(maxf(local_time - TITLE_CELL_IDLE_START, 0.0) * 1.9 + float(spawn_index)) * 0.020
+	return ((0.78 + appear * 0.22) + bounce + idle) * TITLE_CELL_VISUAL_SCALE
+
+
+func _title_partner_for_need(cell_id: String, need: String) -> String:
+	var own_index := _title_cell_final_index(cell_id)
+	var best_id := ""
+	var best_distance := 999
+	for other_id in TITLE_CELL_FINAL_IDS:
+		if other_id == cell_id or _title_cell_letter(other_id) != need:
+			continue
+		var distance: int = absi(_title_cell_final_index(other_id) - own_index)
+		if distance < best_distance:
+			best_distance = distance
+			best_id = other_id
+	return best_id
+
+
+func _title_cell_needs(cell_id: String) -> Array[String]:
+	var own_letter := _title_cell_letter(cell_id)
+	var own_index := _title_cell_final_index(cell_id)
+	var candidate_ids: Array[String] = []
+	for offset in [-1, 1, -2, 2, -3, 3]:
+		var index := own_index + int(offset)
+		if index >= 0 and index < TITLE_CELL_FINAL_IDS.size():
+			candidate_ids.append(str(TITLE_CELL_FINAL_IDS[index]))
+	var needs: Array[String] = []
+	for candidate_id in candidate_ids:
+		var letter := _title_cell_letter(candidate_id)
+		if letter == "" or letter == own_letter or needs.has(letter):
+			continue
+		needs.append(letter)
+		if needs.size() >= 3:
+			return needs
+	for letter in ["C", "E", "L", "U", "A", "R"]:
+		if letter == own_letter or needs.has(letter):
+			continue
+		needs.append(letter)
+		if needs.size() >= 3:
+			return needs
+	return needs
+
+
+func _sync_title_cell_renderer() -> void:
+	_ensure_title_cell_renderer()
+	if not is_instance_valid(_title_cell_renderer) or not _title_cell_renderer.has_method("set_render_state"):
+		return
+	var title_rect := _get_title_cell_rect()
+	var tile_size := _title_cell_tile_size(title_rect)
+	var view_rect := get_viewport_rect()
+	var cells: Array[String] = []
+	var centers := {}
+	var scales := {}
+	var produced := {}
+	var kinds := {}
+	var needs := {}
+	var preferred := {}
+	for cell_id in TITLE_CELL_FINAL_IDS:
+		var id := str(cell_id)
+		cells.append(id)
+		centers[id] = _title_cell_position(id, title_rect, tile_size)
+		scales[id] = _title_cell_scale(id)
+		produced[id] = _title_cell_letter(id)
+		kinds[id] = "Standard"
+		var cell_needs := _title_cell_needs(id)
+		needs[id] = cell_needs
+		var partners := {}
+		for need in cell_needs:
+			var partner := _title_partner_for_need(id, need)
+			if partner != "":
+				partners[need] = partner
+		preferred[id] = partners
+	var state := {
+		"boardVisible": false,
+		"boardRect": title_rect,
+		"boardViewportRect": view_rect,
+		"tileSize": tile_size,
+		"boardCols": 1,
+		"boardRows": 1,
+		"cells": cells,
+		"positions": {},
+		"overrideCellCenters": centers,
+		"overrideCellScales": scales,
+		"producedByCell": produced,
+		"cellKinds": kinds,
+		"rocks": {},
+		"needs": needs,
+		"preferredNeedPartners": preferred,
+		"snapshot": {},
+		"usingCsharpSim": false,
+		"solved": true,
+		"circuitOverlayEnabled": false,
+		"fastDragMode": false,
+		"dragCell": "",
+		"dragPosition": Vector2.ZERO,
+		"originalDragTile": Vector2i.ZERO,
+		"hintPair": [],
+		"resourceMarkMode": 0
+	}
+	_title_cell_renderer.call("set_render_state", state)
 
 
 func _get_title_safe_edge_margin(compact: bool, tiny: bool) -> float:
@@ -1023,18 +1039,6 @@ func _get_title_score_gap() -> float:
 	return 8.0
 
 
-func _get_title_basket_after_ge_gap(compact: bool, tiny: bool) -> float:
-	if tiny:
-		return 22.0
-	return 26.0 if compact else 30.0
-
-
-func _get_title_basket_score_gap(compact: bool, tiny: bool) -> float:
-	if tiny:
-		return 22.0
-	return 26.0 if compact else 30.0
-
-
 func _get_title_score_stack_height(compact: bool, tiny: bool) -> float:
 	var has_puzzle_progress := true
 	var has_arcade_high_score := true
@@ -1062,261 +1066,10 @@ func _get_title_ge_button_bottom_y(view_size: Vector2) -> float:
 	return view_size.y * 0.52
 
 
-func _get_title_basket_global_rest_position(view_size: Vector2, compact: bool, tiny: bool) -> Vector2:
-	var safe_rect := _get_title_padded_safe_view_rect(compact, tiny)
-	var ge_bottom_y: float = _get_title_ge_button_bottom_y(view_size)
-	var desired_y: float = ge_bottom_y + _get_title_basket_after_ge_gap(compact, tiny)
-	var score_stack_height: float = _get_title_score_stack_height(compact, tiny)
-	var lower_stack_top: float = _get_title_version_top_y(view_size, compact, tiny) - (8.0 if tiny else 10.0)
-	var max_y: float = lower_stack_top - _get_title_basket_score_gap(compact, tiny)
-	if score_stack_height > 0.0:
-		max_y -= score_stack_height
-	var min_y: float = maxf(ge_bottom_y + 12.0, safe_rect.position.y + 12.0)
-	if max_y < min_y:
-		return Vector2(safe_rect.get_center().x, min_y)
-	return Vector2(safe_rect.get_center().x, clampf(desired_y, min_y, max_y))
-
-
-func _get_title_basket_local_rest_position(compact: bool) -> Vector2:
-	var center_container: Control = $CenterContainer
-	var view_size: Vector2 = get_viewport_rect().size
-	var tiny: bool = minf(view_size.x, view_size.y) <= TITLE_TINY_SHORT_EDGE
-	var global_rest: Vector2 = _get_title_basket_global_rest_position(view_size, compact, tiny)
-	if is_instance_valid(center_container):
-		return global_rest - center_container.global_position
-	return global_rest
-
-
-func _get_title_basket_score_anchor(view_size: Vector2, compact: bool) -> Vector2:
-	var tiny: bool = minf(view_size.x, view_size.y) <= TITLE_TINY_SHORT_EDGE
-	return _get_title_basket_global_rest_position(view_size, compact, tiny)
-
-
-func _get_title_basket_center(view_size: Vector2) -> Vector2:
-	var compact = Global.is_mobile_platform or minf(view_size.x, view_size.y) <= TITLE_COMPACT_SHORT_EDGE
-	return _get_title_basket_score_anchor(view_size, compact)
-
-
-func _title_phase_t(duration: float) -> float:
-	if duration <= 0.0:
-		return 1.0
-	return clampf(_title_flyby_elapsed / duration, 0.0, 1.0)
-
-
-func _title_ease_sine(t: float) -> float:
-	return 0.5 - 0.5 * cos(clampf(t, 0.0, 1.0) * PI)
-
-
-func _title_basket_drop_position(t: float) -> Vector2:
-	var drop_t = clampf(t, 0.0, 1.0)
-	var drop_x = _title_basket_rest_pos.x
-	var start_y = _title_basket_drop_start_pos.y
-	var rest_y = _title_basket_rest_pos.y
-	var fall_end := TITLE_BASKET_DROP_LAND_T
-	var first_bounce_end := 0.88
-	var bounce_height = clampf((rest_y - start_y) * 0.12, 12.0, 34.0)
-	if drop_t < fall_end:
-		var fall_t = drop_t / fall_end
-		return Vector2(drop_x, lerpf(start_y, rest_y, fall_t * fall_t))
-	if drop_t < first_bounce_end:
-		var bounce_t = (drop_t - fall_end) / (first_bounce_end - fall_end)
-		return Vector2(drop_x, rest_y - sin(bounce_t * PI) * bounce_height)
-	var settle_t = (drop_t - first_bounce_end) / (1.0 - first_bounce_end)
-	return Vector2(drop_x, rest_y - sin(settle_t * PI) * bounce_height * 0.32)
-
-
-func _begin_title_bird_flyby() -> void:
-	_ensure_title_flyby_nodes()
-	var view_size = get_viewport_rect().size
-	var y = _get_title_bird_flyby_y(view_size)
-	_title_basket_rest_pos = _get_title_basket_center(view_size)
-	_title_bird_start_pos = Vector2(-98.0, y)
-	_title_bird_drop_pos = Vector2(_title_basket_rest_pos.x - 42.0, y - 4.0)
-	_title_bird_exit_pos = Vector2(view_size.x + 98.0, y - 12.0)
-	var basket = _get_title_basket_sprite()
-	if is_instance_valid(basket):
-		basket.global_position = _title_basket_rest_pos
-		basket.visible = false
-	if not is_instance_valid(_title_bird_sprite):
-		return
-	_title_bird_sprite.position = _title_bird_start_pos
-	_title_bird_sprite.visible = true
-	_title_bird_sprite.play(&"default")
-	if _can_run_title_flyby_audio():
-		var bird_player := _ensure_title_predator_bird_sound_player()
-		if is_instance_valid(bird_player):
-			bird_player.volume_db = TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB
-			bird_player.play()
-	if is_instance_valid(_title_bird_basket_sprite):
-		_title_bird_basket_sprite.visible = true
-	if is_instance_valid(_title_tuktuk_node):
-		_title_tuktuk_node.visible = false
-	if is_instance_valid(_title_tuktuk_basket_sprite):
-		_title_tuktuk_basket_sprite.visible = false
-	_title_flyby_phase = "bird_in"
-	_title_flyby_elapsed = 0.0
-
-
-func _drop_title_basket_from_bird() -> void:
-	_title_basket_land_sound_played = false
-	_title_basket_drop_start_pos = Vector2(_title_basket_rest_pos.x, _title_bird_drop_pos.y + 5.0)
-	if is_instance_valid(_title_bird_basket_sprite):
-		_title_basket_drop_start_pos.y = _title_bird_basket_sprite.global_position.y
-		_title_bird_basket_sprite.visible = false
-	var basket = _get_title_basket_sprite()
-	if is_instance_valid(basket):
-		basket.global_position = _title_basket_drop_start_pos
-		basket.visible = true
-	_title_flyby_phase = "bird_out_drop"
-	_title_flyby_elapsed = 0.0
-
-
-func _begin_title_tuktuk_flyby() -> void:
-	_ensure_title_flyby_nodes()
-	var view_size = get_viewport_rect().size
-	if _title_basket_rest_pos == Vector2.ZERO:
-		_title_basket_rest_pos = _get_title_basket_center(view_size)
-	_title_tuktuk_start_pos = Vector2(-96.0, _title_basket_rest_pos.y)
-	_title_tuktuk_pickup_pos = Vector2(_title_basket_rest_pos.x - 24.0, _title_basket_rest_pos.y)
-	_title_tuktuk_exit_pos = Vector2(view_size.x + 112.0, _title_basket_rest_pos.y)
-	var total_distance = maxf(_title_tuktuk_exit_pos.x - _title_tuktuk_start_pos.x, 1.0)
-	_title_tuktuk_pickup_seconds = clampf(((_title_tuktuk_pickup_pos.x - _title_tuktuk_start_pos.x) / total_distance) * TITLE_TUKTUK_FLYBY_SECONDS, 0.55, TITLE_TUKTUK_FLYBY_SECONDS * 0.72)
-	_title_tuktuk_exit_seconds = maxf(TITLE_TUKTUK_FLYBY_SECONDS - _title_tuktuk_pickup_seconds, 0.75)
-	if is_instance_valid(_title_tuktuk_node):
-		_title_tuktuk_node.position = _title_tuktuk_start_pos
-		_title_tuktuk_node.visible = true
-	if _can_run_title_flyby_audio():
-		var tuktuk_player := _ensure_title_tuktuk_engine_sound_player()
-		if is_instance_valid(tuktuk_player):
-			tuktuk_player.volume_db = TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB
-			tuktuk_player.play()
-	if is_instance_valid(_title_tuktuk_basket_sprite):
-		_title_tuktuk_basket_sprite.visible = false
-	var basket = _get_title_basket_sprite()
-	if is_instance_valid(basket):
-		basket.global_position = _title_basket_rest_pos
-		basket.visible = true
-	_title_flyby_phase = "tuktuk_pickup"
-	_title_flyby_elapsed = 0.0
-
-
-func _title_tuktuk_pickup_basket() -> void:
-	var basket = _get_title_basket_sprite()
-	if is_instance_valid(basket):
-		basket.visible = false
-	if is_instance_valid(_title_tuktuk_basket_sprite):
-		_title_tuktuk_basket_sprite.visible = true
-	_title_flyby_phase = "tuktuk_exit"
-	_title_flyby_elapsed = 0.0
-
-
-func _finish_title_tuktuk_flyby() -> void:
-	if is_instance_valid(_title_tuktuk_node):
-		_title_tuktuk_node.visible = false
-	if is_instance_valid(_title_tuktuk_basket_sprite):
-		_title_tuktuk_basket_sprite.visible = false
-	_title_flyby_phase = "wait_after_tuktuk"
-	_title_flyby_elapsed = 0.0
-
-
-func _update_title_flyby(delta: float) -> void:
-	if not _title_flyby_running:
-		return
-	_title_flyby_elapsed += maxf(delta, 0.0)
-	match _title_flyby_phase:
-		"bird_in":
-			var bird_in_seconds = TITLE_BIRD_FLYBY_SECONDS * 0.48
-			var t = _title_ease_sine(_title_phase_t(bird_in_seconds))
-			if is_instance_valid(_title_bird_sprite):
-				_title_bird_sprite.position = _title_bird_start_pos.lerp(_title_bird_drop_pos, t)
-			if _title_flyby_elapsed >= bird_in_seconds:
-				_drop_title_basket_from_bird()
-		"bird_out_drop":
-			var bird_out_seconds = TITLE_BIRD_FLYBY_SECONDS * 0.52
-			var t_bird = _title_ease_sine(_title_phase_t(bird_out_seconds))
-			if is_instance_valid(_title_bird_sprite):
-				_title_bird_sprite.position = _title_bird_drop_pos.lerp(_title_bird_exit_pos, t_bird)
-				if _title_flyby_elapsed >= bird_out_seconds:
-					_title_bird_sprite.visible = false
-			var basket = _get_title_basket_sprite()
-			var t_drop = _title_phase_t(TITLE_BASKET_DROP_SECONDS)
-			if is_instance_valid(basket):
-				basket.global_position = _title_basket_drop_position(t_drop)
-			if not _title_basket_land_sound_played and t_drop >= TITLE_BASKET_DROP_LAND_T:
-				_title_basket_land_sound_played = true
-				_play_title_basket_land_sound()
-			if _title_flyby_elapsed >= maxf(bird_out_seconds, TITLE_BASKET_DROP_SECONDS):
-				if is_instance_valid(basket):
-					basket.global_position = _title_basket_rest_pos
-					basket.visible = true
-				_title_flyby_phase = "wait_after_drop"
-				_title_flyby_elapsed = 0.0
-		"wait_after_drop":
-			if _title_flyby_elapsed >= TITLE_FLYBY_WAIT_SECONDS:
-				_begin_title_tuktuk_flyby()
-		"tuktuk_pickup":
-			var t_pickup = _title_ease_sine(_title_phase_t(_title_tuktuk_pickup_seconds))
-			if is_instance_valid(_title_tuktuk_node):
-				_title_tuktuk_node.position = _title_tuktuk_start_pos.lerp(_title_tuktuk_pickup_pos, t_pickup)
-			if _title_flyby_elapsed >= _title_tuktuk_pickup_seconds:
-				_title_tuktuk_pickup_basket()
-		"tuktuk_exit":
-			var t_exit = _title_ease_sine(_title_phase_t(_title_tuktuk_exit_seconds))
-			if is_instance_valid(_title_tuktuk_node):
-				_title_tuktuk_node.position = _title_tuktuk_pickup_pos.lerp(_title_tuktuk_exit_pos, t_exit)
-			if _title_flyby_elapsed >= _title_tuktuk_exit_seconds:
-				_finish_title_tuktuk_flyby()
-		"wait_after_tuktuk":
-			if _title_flyby_elapsed >= TITLE_FLYBY_WAIT_SECONDS:
-				_begin_title_bird_flyby()
-		_:
-			_begin_title_bird_flyby()
-
-
-func _reset_title_flyby_visuals() -> void:
-	_title_basket_land_sound_played = false
-	if is_instance_valid(_title_bird_sprite):
-		_title_bird_sprite.visible = false
-	if is_instance_valid(_title_bird_basket_sprite):
-		_title_bird_basket_sprite.visible = false
-	if is_instance_valid(_title_tuktuk_node):
-		_title_tuktuk_node.visible = false
-	if is_instance_valid(_title_tuktuk_basket_sprite):
-		_title_tuktuk_basket_sprite.visible = false
-	if is_instance_valid(_title_predator_bird_sound_player):
-		_title_predator_bird_sound_player.stop()
-		_title_predator_bird_sound_player.volume_db = TITLE_PREDATOR_BIRD_SILENT_VOLUME_DB
-	if is_instance_valid(_title_tuktuk_engine_sound_player):
-		_title_tuktuk_engine_sound_player.stop()
-		_title_tuktuk_engine_sound_player.volume_db = TITLE_TUKTUK_ENGINE_SILENT_VOLUME_DB
-	if is_instance_valid(_title_basket_land_sound_player):
-		_title_basket_land_sound_player.stop()
-
-
-func _release_title_audio() -> void:
-	_stop_title_audio_players([
-		_title_predator_bird_sound_player,
-		_title_tuktuk_engine_sound_player,
-		_title_basket_land_sound_player
-	], true)
-	_title_predator_bird_sound_player = null
-	_title_tuktuk_engine_sound_player = null
-	_title_basket_land_sound_player = null
-
-
 func _shutdown_title_runtime() -> void:
-	_title_flyby_running = false
 	set_process(false)
-	_reset_title_flyby_visuals()
-	_release_title_audio()
+	_title_cell_renderer = null
 	_ge_logo_texture = null
-
-
-func _start_title_flyby_cycle() -> void:
-	if _title_flyby_running:
-		return
-	_title_flyby_running = true
-	_begin_title_bird_flyby()
 
 
 func _connect_viewport_resize_signal() -> void:
@@ -1375,7 +1128,7 @@ func _load_png_image_from_file(path: String) -> Image:
 	return image
 
 
-func _configure_title_background_rect(rect: TextureRect, z_index: int, texture_path: String, tiled: bool = false) -> void:
+func _configure_title_background_rect(rect: Control, z_index: int, texture_path: String, tiled: bool = false) -> void:
 	if not is_instance_valid(rect):
 		return
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1383,19 +1136,21 @@ func _configure_title_background_rect(rect: TextureRect, z_index: int, texture_p
 	rect.z_index = z_index
 	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED if tiled else CanvasItem.TEXTURE_REPEAT_DISABLED
-	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rect.offset_left = 0.0
-	rect.offset_top = 0.0
-	rect.offset_right = 0.0
-	rect.offset_bottom = 0.0
 	var texture = _load_title_texture(texture_path)
-	if is_instance_valid(texture):
-		rect.texture = texture
+	if not is_instance_valid(texture):
+		return
+	if rect is TiledTitleBackground:
+		(rect as TiledTitleBackground).set_title_texture(texture)
+	elif rect is TextureRect:
+		var texture_rect := rect as TextureRect
+		texture_rect.texture = texture
+		texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		texture_rect.stretch_mode = TextureRect.STRETCH_TILE if tiled else TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 
 func _ensure_responsive_background_nodes() -> void:
 	if not is_instance_valid(_title_soil_background):
-		_title_soil_background = TextureRect.new()
+		_title_soil_background = TiledTitleBackground.new()
 		_title_soil_background.name = "ResponsiveCellularBackground"
 		add_child(_title_soil_background)
 		_configure_title_background_rect(_title_soil_background, -120, TITLE_CELLULAR_BACKGROUND_PATH, true)
@@ -1416,22 +1171,12 @@ func _hide_legacy_background_nodes() -> void:
 func _layout_responsive_background(view_size: Vector2) -> void:
 	_ensure_responsive_background_nodes()
 	if is_instance_valid(_title_soil_background):
-		var tile_size := Vector2(968.0, 1046.0)
-		if is_instance_valid(_title_soil_background.texture):
-			tile_size = _title_soil_background.texture.get_size()
-		tile_size.x = maxf(tile_size.x, 1.0)
-		tile_size.y = maxf(tile_size.y, 1.0)
-		var tile_origin := Vector2(
-			fposmod((view_size.x - tile_size.x) * 0.5, tile_size.x) - tile_size.x,
-			fposmod((view_size.y - tile_size.y) * 0.5, tile_size.y) - tile_size.y
-		)
 		_title_soil_background.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		_title_soil_background.position = Vector2(floor(tile_origin.x), floor(tile_origin.y))
-		_title_soil_background.size = Vector2(ceil(view_size.x + tile_size.x * 2.0), ceil(view_size.y + tile_size.y * 2.0))
+		_title_soil_background.position = Vector2.ZERO
+		_title_soil_background.size = Vector2(ceil(view_size.x), ceil(view_size.y))
 		_title_soil_background.visible = true
-		_title_soil_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_title_soil_background.stretch_mode = TextureRect.STRETCH_TILE
 		_title_soil_background.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+		_title_soil_background.queue_redraw()
 
 
 func _apply_responsive_layout() -> void:
@@ -1494,8 +1239,8 @@ func _apply_responsive_layout() -> void:
 	var info_font_size := 20 if compact else 22
 	if tiny:
 		info_font_size = 17
-	_style_title_info_label(_puzzle_progress_label, info_font_size)
-	_style_title_info_label(_arcade_high_score_label, info_font_size)
+	_style_title_menu_stat_label(_puzzle_progress_label, info_font_size)
+	_style_title_menu_stat_label(_arcade_high_score_label, info_font_size)
 	_layout_puzzle_reset_confirm_panel(safe_rect, compact, tiny)
 	if is_instance_valid(_title_quit_button):
 		_title_quit_button.custom_minimum_size = Vector2(quit_width, quit_height)
@@ -1549,7 +1294,6 @@ func _apply_responsive_layout() -> void:
 			link.add_theme_font_size_override("font_size", 24 if compact else 30)
 	var regen_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
 	if is_instance_valid(regen_label):
-		var regen_font_size = title_font_size + (24 if tiny else (30 if compact else 36)) - 4
 		var title_width = clampf(view_size.x - 48.0, 340.0, 720.0)
 		var title_height_box = 88.0 if tiny else (98.0 if compact else 112.0)
 		regen_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1557,17 +1301,16 @@ func _apply_responsive_layout() -> void:
 		regen_label.text = "Cellular"
 		regen_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		regen_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		regen_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.24, 1.0))
-		regen_label.add_theme_color_override("font_outline_color", Color(0.035, 0.18, 0.075, 1.0))
-		regen_label.add_theme_color_override("font_shadow_color", Color(0.23, 0.09, 0.02, 0.68))
-		regen_label.add_theme_constant_override("outline_size", 6 if compact else 8)
-		regen_label.add_theme_constant_override("shadow_offset_x", 3 if compact else 4)
-		regen_label.add_theme_constant_override("shadow_offset_y", 5 if compact else 7)
-		regen_label.add_theme_font_size_override("font_size", regen_font_size)
+		regen_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.0))
+		regen_label.add_theme_color_override("font_outline_color", Color(1.0, 1.0, 1.0, 0.0))
+		regen_label.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.0))
+		regen_label.add_theme_constant_override("outline_size", 0)
+		regen_label.add_theme_constant_override("shadow_offset_x", 0)
+		regen_label.add_theme_constant_override("shadow_offset_y", 0)
+		regen_label.add_theme_font_size_override("font_size", maxi(1, title_font_size))
 	var shroom: Sprite2D = get_node_or_null("CenterContainer/shroom") as Sprite2D
 	var farmer: Sprite2D = get_node_or_null("CenterContainer/farmer") as Sprite2D
 	var small_shroom: Sprite2D = get_node_or_null("CenterContainer/SmallShroom") as Sprite2D
-	var basket: Sprite2D = get_node_or_null("CenterContainer/Basket") as Sprite2D
 	if is_instance_valid(shroom):
 		shroom.visible = false
 		shroom.scale = Vector2(0.24, 0.24) if compact else Vector2(0.30561, 0.30561)
@@ -1586,11 +1329,8 @@ func _apply_responsive_layout() -> void:
 		if tiny:
 			small_shroom.scale = Vector2(0.42, 0.42)
 		small_shroom.position = Vector2(270.0, 522.0) if compact else Vector2(269.5, 541.5)
-	if is_instance_valid(basket):
-		if not _title_flyby_running:
-			basket.position = _get_title_basket_local_rest_position(compact)
-			basket.visible = true
 	_update_title_score_widgets(view_size, compact, tiny)
+	_sync_title_cell_renderer()
 	if is_instance_valid(title):
 		var title_height = 122.0 if tiny else (134.0 if compact else 160.0)
 		var fallback_top = 22.0 if compact else 68.0
@@ -1660,12 +1400,10 @@ func _ready():
 	_refresh_cellular_title_stats()
 	_setup_version_label()
 	_ensure_title_score_widgets()
-	_ensure_title_flyby_nodes()
+	_ensure_title_cell_renderer()
 	_connect_viewport_resize_signal()
 	_apply_responsive_layout()
 	_request_title_layout_refresh(4)
-	if _can_run_title_flyby_audio():
-		call_deferred("_start_title_flyby_cycle")
 	Global.social_mode = false
 
 
@@ -1673,22 +1411,20 @@ func _process(delta: float) -> void:
 	if _title_pending_layout_frames > 0:
 		_title_pending_layout_frames -= 1
 		_apply_responsive_layout()
+	_title_cell_animation_time += maxf(delta, 0.0)
+	_sync_title_cell_renderer()
 	_update_title_score_sparkles(delta)
-	_update_title_flyby(delta)
-	_update_title_flyby_audio(delta)
 
 
 func _exit_tree() -> void:
 	_shutdown_title_runtime()
-	var basket = _get_title_basket_sprite()
-	if is_instance_valid(basket):
-		basket.visible = true
 		
 
 func _on_tutorial_pressed() -> void:
 	_reset_run_state()
 	Global.mode = "puzzle"
 	Global.active_mode_id = "cellular_puzzle"
+	Global.cellular_puzzle_highest_level = clampi(maxi(1, Global.cellular_puzzle_highest_level), 1, Global.CELLULAR_PUZZLE_FINAL_LEVEL)
 	Global.cellular_puzzle_current_level = clampi(maxi(1, Global.cellular_puzzle_current_level), 1, maxi(1, Global.cellular_puzzle_highest_level))
 	Global.active_scenario_id = str("puzzle_level_", Global.cellular_puzzle_current_level)
 	get_tree().change_scene_to_file("res://scenes/cellular_puzzle_level.tscn")
@@ -1698,27 +1434,10 @@ func _on_free_garden_pressed() -> void:
 
 func _on_challenge_button_pressed() -> void:
 	_reset_run_state()
-	Global.mode = "challenge"
+	Global.mode = "arcade"
 	Global.active_mode_id = "cellular_arcade"
-	Global.is_raining = true
-	Global.is_birding = true
-	Global.is_killing = true
-	Global.is_max_babies = true
-	Global.enable_tuktuk_predators = true
-	Global.bars_on = false
-	Global.draw_lines = true
-	Global.inventory = { #how many of each plant do we have to use
-	"bean": 3,
-	"squash": 3,				
-	"maize": 3,
-	"tree": 3,
-	"myco": 3,
-	"farmer": 0,
-	"vendor": 0,
-	"cook": 0,
-	"basket": 3
-	}
-	get_tree().change_scene_to_file("res://scenes/level.tscn")
+	Global.active_scenario_id = "cellular_arcade"
+	get_tree().change_scene_to_file("res://scenes/cellular_arcade_level.tscn")
 
 
 func _on_reset_puzzle_progress_pressed() -> void:

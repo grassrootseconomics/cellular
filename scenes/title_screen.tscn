@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3 uid="uid://bldumq1sorlww"]
+[gd_scene load_steps=7 format=3 uid="uid://bldumq1sorlww"]
 
 [ext_resource type="Script" path="res://scenes/title_screen.gd" id="1_owrpj"]
 [ext_resource type="Texture2D" uid="uid://nm116edtoqj" path="res://graphics/soil_end.jpeg" id="2_8cwuh"]
@@ -6,7 +6,6 @@
 [ext_resource type="Texture2D" uid="uid://qeph5x6totjj" path="res://icon.svg" id="3_vd4ur"]
 [ext_resource type="Texture2D" uid="uid://curkwa3t2cvv3" path="res://graphics/farmer.png" id="4_1n8o6"]
 [ext_resource type="Texture2D" uid="uid://cypit7l2enax4" path="res://graphics/rhizomorphic.png" id="4_knllo"]
-[ext_resource type="Texture2D" uid="uid://1654ejogtgjr" path="res://graphics/basket.png" id="5_wt83o"]
 
 [node name="TitleScreen" type="Control"]
 layout_mode = 3
@@ -60,10 +59,6 @@ position = Vector2(269.5, 541.5)
 scale = Vector2(0.629555, 0.629555)
 texture = ExtResource("4_knllo")
 
-[node name="Basket" type="Sprite2D" parent="CenterContainer"]
-position = Vector2(268.5, 534.5)
-texture = ExtResource("5_wt83o")
-
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
 layout_mode = 2
 theme_override_constants/separation = 11
@@ -101,12 +96,12 @@ text = "People"
 layout_mode = 2
 size_flags_horizontal = 4
 custom_minimum_size = Vector2(680, 124)
-theme_override_colors/font_color = Color(1, 0.84, 0.24, 1)
-theme_override_colors/font_outline_color = Color(0.035, 0.18, 0.075, 1)
-theme_override_colors/font_shadow_color = Color(0.23, 0.09, 0.02, 0.68)
-theme_override_constants/outline_size = 8
-theme_override_constants/shadow_offset_x = 4
-theme_override_constants/shadow_offset_y = 7
+theme_override_colors/font_color = Color(1, 1, 1, 0)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 0)
+theme_override_colors/font_shadow_color = Color(1, 1, 1, 0)
+theme_override_constants/outline_size = 0
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 0
 text = "Cellular"
 horizontal_alignment = 1
 vertical_alignment = 1

@@ -1,47 +1,47 @@
-## K1 *4 .. .. P2 .. .. T1
-F1 .. .. ## .. ## .. O1 *1
-.. X1 C1 ## U1 ## ## ## ..
-.. ## .. T2 *2 .. A1 H1 M1
-V1 .. R1 .. .. .. P1 .. E1
-G1 .. .. .. .. L1 W2 N1 W1
-.. ## *5 .. .. .. D2 ## ..
-.. S1 ## B1 .. G2 Q1 .. ##
-I1 *6 .. .. D1 *3 Y1 .. J1
+*2 .. M1 .. S1 .. *3 ## ##
+.. R1 ## .. .. .. *4 .. I1
+B2 O1 *5 .. X1 .. .. V1 J1
+.. .. .. .. H3 .. D1 .. ..
+## .. U1 .. K1 .. R2 .. G1
+## .. W1 Q1 M2 .. .. Y1 ##
+## ## B1 F1 .. T1 P1 L1 H1
+*6 .. A1 E1 .. ## .. .. ##
+H2 ## .. C1 ## .. .. *1 N1
 
 Legend:
-*1: red-myco-001; red-myco; needs S,N,D,T
-*2: red-myco-002; red-myco; needs P,E,U,Y
-*3: red-myco-003; red-myco; needs V,C,E,J
-*4: red-myco-004; red-myco; needs X,D,Y,Q
-*5: red-myco-005; red-myco; needs P,H,M,N
-*6: red-myco-006; red-myco; needs S,P,W,F
-A1: cell-a-001; produces A; needs G,S,P
-B1: cell-b-001; produces B; needs W,F,S
-C1: cell-c-001; produces C; needs F,Y,B
-D1: cell-d-001; produces D; needs V,P,U
-D2: cell-d-002; produces D; needs Y,J,H
-E1: cell-e-001; produces E; needs L,C,H
-F1: cell-f-001; produces F; needs P,T,M
-G1: cell-g-001; produces G; needs O,W,Q
-G2: cell-g-002; produces G; needs P,A,W
-H1: cell-h-001; produces H; needs J,L,D
-I1: cell-i-001; produces I; needs K,D,N
-J1: cell-j-001; produces J; needs D,H,U
-K1: cell-k-001; produces K; needs N,I,T
-L1: cell-l-001; produces L; needs H,E,J
-M1: cell-m-001; produces M; needs Y,P,C
-N1: cell-n-001; produces N; needs T,K,P
-O1: cell-o-001; produces O; needs Q,G,R
-P1: cell-p-001; produces P; needs M,F,Y
-P2: cell-p-002; produces P; needs V,T,E
-Q1: cell-q-001; produces Q; needs R,O,Y
-R1: cell-r-001; produces R; needs D,Q,I
-S1: cell-s-001; produces S; needs A,W,G
-T1: cell-t-001; produces T; needs X,U,S
-T2: cell-t-002; produces T; needs P,N,E
-U1: cell-u-001; produces U; needs T,V,X
-V1: cell-v-001; produces V; needs U,D,T
-W1: cell-w-001; produces W; needs G,N,O
-W2: cell-w-002; produces W; needs S,B,A
-X1: cell-x-001; produces X; needs D,T,F
-Y1: cell-y-001; produces Y; needs C,M,F
+*1: red-myco-001; red-myco; needs H,W,C,F
+*2: red-myco-002; red-myco; needs E,B,H,X
+*3: red-myco-003; red-myco; needs Y,J,O,H
+*4: red-myco-004; red-myco; needs N,H,X,F
+*5: red-myco-005; red-myco; needs O,H,I,N
+*6: red-myco-006; red-myco; needs B,V,D,T
+A1: cell-a-001; produces A; needs G,C,M
+B1: cell-b-001; produces B; needs D,T,V
+B2: cell-c-001; produces B; needs G,E,V
+C1: cell-c-002; produces C; needs W,A,U
+D1: cell-d-001; produces D; needs V,E,B
+E1: cell-e-001; produces E; needs G,D,M
+F1: cell-f-001; produces F; needs H,X,P
+G1: cell-g-001; produces G; needs C,A,E
+H1: cell-h-001; produces H; needs I,F,X
+H2: cell-h-002; produces H; needs J,I,O
+H3: cell-w-001; produces H; needs W,J,C
+I1: cell-i-001; produces I; needs H,Y,F
+J1: cell-j-001; produces J; needs W,H,R
+K1: cell-k-001; produces K; needs Q,U,C
+L1: cell-l-001; produces L; needs X,P,T
+M1: cell-m-001; produces M; needs E,A,G
+M2: cell-m-002; produces M; needs R,O,J
+N1: cell-n-001; produces N; needs P,L,F
+O1: cell-o-001; produces O; needs M,Y,R
+P1: cell-p-001; produces P; needs F,L,N
+Q1: cell-q-001; produces Q; needs A,U,C
+R1: cell-r-001; produces R; needs J,S,M
+R2: cell-r-002; produces R; needs D,V,E
+S1: cell-s-001; produces S; needs W,R,J
+T1: cell-t-001; produces T; needs B,X,D
+U1: cell-u-001; produces U; needs C,Q,K
+V1: cell-v-001; produces V; needs D,R,B
+W1: cell-w-002; produces W; needs J,C,S
+X1: cell-x-001; produces X; needs F,T,L
+Y1: cell-y-001; produces Y; needs I,H,O

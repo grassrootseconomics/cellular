@@ -110,7 +110,7 @@ public static class FixtureLoader
             }
 
             var kind = ParseCellKind(cellDto);
-            var pool = BuildPool(cellDto, catalog);
+            var pool = BuildPool(cellDto, catalog, kind);
             if (kind is CellKind.WhiteMyco or CellKind.RedMyco)
             {
                 if (cellDto.Sources is { Count: > 0 })
@@ -167,10 +167,15 @@ public static class FixtureLoader
         return world;
     }
 
-    private static SwapPoolState BuildPool(CellDto cellDto, ResourceCatalog catalog)
+    private static SwapPoolState BuildPool(CellDto cellDto, ResourceCatalog catalog, CellKind kind)
     {
         if (cellDto.Slots is null || cellDto.Slots.Count == 0)
         {
+            if (kind is CellKind.WhiteMyco or CellKind.RedMyco)
+            {
+                return new SwapPoolState();
+            }
+
             throw new InvalidFixtureException($"Cell '{cellDto.Id}' must define at least one pool slot.");
         }
 

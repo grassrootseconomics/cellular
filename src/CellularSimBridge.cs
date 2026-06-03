@@ -9,8 +9,6 @@ public partial class CellularSimBridge : Node
 {
     private const long RecentEventWindowTicks = 12;
     private const int PossibleSwapSnapshotLimit = 4096;
-    private const int MycoStartingQuantity = 250;
-    private const int MycoCapacity = 500;
     private const int StandardMinimumGrossSwapQuantity = 1;
     private const int RedMycoOutwardFeeQuantity = 1;
     private const int RedMycoMinimumGrossSwapQuantity = RedMycoOutwardFeeQuantity + 1;
@@ -88,7 +86,18 @@ public partial class CellularSimBridge : Node
 
     public bool MoveCell(string cellId, int x, int y)
     {
-        return _engine?.World.MoveCell(cellId, new GridPosition(x, y)) ?? false;
+        if (_engine is null)
+        {
+            return false;
+        }
+
+        var moved = _engine.World.MoveCell(cellId, new GridPosition(x, y));
+        if (moved)
+        {
+            _engine.RefreshAdaptiveMyco(force: true);
+        }
+
+        return moved;
     }
 
     public bool ResetWithCurrentLayout()
@@ -101,6 +110,7 @@ public partial class CellularSimBridge : Node
 
         try
         {
+            _engine.RefreshAdaptiveMyco(force: true);
             var fixtureJson = BuildCleanFixtureJson(_loaded, _engine);
             return LoadFixtureJson(fixtureJson);
         }
@@ -151,53 +161,12 @@ public partial class CellularSimBridge : Node
             return false;
         }
 
-        var uniqueNeeds = new List<ResourceId>(SwapPoolState.MaxSlots);
-        var seen = new HashSet<ResourceId>();
-        foreach (var needValue in needs)
-        {
-            if (uniqueNeeds.Count >= SwapPoolState.MaxSlots)
-            {
-                break;
-            }
-
-            var resourceName = needValue.AsString();
-            if (string.IsNullOrWhiteSpace(resourceName))
-            {
-                continue;
-            }
-
-            if (!_loaded.Catalog.TryGetId(resourceName, out var resource))
-            {
-                _lastError = $"Unknown myco resource '{resourceName}'.";
-                return false;
-            }
-
-            if (seen.Add(resource))
-            {
-                uniqueNeeds.Add(resource);
-            }
-        }
-
-        if (uniqueNeeds.Count == 0)
-        {
-            _lastError = "Myco needs at least one valid resource.";
-            return false;
-        }
-
         try
         {
             var pool = new SwapPoolState();
-            foreach (var resource in uniqueNeeds)
-            {
-                pool.AddSlot(resource, PoolSlotRole.Need, MycoStartingQuantity, MycoCapacity);
-            }
-
             _engine.World.AddCell(new CellState(id, position, pool, cellKind));
             AddRequiredCell(_engine.Options, id);
-            foreach (var resource in uniqueNeeds)
-            {
-                AddRequiredResource(_engine.Options, resource);
-            }
+            _engine.RefreshAdaptiveMyco(force: true);
 
             var fixtureJson = BuildCleanFixtureJson(_loaded, _engine);
             return LoadFixtureJson(fixtureJson);
@@ -220,19 +189,6 @@ public partial class CellularSimBridge : Node
         }
 
         options.RequiredCellIds.Add(cellId);
-    }
-
-    private static void AddRequiredResource(EngineOptions options, ResourceId resource)
-    {
-        foreach (var existing in options.RequiredResources)
-        {
-            if (existing == resource)
-            {
-                return;
-            }
-        }
-
-        options.RequiredResources.Add(resource);
     }
 
     public void TickMany(int count)
@@ -286,6 +242,7 @@ public partial class CellularSimBridge : Node
                 ["kind"] = cell.Kind.ToString(),
                 ["glowing"] = cell.IsGlowing,
                 ["glowTicks"] = cell.GlowTicksRemaining,
+                ["mycoWaiting"] = cell.IsMyco && cell.Pool.Slots.Count == 0,
                 ["strain"] = cell.Strain.Total,
                 ["producedResource"] = ProducedResourceName(loaded, cell),
                 ["slots"] = BuildSlotsSnapshot(loaded, cell)
@@ -747,15 +704,18 @@ public partial class CellularSimBridge : Node
         foreach (var cell in engine.World.Cells)
         {
             var slots = new List<object>(cell.Pool.Slots.Count);
-            foreach (var slot in cell.Pool.Slots)
+            if (!cell.IsMyco)
             {
-                slots.Add(new Dictionary<string, object>
+                foreach (var slot in cell.Pool.Slots)
                 {
-                    ["resource"] = loaded.Catalog.GetName(slot.Resource),
-                    ["role"] = slot.Role.ToString(),
-                    ["quantity"] = cell.IsMyco ? Math.Min(MycoStartingQuantity, slot.Capacity) : 0,
-                    ["capacity"] = slot.Capacity
-                });
+                    slots.Add(new Dictionary<string, object>
+                    {
+                        ["resource"] = loaded.Catalog.GetName(slot.Resource),
+                        ["role"] = slot.Role.ToString(),
+                        ["quantity"] = 0,
+                        ["capacity"] = slot.Capacity
+                    });
+                }
             }
 
             var sources = new List<object>(cell.Sources.Count);

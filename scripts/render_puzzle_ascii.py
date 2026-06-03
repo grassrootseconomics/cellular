@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from collections import defaultdict
 from pathlib import Path
 
@@ -201,13 +202,26 @@ def same_board(a: dict, b: dict) -> bool:
     )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Render puzzle fixture JSON files as two-character ASCII maps with legends.")
+    parser.add_argument("--from-level", type=int, default=1)
+    parser.add_argument("--to-level", type=int, default=999)
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    from_level = max(1, int(args.from_level))
+    to_level = max(from_level, int(args.to_level))
     skipped: list[str] = []
     converted_from_text: list[str] = []
     wrote = 0
 
     for fixture_path in sorted(LEVEL_DIR.glob("level-[0-9][0-9][0-9].json")):
         level = fixture_path.stem.removeprefix("level-")
+        level_number = int(level)
+        if level_number < from_level or level_number > to_level:
+            continue
         document = load_json(fixture_path)
         (LEVEL_DIR / f"level-{level}.txt").write_text(render_fixture(document), encoding="utf-8")
         wrote += 1

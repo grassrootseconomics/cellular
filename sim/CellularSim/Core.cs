@@ -172,6 +172,8 @@ public sealed class SwapPoolState
         return slot;
     }
 
+    public void ClearSlots() => _slots.Clear();
+
     public PoolSlot? GetSlot(ResourceId resource)
     {
         for (var i = 0; i < _slots.Count; i++)
@@ -439,6 +441,7 @@ public sealed class GridWorld
     public IReadOnlyList<CellState> Cells => _cells;
     public IReadOnlyCollection<GridPosition> Rocks => _rocks;
     public IReadOnlyList<CellEdge> AdjacentEdges => GetAdjacentEdges();
+    public long TopologyVersion { get; private set; }
 
     public bool InBounds(GridPosition position) =>
         position.X >= 0 && position.X < Width && position.Y >= 0 && position.Y < Height;
@@ -452,7 +455,11 @@ public sealed class GridWorld
             throw new InvalidOperationException("Cannot place a rock on a cell.");
         }
 
-        _rocks.Add(position);
+        if (_rocks.Add(position))
+        {
+            _adjacentEdgesDirty = true;
+            TopologyVersion++;
+        }
     }
 
     public CellState AddCell(CellState cell)
@@ -479,6 +486,7 @@ public sealed class GridWorld
         _cellIndexesById.Add(cell.Id, cell.Index);
         _occupancy.Add(cell.Position, cell.Index);
         _adjacentEdgesDirty = true;
+        TopologyVersion++;
         return cell;
     }
 
@@ -555,6 +563,7 @@ public sealed class GridWorld
         cell.Position = position;
         _occupancy[position] = index;
         _adjacentEdgesDirty = true;
+        TopologyVersion++;
         return true;
     }
 

@@ -81,6 +81,7 @@ const CIRCUIT_GROUP_COLORS := [
 	Color(1.00, 0.46, 0.24, 1.0),
 	Color(0.45, 0.62, 1.00, 1.0)
 ]
+const FINAL_PUZZLE_LEVEL := 44
 
 var _level_number := 1
 var _cells: Array[String] = []
@@ -132,6 +133,9 @@ var _flow_label: Label = null
 var _info_panel: Panel = null
 var _info_label: Label = null
 var _info_close_button: Button = null
+var _final_win_panel: Panel = null
+var _final_win_title: Label = null
+var _final_win_menu_button: Button = null
 var _sim_bridge: Node = null
 var _board_renderer: Node = null
 var _sim_snapshot: Dictionary = {}
@@ -166,6 +170,7 @@ var _latest_report := ""
 var _latest_report_dirty := false
 var _level_high_velocity := 0
 var _level_high_velocity_dirty := false
+var _final_win_announced := false
 
 
 func _ready() -> void:
@@ -176,7 +181,7 @@ func _ready() -> void:
 	_sim_bridge = get_node_or_null("/root/CellularSim")
 	_create_hud()
 	_try_create_board_renderer()
-	_load_level(maxi(1, Global.cellular_puzzle_current_level))
+	_load_level(_clamp_puzzle_level(Global.cellular_puzzle_current_level))
 	set_process(true)
 	queue_redraw()
 
@@ -230,6 +235,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			queue_redraw()
 		elif key_event.keycode == KEY_H:
 			_on_hint_pressed()
+			get_viewport().set_input_as_handled()
 		elif key_event.keycode == KEY_N:
 			_on_next_pressed(true)
 		elif key_event.keycode == KEY_W:
@@ -241,7 +247,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _parse_puzzle_debug_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--puzzle-level="):
-			Global.cellular_puzzle_current_level = maxi(1, int(arg.trim_prefix("--puzzle-level=")))
+			Global.cellular_puzzle_current_level = _clamp_puzzle_level(int(arg.trim_prefix("--puzzle-level=")))
 		elif arg.begins_with("--puzzle-fixture="):
 			_fixture_override_path = _normalize_fixture_override_path(arg.trim_prefix("--puzzle-fixture="))
 		elif arg == "--puzzle-visual-profile":
@@ -259,6 +265,14 @@ func _normalize_fixture_override_path(path: String) -> String:
 	if trimmed.begins_with("res://") or trimmed.begins_with("user://") or trimmed.begins_with("/"):
 		return trimmed
 	return str("res://", trimmed)
+
+
+func _clamp_puzzle_level(level_number: int) -> int:
+	return clampi(maxi(1, level_number), 1, FINAL_PUZZLE_LEVEL)
+
+
+func _is_final_puzzle_level() -> bool:
+	return _level_number >= FINAL_PUZZLE_LEVEL
 
 
 func _create_hud() -> void:
@@ -346,6 +360,25 @@ func _create_hud() -> void:
 	_info_close_button.text = "x"
 	_info_close_button.pressed.connect(_on_info_close_pressed)
 	_info_panel.add_child(_info_close_button)
+
+	_final_win_panel = Panel.new()
+	_final_win_panel.name = "FinalPuzzleWinPanel"
+	_final_win_panel.visible = false
+	_final_win_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_final_win_panel)
+
+	_final_win_title = Label.new()
+	_final_win_title.name = "FinalPuzzleWinTitle"
+	_final_win_title.text = "You Won!"
+	_final_win_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_final_win_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_final_win_panel.add_child(_final_win_title)
+
+	_final_win_menu_button = Button.new()
+	_final_win_menu_button.name = "FinalPuzzleMainMenuButton"
+	_final_win_menu_button.text = "Main Menu"
+	_final_win_menu_button.pressed.connect(_on_final_win_main_menu_pressed)
+	_final_win_panel.add_child(_final_win_menu_button)
 	_layout_hud()
 
 
@@ -364,6 +397,7 @@ func _style_button(button: Button) -> void:
 	button.custom_minimum_size = Vector2(44, 44)
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.add_theme_font_size_override("font_size", 20)
+	_apply_cellular_button_style(button)
 
 
 func _style_compact_button(button: Button) -> void:
@@ -372,6 +406,27 @@ func _style_compact_button(button: Button) -> void:
 	button.custom_minimum_size = Vector2(44, 44)
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.add_theme_font_size_override("font_size", 23)
+	_apply_cellular_button_style(button)
+
+
+func _apply_cellular_button_style(button: Button) -> void:
+	button.add_theme_color_override("font_color", Color(0.92, 1.0, 0.96, 1.0))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.92, 0.36, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(0.04, 0.06, 0.045, 1.0))
+	button.add_theme_color_override("font_outline_color", Color(0.01, 0.025, 0.03, 0.92))
+	button.add_theme_constant_override("outline_size", 3)
+	button.add_theme_stylebox_override("normal", _make_cellular_button_style(Color(0.045, 0.085, 0.085, 0.94), Color(0.36, 0.92, 0.76, 0.54)))
+	button.add_theme_stylebox_override("hover", _make_cellular_button_style(Color(0.065, 0.13, 0.12, 0.98), Color(0.78, 1.0, 0.70, 0.88)))
+	button.add_theme_stylebox_override("pressed", _make_cellular_button_style(Color(0.98, 0.78, 0.20, 0.98), Color(1.0, 0.96, 0.48, 1.0)))
+
+
+func _make_cellular_button_style(fill: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	return style
 
 
 func _set_control_rect(control: Control, pos: Vector2, rect_size: Vector2) -> void:
@@ -408,6 +463,7 @@ func _layout_hud() -> void:
 	else:
 		_layout_hud_portrait(safe_rect, margin)
 	_layout_info_panel(safe_rect, landscape, margin)
+	_layout_final_win_panel(safe_rect, landscape, margin)
 	_update_info_button_state()
 	if is_instance_valid(_board_renderer) and _board_renderer is Control:
 		var renderer := _board_renderer as Control
@@ -635,6 +691,33 @@ func _layout_info_panel(safe_rect: Rect2, landscape: bool, margin: float) -> voi
 		_style_label(_info_label, 17, Color(0.88, 1.0, 0.96, 1.0))
 
 
+func _layout_final_win_panel(safe_rect: Rect2, landscape: bool, margin: float) -> void:
+	if not is_instance_valid(_final_win_panel):
+		return
+	var panel_width: float = minf(430.0, maxf(250.0, safe_rect.size.x - margin * 2.0))
+	if landscape:
+		panel_width = minf(420.0, maxf(260.0, safe_rect.size.x * 0.42))
+	var panel_height: float = 176.0
+	var panel_pos := Vector2(
+		safe_rect.position.x + round((safe_rect.size.x - panel_width) * 0.5),
+		safe_rect.position.y + round((safe_rect.size.y - panel_height) * 0.5)
+	)
+	_set_control_rect(_final_win_panel, panel_pos, Vector2(panel_width, panel_height))
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.025, 0.055, 0.065, 0.98)
+	panel_style.border_color = Color(0.52, 1.0, 0.78, 0.84)
+	panel_style.set_border_width_all(3)
+	panel_style.set_corner_radius_all(8)
+	_final_win_panel.add_theme_stylebox_override("panel", panel_style)
+	if is_instance_valid(_final_win_title):
+		_set_control_rect(_final_win_title, Vector2(18.0, 22.0), Vector2(maxf(1.0, panel_width - 36.0), 58.0))
+		_style_label(_final_win_title, 36, Color(0.92, 1.0, 0.96, 1.0))
+	if is_instance_valid(_final_win_menu_button):
+		_style_button(_final_win_menu_button)
+		var button_width: float = minf(190.0, maxf(140.0, panel_width - 48.0))
+		_set_control_rect(_final_win_menu_button, Vector2(round((panel_width - button_width) * 0.5), 108.0), Vector2(button_width, 48.0))
+
+
 func _get_safe_edge_margin() -> float:
 	var view_size: Vector2 = get_viewport_rect().size
 	var short_edge: float = minf(view_size.x, view_size.y)
@@ -720,10 +803,10 @@ func _try_create_board_renderer() -> void:
 
 func _load_level(level_number: int, record_progress: bool = true) -> void:
 	_save_level_high_velocity_if_dirty()
-	_level_number = level_number
+	_level_number = _clamp_puzzle_level(level_number)
 	Global.active_scenario_id = str("puzzle_level_", _level_number)
 	if record_progress:
-		Global.cellular_puzzle_current_level = maxi(1, _level_number)
+		Global.cellular_puzzle_current_level = _clamp_puzzle_level(_level_number)
 		if Global.cellular_puzzle_current_level > Global.cellular_puzzle_highest_level:
 			Global.cellular_puzzle_highest_level = Global.cellular_puzzle_current_level
 		if Global.has_method("save_cellular_progress"):
@@ -757,6 +840,8 @@ func _load_level(level_number: int, record_progress: bool = true) -> void:
 	_board_cols = BOARD_SIZE
 	_board_rows = BOARD_SIZE
 	_solved = false
+	_final_win_announced = false
+	_hide_final_win_panel()
 	_reset_camera_state()
 	_latest_report = ""
 	_latest_report_dirty = false
@@ -877,9 +962,10 @@ func _build_puzzle_level_state_document() -> Dictionary:
 	for cell in _cells:
 		var tile := _get_cell_tile(cell)
 		var needs: Array = []
-		var needs_value: Array = _needs.get(cell, [])
-		for need in needs_value:
-			needs.append(str(need))
+		if not _is_myco_cell(cell):
+			var needs_value: Array = _needs.get(cell, [])
+			for need in needs_value:
+				needs.append(str(need))
 		cell_docs.append({
 			"id": cell,
 			"x": tile.x,
@@ -1039,9 +1125,10 @@ func _apply_saved_puzzle_state_to_visual_model() -> bool:
 		_cell_kind_by_id[id] = kind
 		if _is_myco_kind(kind):
 			_produced_by_cell[id] = ""
+			_needs[id] = []
 		else:
 			_produced_by_cell[id] = str(saved_cell.get("produced", id))
-		_needs[id] = _saved_cell_needs(saved_cell)
+			_needs[id] = _saved_cell_needs(saved_cell)
 		_positions[id] = Vector2i(int(saved_cell.get("x", 0)), int(saved_cell.get("y", 0)))
 	_refresh_myco_id_counters()
 	_board_renderer_full_sync_needed = true
@@ -1097,15 +1184,12 @@ func _build_saved_cell_map(state: Dictionary, width: int, height: int, rocks: Di
 
 
 func _build_saved_myco_cell_doc(saved_cell: Dictionary) -> Dictionary:
-	var slots: Array = []
-	for need in _saved_cell_needs(saved_cell):
-		slots.append({"resource": need, "role": "Need", "quantity": 250, "capacity": 500})
 	return {
 		"id": str(saved_cell.get("id", "")),
 		"kind": str(saved_cell.get("kind", CELL_KIND_RED_MYCO)),
 		"x": int(saved_cell.get("x", 0)),
 		"y": int(saved_cell.get("y", 0)),
-		"slots": slots
+		"slots": []
 	}
 
 
@@ -1177,7 +1261,7 @@ func _save_current_level_progress() -> void:
 	if _solved:
 		_save_level_high_velocity_if_dirty()
 		return
-	Global.cellular_puzzle_current_level = clampi(maxi(1, _level_number), 1, maxi(1, Global.cellular_puzzle_highest_level))
+	Global.cellular_puzzle_current_level = clampi(_clamp_puzzle_level(_level_number), 1, maxi(1, Global.cellular_puzzle_highest_level))
 	if Global.has_method("save_cellular_progress"):
 		Global.save_cellular_progress()
 	_save_level_high_velocity_if_dirty()
@@ -1363,7 +1447,9 @@ func _refresh_sim_snapshot() -> void:
 					if str(slot_doc.get("role", "")) == "Need":
 						needs.append(str(slot_doc.get("resource", "")))
 			_needs[id] = needs
+	var was_solved := _solved
 	_solved = bool(_sim_snapshot.get("won", false))
+	_handle_solved_state(was_solved)
 	_refresh_myco_id_counters()
 	_maybe_update_level_high_velocity()
 	_board_renderer_full_sync_needed = true
@@ -1376,13 +1462,6 @@ func _spawn_myco(kind: String) -> void:
 		_update_level_text()
 		queue_redraw()
 		return
-	var resources := _collect_myco_resource_names()
-	if resources.is_empty():
-		_sim_status_message = "No resources available for myco"
-		_hint_text = ""
-		_update_level_text()
-		queue_redraw()
-		return
 	var tile := _random_empty_tile()
 	if tile == Vector2i(-1, -1):
 		_sim_status_message = "No empty tile for myco"
@@ -1390,11 +1469,8 @@ func _spawn_myco(kind: String) -> void:
 		_update_level_text()
 		queue_redraw()
 		return
-	var needs := _choose_myco_needs(resources)
 	var id := _next_myco_id(kind)
 	var needs_arg := Array()
-	for need in needs:
-		needs_arg.append(str(need))
 	var added_value: Variant = _sim_bridge.call("add_myco_cell", kind, id, tile.x, tile.y, needs_arg)
 	if not bool(added_value):
 		var error_value: Variant = _sim_bridge.call("get_last_error")
@@ -1578,7 +1654,7 @@ func _update_level_text() -> void:
 
 
 func _can_go_next() -> bool:
-	return _solved or Global.cellular_puzzle_highest_level > _level_number
+	return _level_number < FINAL_PUZZLE_LEVEL and (_solved or Global.cellular_puzzle_highest_level > _level_number)
 
 
 func _update_next_button_state() -> void:
@@ -2535,11 +2611,19 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		_draw_fullness_arc(center, radius * 1.07, _display_fullness(cell, produced_resource, _slot_fullness(cell, produced_resource)), color, 6.0)
 	var font := get_theme_default_font()
 	var needed: Array = _needs.get(cell, [])
+	var pip_count := MYCO_MAX_NEEDS if is_myco else needed.size()
 	var used_angles: Array[float] = []
-	for index in range(needed.size()):
-		var need := str(needed[index])
+	for index in range(pip_count):
 		var pip_radius := _need_pip_radius(radius)
-		var visual := _need_visual_data(cell, need, index, needed.size(), center, radius, pip_radius, used_angles)
+		if index >= needed.size():
+			var blank_angle := -PI * 0.5 + TAU * float(index) / maxf(float(pip_count), 1.0)
+			var blank_center := center + Vector2(cos(blank_angle), sin(blank_angle)) * radius * 1.18
+			draw_circle(blank_center, pip_radius, Color(0.92, 0.97, 0.96, 1.0))
+			draw_circle(blank_center, pip_radius, Color(0.01, 0.025, 0.03, 0.70), false, 2.2)
+			draw_circle(blank_center, pip_radius * 0.84, Color(1, 1, 1, 0.52), false, 1.4)
+			continue
+		var need := str(needed[index])
+		var visual := _need_visual_data(cell, need, index, pip_count, center, radius, pip_radius, used_angles)
 		var angle := float(visual.get("angle", 0.0))
 		used_angles.append(float(visual.get("targetAngle", angle)))
 		var pip_offset := float(visual.get("offset", radius * 1.18))
@@ -2756,7 +2840,7 @@ func _smooth_pip_offset(key: String, target_offset: float) -> float:
 
 
 func _draw_next_level_pulse() -> void:
-	if not _solved or not is_instance_valid(_next_button):
+	if not _solved or not is_instance_valid(_next_button) or not _next_button.visible:
 		return
 	var rect := Rect2(_next_button.position, _next_button.size).grow(6.0)
 	var pulse := 0.5 + sin(Time.get_ticks_msec() / 130.0) * 0.5
@@ -3811,9 +3895,7 @@ func _check_solution() -> void:
 	if _using_csharp_sim:
 		var was_solved := _solved
 		_solved = bool(_sim_snapshot.get("won", false))
-		if _solved and not was_solved and Global.has_method("record_cellular_puzzle_level_complete"):
-			_save_level_high_velocity_if_dirty()
-			Global.record_cellular_puzzle_level_complete(_level_number)
+		_handle_solved_state(was_solved)
 		_update_level_text()
 		return
 	var all_met := true
@@ -3822,11 +3904,35 @@ func _check_solution() -> void:
 			all_met = false
 			break
 	if all_met and not _solved:
+		var was_solved := _solved
 		_solved = true
-		if Global.has_method("record_cellular_puzzle_level_complete"):
-			_save_level_high_velocity_if_dirty()
-			Global.record_cellular_puzzle_level_complete(_level_number)
+		_handle_solved_state(was_solved)
 	_update_level_text()
+
+
+func _handle_solved_state(was_solved: bool) -> void:
+	if not _solved:
+		return
+	if not was_solved and Global.has_method("record_cellular_puzzle_level_complete"):
+		_save_level_high_velocity_if_dirty()
+		Global.record_cellular_puzzle_level_complete(_level_number)
+	if _is_final_puzzle_level():
+		_show_final_win_panel()
+
+
+func _show_final_win_panel() -> void:
+	if _final_win_announced and is_instance_valid(_final_win_panel) and _final_win_panel.visible:
+		return
+	_final_win_announced = true
+	if is_instance_valid(_final_win_panel):
+		_final_win_panel.visible = true
+		move_child(_final_win_panel, get_child_count() - 1)
+	_layout_hud()
+
+
+func _hide_final_win_panel() -> void:
+	if is_instance_valid(_final_win_panel):
+		_final_win_panel.visible = false
 
 
 func _resource_color(resource: String) -> Color:
@@ -3840,6 +3946,10 @@ func _on_back_pressed() -> void:
 	_save_puzzle_level_state()
 	_save_current_level_progress()
 	get_tree().change_scene_to_file("res://scenes/title_screen.tscn")
+
+
+func _on_final_win_main_menu_pressed() -> void:
+	_on_back_pressed()
 
 
 func _on_reset_pressed() -> void:
@@ -3889,11 +3999,15 @@ func _cell_hint_mark(cell: String) -> String:
 
 
 func _on_next_pressed(diagnostic_bypass: bool = false) -> void:
+	if _is_final_puzzle_level():
+		if _solved:
+			_show_final_win_panel()
+		return
 	var record_progress := _can_go_next()
 	if not record_progress and not diagnostic_bypass:
 		return
 	_save_puzzle_level_state()
-	var next_level := _level_number + 1
+	var next_level := _clamp_puzzle_level(_level_number + 1)
 	if record_progress:
 		Global.cellular_puzzle_current_level = next_level
 		if next_level > Global.cellular_puzzle_highest_level:

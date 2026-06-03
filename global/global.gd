@@ -9,6 +9,7 @@ var last_rank_key := 0
 const HIGH_SCORE_SAVE_PATH := "user://high_score.cfg"
 const CELLULAR_PROGRESS_SAVE_PATH := "user://cellular_progress.cfg"
 const CELLULAR_PUZZLE_STATE_SAVE_PATH := "user://cellular_puzzle_state.cfg"
+const CELLULAR_PUZZLE_FINAL_LEVEL := 44
 const GAMEPLAY_SPEED_NORMAL := 0
 const GAMEPLAY_SPEED_FAST := 1
 const GAMEPLAY_SPEED_SLOW := 2
@@ -499,7 +500,7 @@ func load_cellular_progress() -> void:
 	var cfg := ConfigFile.new()
 	var err := cfg.load(CELLULAR_PROGRESS_SAVE_PATH)
 	if err == OK:
-		cellular_puzzle_highest_level = maxi(1, int(cfg.get_value("puzzle", "highest_level", 1)))
+		cellular_puzzle_highest_level = clampi(maxi(1, int(cfg.get_value("puzzle", "highest_level", 1))), 1, CELLULAR_PUZZLE_FINAL_LEVEL)
 		cellular_puzzle_current_level = clampi(maxi(1, int(cfg.get_value("puzzle", "current_level", cellular_puzzle_highest_level))), 1, cellular_puzzle_highest_level)
 		cellular_puzzle_level_high_velocities.clear()
 		if cfg.has_section("puzzle_velocities"):
@@ -513,8 +514,10 @@ func load_cellular_progress() -> void:
 
 func save_cellular_progress() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("puzzle", "highest_level", maxi(1, cellular_puzzle_highest_level))
-	cfg.set_value("puzzle", "current_level", clampi(maxi(1, cellular_puzzle_current_level), 1, maxi(1, cellular_puzzle_highest_level)))
+	cellular_puzzle_highest_level = clampi(maxi(1, cellular_puzzle_highest_level), 1, CELLULAR_PUZZLE_FINAL_LEVEL)
+	cellular_puzzle_current_level = clampi(maxi(1, cellular_puzzle_current_level), 1, maxi(1, cellular_puzzle_highest_level))
+	cfg.set_value("puzzle", "highest_level", cellular_puzzle_highest_level)
+	cfg.set_value("puzzle", "current_level", cellular_puzzle_current_level)
 	for key in cellular_puzzle_level_high_velocities.keys():
 		cfg.set_value("puzzle_velocities", str(key), maxi(0, int(cellular_puzzle_level_high_velocities.get(key, 0))))
 	cfg.save(CELLULAR_PROGRESS_SAVE_PATH)
@@ -530,13 +533,19 @@ func reset_cellular_puzzle_progress() -> void:
 
 
 func record_cellular_puzzle_level_complete(level_number: int) -> bool:
-	var completed_level := maxi(1, level_number)
+	var completed_level := clampi(maxi(1, level_number), 1, CELLULAR_PUZZLE_FINAL_LEVEL)
+	if completed_level >= CELLULAR_PUZZLE_FINAL_LEVEL:
+		var changed := cellular_puzzle_highest_level < CELLULAR_PUZZLE_FINAL_LEVEL or cellular_puzzle_current_level != CELLULAR_PUZZLE_FINAL_LEVEL
+		cellular_puzzle_highest_level = CELLULAR_PUZZLE_FINAL_LEVEL
+		cellular_puzzle_current_level = CELLULAR_PUZZLE_FINAL_LEVEL
+		save_cellular_progress()
+		return changed
 	var next_level := completed_level + 1
 	if next_level <= cellular_puzzle_highest_level:
 		save_cellular_progress()
 		return false
-	cellular_puzzle_highest_level = next_level
-	cellular_puzzle_current_level = next_level
+	cellular_puzzle_highest_level = mini(next_level, CELLULAR_PUZZLE_FINAL_LEVEL)
+	cellular_puzzle_current_level = cellular_puzzle_highest_level
 	save_cellular_progress()
 	return true
 

@@ -18,16 +18,14 @@ config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
 boot_splash/image="res://loading/shamba-logo-ge.png"
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/driver="Dummy"
+
 [autoload]
 
 Global="*res://global/global.gd"
 CellularSim="*res://global/cellular_sim.gd"
-
-[audio]
-
-driver/driver="Dummy"
-driver/enable_input=false
-general/text_to_speech=false
 
 [display]
 

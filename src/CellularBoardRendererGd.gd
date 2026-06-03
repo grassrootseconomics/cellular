@@ -62,6 +62,9 @@ var _inventory_cells: Array[String] = []
 var _positions: Dictionary = {}
 var _inventory_centers: Dictionary = {}
 var _inventory_fresh_starts: Dictionary = {}
+var _override_cell_centers: Dictionary = {}
+var _override_cell_scales: Dictionary = {}
+var _preferred_need_partners: Dictionary = {}
 var _produced_by_cell: Dictionary = {}
 var _cell_kinds: Dictionary = {}
 var _needs: Dictionary = {}
@@ -103,6 +106,9 @@ func set_render_state(state: Dictionary) -> void:
 	_read_positions(state)
 	_read_inventory_centers(state)
 	_read_inventory_fresh_starts(state)
+	_read_override_cell_centers(state)
+	_read_override_cell_scales(state)
+	_read_preferred_need_partners(state)
 	_read_string_map(state, "producedByCell", _produced_by_cell)
 	_read_string_map(state, "cellKinds", _cell_kinds)
 	_read_needs(state)
@@ -396,6 +402,7 @@ func _need_visual_data(cell: String, need: String, index: int, count: int, cente
 
 func _need_state_data(cell: String, need: String) -> Dictionary:
 	var fullness := _slot_fullness(cell, need) if _using_sim_state else 0.0
+	var preferred_partner := _preferred_need_partner(cell, need)
 	var active_partner := _recent_flow_source_for_need(cell, need)
 	var active_alpha := _recent_flow_alpha_for_need(cell, need)
 	if active_partner.is_empty():
@@ -405,8 +412,10 @@ func _need_state_data(cell: String, need: String) -> Dictionary:
 	var possible_partner := _possible_swap_partner_for_need(cell, need)
 	if possible_partner.is_empty():
 		possible_partner = _adjacent_exchange_partner_for_need(cell, need)
+	if possible_partner.is_empty():
+		possible_partner = preferred_partner
 	if not possible_partner.is_empty():
-		return {"state": NEED_STATE_AVAILABLE, "partner": possible_partner, "fullness": fullness, "activeAlpha": 0.0}
+		return {"state": NEED_STATE_AVAILABLE, "partner": possible_partner, "fullness": maxf(fullness, 0.18 if not _using_sim_state else 0.0), "activeAlpha": 0.0}
 	if fullness > 0.0:
 		return {"state": NEED_STATE_SATISFIED, "partner": "", "fullness": fullness, "activeAlpha": 0.0}
 	return {"state": NEED_STATE_MISSING, "partner": "", "fullness": 0.0, "activeAlpha": 0.0}
@@ -620,6 +629,8 @@ func _visual_cell_center(cell: String) -> Vector2:
 		return _drag_position
 	if cell == _inventory_drag_cell:
 		return _inventory_drag_position
+	if _override_cell_centers.has(cell):
+		return _override_cell_centers[cell] as Vector2
 	if _inventory_centers.has(cell):
 		return _inventory_centers[cell] as Vector2
 	if _positions.has(cell):
@@ -628,7 +639,20 @@ func _visual_cell_center(cell: String) -> Vector2:
 
 
 func _cell_visual_scale(cell: String) -> float:
+	if _override_cell_scales.has(cell):
+		return float(_override_cell_scales.get(cell, 1.0))
 	return INVENTORY_CELL_SCALE if _inventory_cells.has(cell) else 1.0
+
+
+func _preferred_need_partner(cell: String, need: String) -> String:
+	var value: Variant = _preferred_need_partners.get(cell, {})
+	if not value is Dictionary:
+		return ""
+	var by_need: Dictionary = value as Dictionary
+	var partner := str(by_need.get(need, ""))
+	if not partner.is_empty() and _cells.has(partner):
+		return partner
+	return ""
 
 
 func _cell_needs(cell: String) -> Array[String]:
@@ -870,6 +894,49 @@ func _read_inventory_fresh_starts(state: Dictionary) -> void:
 	var starts: Dictionary = value as Dictionary
 	for key in starts.keys():
 		_inventory_fresh_starts[str(key)] = int(starts.get(key, 0))
+
+
+func _read_override_cell_centers(state: Dictionary) -> void:
+	_override_cell_centers.clear()
+	var value: Variant = state.get("overrideCellCenters", {})
+	if not value is Dictionary:
+		return
+	var centers: Dictionary = value as Dictionary
+	for key in centers.keys():
+		var center_value: Variant = centers.get(key, Vector2.ZERO)
+		if center_value is Vector2:
+			_override_cell_centers[str(key)] = center_value
+
+
+func _read_override_cell_scales(state: Dictionary) -> void:
+	_override_cell_scales.clear()
+	var value: Variant = state.get("overrideCellScales", {})
+	if not value is Dictionary:
+		return
+	var scales: Dictionary = value as Dictionary
+	for key in scales.keys():
+		_override_cell_scales[str(key)] = float(scales.get(key, 1.0))
+
+
+func _read_preferred_need_partners(state: Dictionary) -> void:
+	_preferred_need_partners.clear()
+	var value: Variant = state.get("preferredNeedPartners", {})
+	if not value is Dictionary:
+		return
+	var source: Dictionary = value as Dictionary
+	for cell_key in source.keys():
+		var needs_value: Variant = source.get(cell_key, {})
+		if not needs_value is Dictionary:
+			continue
+		var partner_by_need: Dictionary = {}
+		var needs_source: Dictionary = needs_value as Dictionary
+		for need_key in needs_source.keys():
+			var need := str(need_key)
+			var partner := str(needs_source.get(need_key, ""))
+			if not need.is_empty() and not partner.is_empty():
+				partner_by_need[need] = partner
+		if not partner_by_need.is_empty():
+			_preferred_need_partners[str(cell_key)] = partner_by_need
 
 
 func _read_string_map(state: Dictionary, key: String, target: Dictionary) -> void:

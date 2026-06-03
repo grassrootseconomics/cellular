@@ -5,7 +5,8 @@ const TITLE_TINY_SHORT_EDGE := 500.0
 const GE_LOGO_PATH := "res://graphics/ge-logo-horizontal-text.png"
 const TITLE_CELLULAR_BACKGROUND_PATH := "res://graphics/cellular-lapace.png"
 const TITLE_SCORE_STAR_COUNT := 12
-const TITLE_CELL_RENDERER_PATH := "res://src/CellularBoardRenderer.cs"
+const TITLE_CELL_RENDERER_CS_PATH := "res://src/CellularBoardRenderer.cs"
+const TITLE_CELL_RENDERER_GD_PATH := "res://src/CellularBoardRendererGd.gd"
 const TITLE_CELL_RENDERER_Z := 42
 const TITLE_CELL_ENTER_DURATION := 2.15
 const TITLE_CELL_SPAWN_DELAY := 0.17
@@ -739,15 +740,25 @@ func _update_title_score_sparkles(delta: float) -> void:
 func _ensure_title_cell_renderer() -> void:
 	if is_instance_valid(_title_cell_renderer):
 		return
-	if not ResourceLoader.exists(TITLE_CELL_RENDERER_PATH):
+	var renderer_paths: Array[String] = []
+	if _title_has_user_arg("--force-gd-renderer"):
+		renderer_paths.append(TITLE_CELL_RENDERER_GD_PATH)
+	else:
+		renderer_paths.append(TITLE_CELL_RENDERER_CS_PATH)
+		renderer_paths.append(TITLE_CELL_RENDERER_GD_PATH)
+	for renderer_path in renderer_paths:
+		if not ResourceLoader.exists(renderer_path):
+			continue
+		var renderer_script: Resource = load(renderer_path)
+		if renderer_script == null or not renderer_script is Script:
+			continue
+		var instance: Variant = (renderer_script as Script).new()
+		if not instance is Control:
+			continue
+		_title_cell_renderer = instance as Control
+		break
+	if not is_instance_valid(_title_cell_renderer):
 		return
-	var renderer_script: Resource = load(TITLE_CELL_RENDERER_PATH)
-	if renderer_script == null or not renderer_script is Script:
-		return
-	var instance: Variant = (renderer_script as Script).new()
-	if not instance is Control:
-		return
-	_title_cell_renderer = instance as Control
 	_title_cell_renderer.name = "TitleCellWordRenderer"
 	_title_cell_renderer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_title_cell_renderer.z_as_relative = false
@@ -758,6 +769,13 @@ func _ensure_title_cell_renderer() -> void:
 	_title_cell_renderer.offset_right = 0.0
 	_title_cell_renderer.offset_bottom = 0.0
 	add_child(_title_cell_renderer)
+
+
+func _title_has_user_arg(flag: String) -> bool:
+	for arg in OS.get_cmdline_user_args():
+		if str(arg) == flag:
+			return true
+	return false
 
 
 func _show_title_text_fallback() -> void:

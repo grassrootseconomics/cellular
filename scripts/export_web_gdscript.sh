@@ -52,6 +52,9 @@ rsync -a --delete \
   --exclude='**/*.cs' \
   "$ROOT_DIR/" "$TMP_DIR/"
 
+mkdir -p "$TMP_DIR/src"
+cp "$ROOT_DIR/src/CellularBoardRendererGd.gd" "$TMP_DIR/src/CellularBoardRendererGd.gd"
+
 mkdir -p "$TMP_DIR/web"
 for icon in \
   index.144x144.png \

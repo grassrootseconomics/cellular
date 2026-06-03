@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Reset Cellular Web Cache</title>
+	<style>
+		body {
+			margin: 2rem;
+			background: #0f1b1a;
+			color: #f3fffb;
+			font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		}
+		button {
+			margin-top: 1rem;
+			padding: 0.8rem 1.2rem;
+			border: 1px solid #75d7c2;
+			border-radius: 0.4rem;
+			background: #174d48;
+			color: white;
+			font: inherit;
+		}
+	</style>
+</head>
+<body>
+	<h1>Resetting Cellular Web Cache</h1>
+	<p id="status">Clearing old local service workers and cached files...</p>
+	<button id="continue" type="button" hidden>Open Cellular</button>
+	<script>
+async function clearCellularWebCache() {
+	const status = document.getElementById("status");
+	try {
+		if ("serviceWorker" in navigator) {
+			const registrations = await navigator.serviceWorker.getRegistrations();
+			await Promise.all(registrations.map((registration) => registration.unregister()));
+		}
+		if ("caches" in window) {
+			const keys = await caches.keys();
+			await Promise.all(keys.map((key) => caches.delete(key)));
+		}
+		status.textContent = "Cache cleared. Opening Cellular...";
+		setTimeout(() => {
+			location.replace("./");
+		}, 300);
+	} catch (error) {
+		console.error(error);
+		status.textContent = "Cache clear hit an error. Use the button to try opening Cellular anyway.";
+		document.getElementById("continue").hidden = false;
+	}
+}
+document.getElementById("continue").addEventListener("click", () => {
+	location.replace("./");
+});
+clearCellularWebCache();
+	</script>
+</body>
+</html>

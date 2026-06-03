@@ -9,3 +9,13 @@ obj/
 sim/batches/
 sim/generated/
 sim/solutions/
+web/index.html
+web/index.js
+web/index.wasm
+web/index.pck
+web/index.audio*.js
+web/index.offline.html
+web/index.service.worker.js
+web/index.manifest.json
+web/index.png
+web/index.png.import

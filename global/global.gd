@@ -118,11 +118,11 @@ func _request_web_tab_close() -> void:
 	var code := """
 (function () {
 	function showCloseMessage() {
-		if (document.getElementById("social-soil-close-message")) {
+		if (document.getElementById("cellular-close-message")) {
 			return;
 		}
 		const overlay = document.createElement("div");
-		overlay.id = "social-soil-close-message";
+		overlay.id = "cellular-close-message";
 		overlay.textContent = "You can close this tab now.";
 		overlay.style.position = "fixed";
 		overlay.style.inset = "0";
@@ -187,8 +187,6 @@ var _trade_sender_buckets: Dictionary = {}
 var _trade_link_buckets: Dictionary = {}
 
 
-
-var sparkle_scene: PackedScene = load("res://scenes/sparkle.tscn")
 
 var growth_time = 0.4
 var decay_time = 1110.6

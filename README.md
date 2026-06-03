@@ -4,7 +4,7 @@ Cellular is a deterministic simulation core and future Godot puzzle game from Gr
 
 It is a living-circuit puzzle about pools, limits, routing, mutual fulfillment, and settlement. The goal is not simply to maximize flow. The goal is to make circulation trustworthy.
 
-The game is inspired by Social Soil, commitment pooling, and work on games, agency, scoring, and value capture. Cellular treats each cell as a small bounded pool: it can produce one resource, need other resources, become strained, glow when fulfilled, and participate in wider circuits. Some cells may be myco cells with no source; these can route and fulfill received resources without producing their own.
+The game is inspired by commitment pooling and work on games, agency, scoring, and value capture. Cellular treats each cell as a small bounded pool: it can produce one resource, need other resources, become strained, glow when fulfilled, and participate in wider circuits. Some cells may be myco cells with no source; these can route and fulfill received resources without producing their own.
 
 This is not a blockchain implementation and not a proof of real-world economic outcomes. It is a playable coordination model for testing assumptions about flow, limits, repair, and fulfillment.
 
@@ -78,6 +78,6 @@ dotnet run --no-restore --project sim/CellularSim.Examples -- --generate-puzzle-
 
 Approved Puzzle fixtures are under `levels/puzzle/`. Each shipped level has a player start fixture, a verified solution fixture, and a compact ASCII solution map.
 
-The existing older Godot gameplay files are temporary reference material from the copied repository. The active Cellular Godot entry point is the title screen, with `res://scenes/cellular_puzzle_level.tscn` as the first Puzzle mode test scene.
+Legacy Godot gameplay files from the copied repository have been moved out of the active tree. The active Cellular Godot entry point is the title screen, with Puzzle and Arcade mode scenes under `scenes/cellular_*`.
 
 Do not run Godot or test commands automatically in this repository unless explicitly requested.

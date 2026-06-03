@@ -4,7 +4,7 @@ Status: draft placeholder.
 
 Cellular is not ready for a public app-store listing. The current milestone is a standalone deterministic C# simulation core. Godot integration, art direction, screenshots, release package IDs, and privacy review are still pending.
 
-Do not submit the legacy Social Soil listing copy for Cellular.
+Do not submit legacy listing copy for Cellular.
 
 ## Future Listing Notes
 

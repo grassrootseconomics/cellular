@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>Social Soil</title>
+		<title>Cellular</title>
 		<style>
 html, body, #canvas {
 	margin: 0;
@@ -92,7 +92,20 @@ body {
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
-<link rel="manifest" href="index.manifest.json">
+
+	<script>
+if (location.search.indexOf('cellular-clear-service-worker=1') !== -1 && 'serviceWorker' in navigator) {
+	navigator.serviceWorker.getRegistrations().then((registrations) => {
+		return Promise.all(registrations.map((registration) => registration.unregister()));
+	}).then(() => {
+		if ('caches' in window) {
+			return caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+		}
+	}).then(() => {
+		location.replace(location.pathname);
+	});
+}
+</script>
 
 	</head>
 	<body>
@@ -112,7 +125,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":7740184,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":4442088,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

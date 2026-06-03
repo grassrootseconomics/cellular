@@ -497,7 +497,7 @@ func _set_board_view_rect(pos: Vector2, rect_size: Vector2) -> void:
 
 
 func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
-	var top_height: float = 58.0
+	var top_height: float = 78.0
 	var button_h: float = 44.0
 	var button_y: float = safe_rect.position.y + round((top_height - button_h) * 0.5)
 	_update_next_button_state()
@@ -511,8 +511,8 @@ func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
 	if is_instance_valid(_reset_button):
 		_set_control_rect(_reset_button, Vector2(safe_rect.position.x + safe_rect.size.x - margin - 92.0, button_y), Vector2(92, button_h))
 	if is_instance_valid(_level_label):
-		_set_control_rect(_level_label, safe_rect.position + Vector2(104.0 + margin, 6.0), Vector2(maxf(1.0, safe_rect.size.x - 208.0 - margin * 2.0), 46.0))
-		_style_label(_level_label, 28, Color(0.92, 1.0, 0.96, 1.0))
+		_set_control_rect(_level_label, safe_rect.position + Vector2(104.0 + margin, 2.0), Vector2(maxf(1.0, safe_rect.size.x - 208.0 - margin * 2.0), 34.0))
+		_style_label(_level_label, 25, Color(0.92, 1.0, 0.96, 1.0))
 	if use_two_rows:
 		_layout_portrait_button_row([_hint_button, _zoom_out_button, _zoom_in_button], [84.0, 46.0, 46.0], safe_rect.position.y + safe_rect.size.y - bottom_height + 5.0, safe_rect)
 		_layout_portrait_button_row([_last_button, _next_button], [88.0, 88.0], safe_rect.position.y + safe_rect.size.y - 48.0, safe_rect)
@@ -523,9 +523,9 @@ func _layout_hud_portrait(safe_rect: Rect2, margin: float) -> void:
 	if is_instance_valid(_next_button):
 		_update_next_button_state()
 	if is_instance_valid(_flow_label):
-		_set_control_rect(_flow_label, safe_rect.position + Vector2(margin, top_height - 4.0), Vector2(maxf(1.0, safe_rect.size.x - margin * 2.0), 28.0))
-		_style_label(_flow_label, 17, Color(1.0, 0.86, 0.36, 1.0))
-	var board_top: float = safe_rect.position.y + top_height + 26.0
+		_set_control_rect(_flow_label, safe_rect.position + Vector2(margin, 35.0), Vector2(maxf(1.0, safe_rect.size.x - margin * 2.0), 36.0))
+		_style_label(_flow_label, 15 if safe_rect.size.x < 520.0 else 16, Color(1.0, 0.86, 0.36, 1.0))
+	var board_top: float = safe_rect.position.y + top_height + 10.0
 	var board_bottom: float = safe_rect.position.y + safe_rect.size.y - bottom_height - 8.0
 	_set_board_view_rect(Vector2(safe_rect.position.x + margin, board_top), Vector2(maxf(1.0, safe_rect.size.x - margin * 2.0), maxf(1.0, board_bottom - board_top)))
 
@@ -620,16 +620,16 @@ func _layout_portrait_button_row(controls: Array, widths: Array, row_y: float, s
 
 
 func _layout_hud_landscape(safe_rect: Rect2, margin: float) -> void:
-	var top_height: float = 54.0
+	var top_height: float = 68.0
 	var rail_width: float = 58.0
 	var button_h: float = 44.0
 	if is_instance_valid(_back_button):
 		_set_control_rect(_back_button, safe_rect.position + Vector2(margin, 5.0), Vector2(88, button_h))
 	if is_instance_valid(_level_label):
-		_set_control_rect(_level_label, safe_rect.position + Vector2(98.0 + margin, 4.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 46.0))
-		_style_label(_level_label, 26, Color(0.92, 1.0, 0.96, 1.0))
+		_set_control_rect(_level_label, safe_rect.position + Vector2(98.0 + margin, 3.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 30.0))
+		_style_label(_level_label, 24, Color(0.92, 1.0, 0.96, 1.0))
 	if is_instance_valid(_flow_label):
-		_set_control_rect(_flow_label, safe_rect.position + Vector2(98.0 + margin, 31.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 20.0))
+		_set_control_rect(_flow_label, safe_rect.position + Vector2(98.0 + margin, 35.0), Vector2(maxf(1.0, safe_rect.size.x - rail_width - 110.0 - margin * 3.0), 24.0))
 		_style_label(_flow_label, 14, Color(1.0, 0.86, 0.36, 1.0))
 	_update_next_button_state()
 	var controls: Array = [_reset_button, _hint_button, _zoom_in_button, _zoom_out_button, _last_button, _next_button]
@@ -775,23 +775,37 @@ func _get_padded_safe_view_rect(extra_margin: float = 0.0) -> Rect2:
 
 
 func _try_create_board_renderer() -> void:
-	var renderer_path := "res://src/CellularBoardRenderer.cs"
-	if not ResourceLoader.exists(renderer_path):
+	var renderer_paths: Array[String] = []
+	if _has_user_arg("--force-gd-renderer"):
+		renderer_paths.append("res://src/CellularBoardRendererGd.gd")
+	else:
+		renderer_paths.append("res://src/CellularBoardRenderer.cs")
+		renderer_paths.append("res://src/CellularBoardRendererGd.gd")
+	for renderer_path in renderer_paths:
+		if not ResourceLoader.exists(renderer_path):
+			continue
+		var renderer_script: Resource = load(renderer_path)
+		if renderer_script == null or not renderer_script is Script:
+			continue
+		var instance: Variant = (renderer_script as Script).new()
+		if not instance is Control:
+			continue
+		_board_renderer = instance as Control
+		_board_renderer.name = "CellularBoardRenderer"
+		(_board_renderer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_board_renderer)
+		move_child(_board_renderer, 0)
+		_using_board_renderer = true
+		_board_renderer_full_sync_needed = true
+		_board_renderer_has_state = false
 		return
-	var renderer_script: Resource = load(renderer_path)
-	if renderer_script == null or not renderer_script is Script:
-		return
-	var instance: Variant = (renderer_script as Script).new()
-	if not instance is Control:
-		return
-	_board_renderer = instance as Control
-	_board_renderer.name = "CellularBoardRenderer"
-	(_board_renderer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_board_renderer)
-	move_child(_board_renderer, 0)
-	_using_board_renderer = true
-	_board_renderer_full_sync_needed = true
-	_board_renderer_has_state = false
+
+
+func _has_user_arg(name: String) -> bool:
+	for arg in OS.get_cmdline_user_args():
+		if str(arg) == name:
+			return true
+	return false
 
 
 func _load_level(level_number: int, record_progress: bool = true) -> void:
@@ -1639,11 +1653,14 @@ func _update_level_text() -> void:
 		_update_next_button_state()
 	if is_instance_valid(_flow_label):
 		if _using_csharp_sim:
-			_flow_label.text = str("flow: ", _swap_velocity_from_snapshot(), "  |  highest flow: ", _level_high_velocity, "  |  ", _puzzle_circuit_state_label())
+			if get_viewport_rect().size.x < 560.0:
+				_flow_label.text = str(_puzzle_circuit_state_label(), "  |  Flow ", _swap_velocity_from_snapshot())
+			else:
+				_flow_label.text = str(_puzzle_circuit_state_label(), "  |  Flow ", _swap_velocity_from_snapshot(), "  |  Best ", _level_high_velocity)
 		else:
 			var met := _count_met_needs()
 			var total := _cells.size() * 3
-			_flow_label.text = str(_puzzle_circuit_state_label(), "  |  Flow ", met, "/", total, " needs  |  Swaps ", _active_swap_pairs().size())
+			_flow_label.text = str(_puzzle_circuit_state_label(), "  |  Flow ", met, "/", total, "  |  Swaps ", _active_swap_pairs().size())
 
 
 func _can_go_next() -> bool:
@@ -2563,8 +2580,8 @@ func _draw_electric_flow_line(start: Vector2, finish: Vector2, color: Color, alp
 func _draw_hint() -> void:
 	if _hint_pair.size() != 2:
 		return
-	var a := _hint_pair[0]
-	var b := _hint_pair[1]
+	var a: String = str(_hint_pair[0])
+	var b: String = str(_hint_pair[1])
 	var a_center := _visual_cell_center(a)
 	var b_center := _visual_cell_center(b)
 	var hint_color := Color(1.0, 0.92, 0.24, 0.86)

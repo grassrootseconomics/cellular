@@ -760,6 +760,33 @@ func _ensure_title_cell_renderer() -> void:
 	add_child(_title_cell_renderer)
 
 
+func _show_title_text_fallback() -> void:
+	var title_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
+	if not is_instance_valid(title_label):
+		return
+	title_label.text = "Cellular"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28, 1.0))
+	title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.18, 0.14, 0.95))
+	title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.68))
+	title_label.add_theme_constant_override("outline_size", 5)
+	title_label.add_theme_constant_override("shadow_offset_x", 0)
+	title_label.add_theme_constant_override("shadow_offset_y", 3)
+
+
+func _hide_title_text_for_renderer() -> void:
+	var title_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
+	if not is_instance_valid(title_label):
+		return
+	title_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.0))
+	title_label.add_theme_color_override("font_outline_color", Color(1.0, 1.0, 1.0, 0.0))
+	title_label.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.0))
+	title_label.add_theme_constant_override("outline_size", 0)
+	title_label.add_theme_constant_override("shadow_offset_x", 0)
+	title_label.add_theme_constant_override("shadow_offset_y", 0)
+
+
 func _get_title_cell_rect() -> Rect2:
 	var title_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
 	if is_instance_valid(title_label):
@@ -875,7 +902,9 @@ func _title_cell_needs(cell_id: String) -> Array[String]:
 func _sync_title_cell_renderer() -> void:
 	_ensure_title_cell_renderer()
 	if not is_instance_valid(_title_cell_renderer) or not _title_cell_renderer.has_method("set_render_state"):
+		_show_title_text_fallback()
 		return
+	_hide_title_text_for_renderer()
 	var title_rect := _get_title_cell_rect()
 	var tile_size := _title_cell_tile_size(title_rect)
 	var view_rect := get_viewport_rect()

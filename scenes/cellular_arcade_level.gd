@@ -38,6 +38,8 @@ const HIGH_SCORE_SPARKLE_COUNT := 14
 const INVENTORY_FRESH_SECONDS := 1.55
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
+const PIP_ANGLE_SMOOTH := 0.14
+const PIP_OFFSET_SMOOTH := 0.16
 const HINT_MISSING_CENTER := Vector2(-100000000.0, -100000000.0)
 const DRAG_SOURCE_NONE := ""
 const DRAG_SOURCE_BOARD := "board"
@@ -91,6 +93,8 @@ var _score_pulse_elapsed := SCORE_PULSE_SECONDS
 var _high_score_pulse_elapsed := HIGH_SCORE_PULSE_SECONDS
 var _high_score_sparkle_nonce := 0
 var _inventory_fresh_start_msec_by_id: Dictionary = {}
+var _pip_angle_by_key: Dictionary = {}
+var _pip_offset_by_key: Dictionary = {}
 var _visual_profile_enabled := false
 var _visual_profile_print_every := 120
 var _visual_profile_duration_seconds := 0.0
@@ -200,22 +204,36 @@ func _parse_arcade_args() -> void:
 
 
 func _try_create_board_renderer() -> void:
-	var renderer_path := "res://src/CellularBoardRenderer.cs"
-	if not ResourceLoader.exists(renderer_path):
+	var renderer_paths: Array[String] = []
+	if _has_user_arg("--force-gd-renderer"):
+		renderer_paths.append("res://src/CellularBoardRendererGd.gd")
+	else:
+		renderer_paths.append("res://src/CellularBoardRenderer.cs")
+		renderer_paths.append("res://src/CellularBoardRendererGd.gd")
+	for renderer_path in renderer_paths:
+		if not ResourceLoader.exists(renderer_path):
+			continue
+		var renderer_script: Resource = load(renderer_path)
+		if renderer_script == null or not renderer_script is Script:
+			continue
+		var instance: Variant = (renderer_script as Script).new()
+		if not instance is Control:
+			continue
+		_board_renderer = instance as Control
+		_board_renderer.name = "CellularArcadeBoardRenderer"
+		(_board_renderer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_board_renderer)
+		move_child(_board_renderer, 0)
+		_using_board_renderer = true
+		_board_renderer_full_sync_needed = true
 		return
-	var renderer_script: Resource = load(renderer_path)
-	if renderer_script == null or not renderer_script is Script:
-		return
-	var instance: Variant = (renderer_script as Script).new()
-	if not instance is Control:
-		return
-	_board_renderer = instance as Control
-	_board_renderer.name = "CellularArcadeBoardRenderer"
-	(_board_renderer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_board_renderer)
-	move_child(_board_renderer, 0)
-	_using_board_renderer = true
-	_board_renderer_full_sync_needed = true
+
+
+func _has_user_arg(name: String) -> bool:
+	for arg in OS.get_cmdline_user_args():
+		if str(arg) == name:
+			return true
+	return false
 
 
 func _create_overlay_layer() -> void:
@@ -314,6 +332,8 @@ func _start_run() -> void:
 	_rocks.clear()
 	_sim_snapshot.clear()
 	_cell_state_by_id.clear()
+	_pip_angle_by_key.clear()
+	_pip_offset_by_key.clear()
 	_cell_sequence = 0
 	_score = 0
 	Global.score = 0
@@ -844,7 +864,7 @@ func _clearable_groups_from_snapshot() -> Array:
 	var diagnostics_value: Variant = _sim_snapshot.get("circuitDiagnostics", {})
 	if not diagnostics_value is Dictionary:
 		return result
-	var diagnostics := diagnostics_value as Dictionary
+	var diagnostics: Dictionary = diagnostics_value as Dictionary
 	var groups_value: Variant = diagnostics.get("strongGroups", [])
 	if not groups_value is Array:
 		return result
@@ -875,8 +895,8 @@ func _connected_board_subgroups(ids: Array[String]) -> Array:
 		remaining[id] = true
 	while not remaining.is_empty():
 		var start := ""
-		for key in remaining.keys():
-			start = str(key)
+		for start_key in remaining.keys():
+			start = str(start_key)
 			break
 		if start.is_empty():
 			break
@@ -885,12 +905,12 @@ func _connected_board_subgroups(ids: Array[String]) -> Array:
 		var queue: Array[String] = [start]
 		var index := 0
 		while index < queue.size():
-			var current := queue[index]
+			var current: String = str(queue[index])
 			index += 1
 			component.append(current)
 			var current_tile := _get_cell_tile(current)
-			for key in remaining.keys():
-				var other := str(key)
+			for candidate_key in remaining.keys():
+				var other := str(candidate_key)
 				if current_tile.distance_squared_to(_get_cell_tile(other)) != 1:
 					continue
 				remaining.erase(other)
@@ -1265,11 +1285,15 @@ func _draw_arcade_overlay(layer: Control) -> void:
 
 
 func _draw_fallback_board(layer: Control) -> void:
+	layer.draw_rect(_board_rect.grow(_tile_size * 0.025), Color(0.006, 0.020, 0.024, 0.72), true)
 	for y in range(BOARD_ROWS):
 		for x in range(BOARD_COLS):
 			var rect := Rect2(_board_rect.position + Vector2(x, y) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
-			layer.draw_rect(rect, Color(0.06, 0.12, 0.13, 0.92), true)
-			layer.draw_rect(rect, Color(0.42, 0.86, 0.74, 0.34), false, 2.0)
+			var shade: float = 0.075 if (x + y) % 2 == 0 else 0.095
+			layer.draw_rect(rect, Color(shade, shade + 0.040, shade + 0.048, 0.96), true)
+			layer.draw_rect(rect, Color(0.24, 0.42, 0.42, 0.20), false, maxf(1.0, _tile_size * 0.014))
+	_draw_fallback_circuit_groups(layer)
+	_draw_fallback_recent_flows(layer)
 	for id in _board_cell_ids:
 		if _drag_source == DRAG_SOURCE_BOARD and id == _drag_cell_id:
 			continue
@@ -1334,6 +1358,107 @@ func _draw_hint_overlay(layer: Control) -> void:
 	layer.draw_line(start, finish, color, 3.0, true)
 	layer.draw_arc(start, _tile_size * 0.49, 0.0, TAU, 36, color, 4.0, true)
 	layer.draw_arc(finish, _tile_size * 0.49, 0.0, TAU, 36, color, 4.0, true)
+
+
+func _draw_fallback_circuit_groups(layer: Control) -> void:
+	var diagnostics_value: Variant = _sim_snapshot.get("circuitDiagnostics", {})
+	if not diagnostics_value is Dictionary:
+		return
+	var diagnostics: Dictionary = diagnostics_value as Dictionary
+	var groups_value: Variant = diagnostics.get("strongGroups", [])
+	if not groups_value is Array:
+		return
+	var groups: Array = groups_value as Array
+	var pulse := 0.5 + sin(Time.get_ticks_msec() / 170.0) * 0.5
+	for group_index in range(groups.size()):
+		var group_value: Variant = groups[group_index]
+		if not group_value is Array:
+			continue
+		var cells: Array = group_value as Array
+		if cells.size() < CLEAR_GROUP_MIN_SIZE:
+			continue
+		var all_on_board := true
+		for cell_value in cells:
+			if not _board_cells.has(str(cell_value)):
+				all_on_board = false
+				break
+		if not all_on_board:
+			continue
+		var color := _fallback_group_color(group_index)
+		var fill := color
+		fill.a = 0.15 + pulse * 0.06
+		var edge := color.lightened(0.24)
+		edge.a = 0.64 + pulse * 0.20
+		for cell_value in cells:
+			var id := str(cell_value)
+			var center := _tile_center(_get_cell_tile(id))
+			layer.draw_circle(center, _tile_size * 0.58, fill)
+		for cell_value in cells:
+			var id := str(cell_value)
+			var tile := _get_cell_tile(id)
+			var rect := Rect2(_board_rect.position + Vector2(tile) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
+			layer.draw_rect(rect, Color(color.r, color.g, color.b, 0.08 + pulse * 0.04), true)
+			layer.draw_rect(rect, edge, false, maxf(3.0, _tile_size * 0.045))
+
+
+func _draw_fallback_recent_flows(layer: Control) -> void:
+	var flows_value: Variant = _sim_snapshot.get("flows", [])
+	if not flows_value is Array:
+		return
+	var current_tick := float(_sim_snapshot.get("tick", 0))
+	var flows: Array = flows_value as Array
+	for flow_value in flows:
+		if not flow_value is Dictionary:
+			continue
+		var flow := flow_value as Dictionary
+		var source := str(flow.get("sourceCellId", ""))
+		var target := str(flow.get("targetCellId", ""))
+		var resource := str(flow.get("resource", ""))
+		if source.is_empty() or target.is_empty() or resource.is_empty():
+			continue
+		if not _board_cells.has(source) or not _board_cells.has(target):
+			continue
+		var age := maxf(0.0, current_tick - float(flow.get("tick", current_tick)))
+		var alpha := clampf(1.0 - age / 10.0, 0.0, 1.0)
+		if alpha <= 0.0:
+			continue
+		var start := _fallback_resource_point(source, resource)
+		var finish := _fallback_resource_point(target, resource)
+		var color := _resource_color(resource)
+		color.a = 0.24 + alpha * 0.44
+		layer.draw_line(start, finish, Color(color.r, color.g, color.b, color.a * 0.42), maxf(5.0, _tile_size * 0.070), true)
+		layer.draw_line(start, finish, color.lightened(0.22), maxf(2.4, _tile_size * 0.028), true)
+		var t := clampf(age / 2.4, 0.0, 1.0)
+		var particle := start.lerp(finish, t)
+		layer.draw_circle(particle, maxf(3.0, _tile_size * 0.045), _resource_color(resource))
+		layer.draw_circle(particle, maxf(3.0, _tile_size * 0.045), Color(1.0, 1.0, 1.0, 0.34 * alpha), false, 1.6)
+
+
+func _fallback_group_color(index: int) -> Color:
+	var colors: Array[Color] = [
+		Color(0.30, 1.00, 0.84, 1.0),
+		Color(1.00, 0.76, 0.26, 1.0),
+		Color(0.68, 0.46, 1.00, 1.0),
+		Color(0.28, 0.70, 1.00, 1.0),
+		Color(1.00, 0.36, 0.58, 1.0)
+	]
+	return colors[index % colors.size()]
+
+
+func _fallback_resource_point(cell_id: String, resource: String) -> Vector2:
+	var center := _tile_center(_get_cell_tile(cell_id))
+	var cell: Dictionary = _board_cells.get(cell_id, {})
+	var needs_value: Variant = cell.get("needs", [])
+	if needs_value is Array:
+		var needs: Array = needs_value as Array
+		var count := 4 if str(cell.get("kind", "Standard")) == "RedMyco" else needs.size()
+		for index in range(needs.size()):
+			if str(needs[index]) != resource:
+				continue
+			var radius := _tile_size * 0.38
+			var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+			return center + Vector2(cos(angle), sin(angle)) * radius * 1.18
+	return center
 
 
 func _draw_clear_effect_overlay(layer: Control) -> void:
@@ -1438,31 +1563,318 @@ func _hint_cell_center(id: String) -> Vector2:
 func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: bool, visual_scale: float = 1.0) -> void:
 	var produced := str(cell.get("produced", ""))
 	var kind := str(cell.get("kind", "Standard"))
-	var label := "*" if kind == "RedMyco" else produced
-	var color := Color(0.88, 0.02, 0.10, 1.0) if kind == "RedMyco" else _resource_color(produced)
+	var is_myco := kind == "RedMyco"
+	var label := "" if is_myco else produced
+	var color := Color(0.94, 0.97, 0.94, 1.0) if is_myco else _resource_color(produced)
 	var radius := _tile_size * (0.41 if dragging else 0.38) * visual_scale
+	var glow_alpha := 0.52 if _cell_is_glowing(str(cell.get("id", ""))) else 0.18
+	layer.draw_circle(center, radius * 1.20, Color(color.r, color.g, color.b, glow_alpha * 0.24))
 	layer.draw_circle(center + Vector2(0.0, radius * 0.08), radius * 1.04, Color(0.0, 0.0, 0.0, 0.30))
-	layer.draw_circle(center, radius, color)
-	layer.draw_arc(center, radius, 0.0, TAU, 36, Color(0.95, 1.0, 0.96, 0.62), 2.4, true)
+	layer.draw_circle(center, radius, Color(color.r, color.g, color.b, 0.74))
+	layer.draw_arc(center, radius * 0.96, 0.0, TAU, 42, Color(0.95, 1.0, 0.96, 0.66), maxf(2.0, radius * 0.080), true)
+	if is_myco:
+		_draw_fallback_red_myco_ring(layer, center, radius)
 	var font: Font = ThemeDB.fallback_font
-	_draw_centered_text(layer, font, center, radius, label, int(_tile_size * 0.46 * visual_scale), Color.WHITE)
+	if not label.is_empty():
+		_draw_centered_text(layer, font, center, radius, label, int(_tile_size * 0.46 * visual_scale), Color.WHITE)
 	var needs_value: Variant = cell.get("needs", [])
 	if needs_value is Array:
 		var needs: Array = needs_value as Array
-		var pip_count := 4 if kind == "RedMyco" else needs.size()
+		var pip_count := 4 if is_myco else needs.size()
+		var used_angles: Array[float] = []
+		var cell_id := str(cell.get("id", ""))
 		for index in range(pip_count):
-			var angle := -PI * 0.5 + TAU * float(index) / maxf(float(pip_count), 1.0)
-			var pip_center := center + Vector2(cos(angle), sin(angle)) * radius * 0.86
+			var need_for_position := ""
+			if index < needs.size():
+				need_for_position = str(needs[index])
+			var angle := _fallback_need_angle(cell_id, need_for_position, index, pip_count, center, used_angles)
+			used_angles.append(angle)
+			var pip_offset := _fallback_need_offset(cell_id, need_for_position, index, radius, dragging)
+			var pip_radius := maxf(7.0, minf(radius * 0.34, _tile_size * 0.15) * visual_scale)
+			var pip_center := center + Vector2(cos(angle), sin(angle)) * pip_offset
 			if index >= needs.size():
-				var blank_radius := maxf(7.0, radius * 0.22)
-				layer.draw_circle(pip_center, blank_radius, Color(0.92, 0.97, 0.96, 1.0))
-				layer.draw_arc(pip_center, blank_radius, 0.0, TAU, 16, Color(0.01, 0.025, 0.03, 0.70), 1.4, true)
+				layer.draw_circle(pip_center, pip_radius, Color(0.92, 0.97, 0.96, 1.0))
+				layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.76), maxf(1.4, pip_radius * 0.16), true)
+				layer.draw_arc(pip_center, pip_radius * 0.84, 0.0, TAU, 18, Color(1.0, 1.0, 1.0, 0.44), maxf(1.0, pip_radius * 0.10), true)
 				continue
 			var need := str(needs[index])
+			var tether := _resource_color(need)
+			tether.a = 0.30
+			layer.draw_line(center + Vector2(cos(angle), sin(angle)) * radius * 0.78, pip_center - Vector2(cos(angle), sin(angle)) * pip_radius * 0.72, tether, maxf(1.8, _tile_size * 0.018), true)
 			var pip_color := _resource_color(need)
-			layer.draw_circle(pip_center, maxf(7.0, radius * 0.22), pip_color.darkened(0.10))
-			layer.draw_arc(pip_center, maxf(7.0, radius * 0.22), 0.0, TAU, 16, Color.WHITE, 1.4, true)
-			_draw_centered_text(layer, font, pip_center, radius * 0.22, need, int(_tile_size * 0.15 * visual_scale), Color.WHITE)
+			var fullness := _slot_fullness(cell_id, need)
+			if fullness <= 0.0:
+				pip_color = pip_color.darkened(0.36)
+			layer.draw_circle(pip_center, pip_radius, pip_color)
+			layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.82), maxf(1.5, pip_radius * 0.18), true)
+			layer.draw_arc(pip_center, pip_radius * 0.86, 0.0, TAU, 18, Color.WHITE, maxf(1.1, pip_radius * 0.11), true)
+			_draw_fallback_fullness_arc(layer, pip_center, pip_radius * 1.12, fullness, pip_color, maxf(2.0, pip_radius * 0.20))
+			_draw_centered_text(layer, font, pip_center, pip_radius, need, int(_tile_size * 0.15 * visual_scale), Color.WHITE)
+
+
+func _draw_fallback_red_myco_ring(layer: Control, center: Vector2, radius: float) -> void:
+	var ring_radius := radius * 0.54
+	layer.draw_arc(center, ring_radius, 0.0, TAU, 42, Color(0.86, 0.02, 0.04, 0.18), maxf(2.0, radius * 0.18), true)
+	layer.draw_arc(center, ring_radius, 0.0, TAU, 42, Color(0.92, 0.04, 0.06, 0.48), maxf(1.6, radius * 0.12), true)
+	layer.draw_arc(center, ring_radius, 0.0, TAU, 42, Color(0.70, 0.00, 0.02, 0.90), maxf(1.2, radius * 0.055), true)
+
+
+func _draw_fallback_fullness_arc(layer: Control, center: Vector2, radius: float, fullness: float, color: Color, width: float) -> void:
+	var clamped := clampf(fullness, 0.0, 1.0)
+	var track := Color(0.0, 0.0, 0.0, 0.38)
+	layer.draw_arc(center, radius, -PI * 0.5, TAU - PI * 0.5, 28, track, width, true)
+	if clamped <= 0.0:
+		return
+	var active := color.lightened(0.20)
+	active.a = 0.92
+	layer.draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * clamped, 28, active, width, true)
+
+
+func _fallback_need_angle(cell_id: String, need: String, index: int, count: int, center: Vector2, used_angles: Array[float]) -> float:
+	var partner := _fallback_need_partner(cell_id, need)
+	var target_angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	if not partner.is_empty():
+		var partner_center := _cell_visual_center(partner)
+		if partner_center != HINT_MISSING_CENTER:
+			var delta := partner_center - center
+			if delta.length_squared() > 1.0:
+				target_angle = delta.angle()
+	target_angle = _fallback_separate_need_angle(target_angle, used_angles)
+	return _fallback_smooth_pip_angle(_fallback_pip_key(cell_id, need, index), target_angle)
+
+
+func _fallback_need_offset(cell_id: String, need: String, index: int, radius: float, dragging: bool) -> float:
+	var target_offset := radius * 1.18
+	if not _fallback_need_partner(cell_id, need).is_empty():
+		target_offset = radius * (1.10 if dragging else 1.08)
+	elif _slot_fullness(cell_id, need) > 0.0:
+		target_offset = radius * 1.02
+	return _fallback_smooth_pip_offset(_fallback_pip_key(cell_id, need, index), target_offset)
+
+
+func _fallback_need_partner(cell_id: String, need: String) -> String:
+	if cell_id.is_empty() or need.is_empty():
+		return ""
+	var hinted := _hint_partner_for_cell(cell_id)
+	if not hinted.is_empty() and _cell_can_offer_resource(hinted, need):
+		return hinted
+	var flow_partner := _recent_flow_partner_for_need(cell_id, need)
+	if not flow_partner.is_empty():
+		return flow_partner
+	var possible_partner := _possible_swap_partner_for_need(cell_id, need)
+	if not possible_partner.is_empty():
+		return possible_partner
+	var inventory_partner := _board_partner_for_inventory_need(cell_id, need)
+	if not inventory_partner.is_empty():
+		return inventory_partner
+	var adjacent_partner := _adjacent_partner_for_need(cell_id, need)
+	if not adjacent_partner.is_empty():
+		return adjacent_partner
+	if not hinted.is_empty() and _cell_accepts_resource_doc(_cell_doc_by_id(hinted), _cell_produced_resource_doc(_cell_doc_by_id(cell_id))):
+		return hinted
+	return ""
+
+
+func _hint_partner_for_cell(cell_id: String) -> String:
+	if _hint_pair.size() != 2:
+		return ""
+	var first := str(_hint_pair[0])
+	var second := str(_hint_pair[1])
+	if first == cell_id:
+		return second
+	if second == cell_id:
+		return first
+	return ""
+
+
+func _recent_flow_partner_for_need(cell_id: String, need: String) -> String:
+	var flows_value: Variant = _sim_snapshot.get("flows", [])
+	if not flows_value is Array:
+		return ""
+	var current_tick := float(_sim_snapshot.get("tick", 0))
+	var best_partner := ""
+	var best_age := 999999.0
+	var flows: Array = flows_value as Array
+	for flow_value in flows:
+		if not flow_value is Dictionary:
+			continue
+		var flow := flow_value as Dictionary
+		if str(flow.get("resource", "")) != need:
+			continue
+		var source := str(flow.get("sourceCellId", ""))
+		var target := str(flow.get("targetCellId", ""))
+		if target != cell_id:
+			continue
+		var age := maxf(0.0, current_tick - float(flow.get("tick", current_tick)))
+		if age < best_age:
+			best_age = age
+			best_partner = source
+	return best_partner
+
+
+func _possible_swap_partner_for_need(cell_id: String, need: String) -> String:
+	var possible_value: Variant = _sim_snapshot.get("possibleSwaps", [])
+	if not possible_value is Array:
+		return ""
+	var possible_swaps: Array = possible_value as Array
+	for swap_value in possible_swaps:
+		if not swap_value is Dictionary:
+			continue
+		var swap := swap_value as Dictionary
+		var initiator := str(swap.get("initiator", ""))
+		var counterparty := str(swap.get("counterparty", ""))
+		if initiator == cell_id and str(swap.get("counterpartyPaidResource", "")) == need:
+			return counterparty
+		if counterparty == cell_id and str(swap.get("initiatorPaidResource", "")) == need:
+			return initiator
+	return ""
+
+
+func _adjacent_partner_for_need(cell_id: String, need: String) -> String:
+	if not _board_cells.has(cell_id):
+		return ""
+	var tile := _get_cell_tile(cell_id)
+	var best_partner := ""
+	var best_score := -1.0
+	for other_id in _board_cell_ids:
+		if other_id == cell_id:
+			continue
+		if tile.distance_squared_to(_get_cell_tile(other_id)) != 1:
+			continue
+		if not _cell_can_offer_resource(other_id, need):
+			continue
+		var score := 10.0
+		var other_doc := _cell_doc_by_id(other_id)
+		if _cell_needs_resource_doc(other_doc, _cell_produced_resource_doc(_cell_doc_by_id(cell_id))):
+			score += 5.0
+		if score > best_score or (is_equal_approx(score, best_score) and other_id < best_partner):
+			best_score = score
+			best_partner = other_id
+	return best_partner
+
+
+func _board_partner_for_inventory_need(cell_id: String, need: String) -> String:
+	if _board_cells.has(cell_id):
+		return ""
+	var cell := _cell_doc_by_id(cell_id)
+	if cell.is_empty():
+		return ""
+	var best_partner := ""
+	var best_score := -1.0
+	for board_id in _board_cell_ids:
+		if not _cell_can_offer_resource(board_id, need):
+			continue
+		var board_cell: Dictionary = _board_cells.get(board_id, {})
+		var score := _inventory_hint_score(cell, board_cell)
+		if _cell_needs_resource_doc(board_cell, _cell_produced_resource_doc(cell)):
+			score += 4.0
+		if score > best_score or (is_equal_approx(score, best_score) and board_id < best_partner):
+			best_score = score
+			best_partner = board_id
+	return best_partner
+
+
+func _cell_can_offer_resource(cell_id: String, resource: String) -> bool:
+	if cell_id.is_empty() or resource.is_empty():
+		return false
+	var cell := _cell_doc_by_id(cell_id)
+	if cell.is_empty():
+		return false
+	for offered in _cell_offer_resources(cell):
+		if offered == resource:
+			return true
+	return false
+
+
+func _cell_doc_by_id(cell_id: String) -> Dictionary:
+	if _board_cells.has(cell_id):
+		return _board_cells.get(cell_id, {}) as Dictionary
+	for cell in _inventory_cells:
+		if str(cell.get("id", "")) == cell_id:
+			return cell
+	return {}
+
+
+func _cell_visual_center(cell_id: String) -> Vector2:
+	if _drag_cell_id == cell_id:
+		return _drag_position
+	if _board_cells.has(cell_id):
+		return _tile_center(_get_cell_tile(cell_id))
+	for index in range(_inventory_cells.size()):
+		if index >= _inventory_centers.size():
+			continue
+		if str(_inventory_cells[index].get("id", "")) == cell_id:
+			return _inventory_centers[index]
+	return HINT_MISSING_CENTER
+
+
+func _cell_produced_resource_doc(cell: Dictionary) -> String:
+	return str(cell.get("produced", ""))
+
+
+func _fallback_separate_need_angle(base_angle: float, used_angles: Array[float]) -> float:
+	if used_angles.is_empty():
+		return base_angle
+	var minimum_gap := 0.54
+	var offsets: Array[float] = [0.0, minimum_gap, -minimum_gap, minimum_gap * 2.0, -minimum_gap * 2.0]
+	for offset in offsets:
+		var candidate := base_angle + offset
+		var separated := true
+		for used in used_angles:
+			if absf(wrapf(candidate - used, -PI, PI)) < minimum_gap:
+				separated = false
+				break
+		if separated:
+			return candidate
+	return base_angle
+
+
+func _fallback_pip_key(cell_id: String, need: String, index: int) -> String:
+	return str(cell_id, ":", need, ":", index)
+
+
+func _fallback_smooth_pip_angle(key: String, target_angle: float) -> float:
+	if not _pip_angle_by_key.has(key):
+		_pip_angle_by_key[key] = target_angle
+		return target_angle
+	var current := float(_pip_angle_by_key.get(key, target_angle))
+	var smoothed := current + wrapf(target_angle - current, -PI, PI) * PIP_ANGLE_SMOOTH
+	_pip_angle_by_key[key] = smoothed
+	return smoothed
+
+
+func _fallback_smooth_pip_offset(key: String, target_offset: float) -> float:
+	if not _pip_offset_by_key.has(key):
+		_pip_offset_by_key[key] = target_offset
+		return target_offset
+	var current := float(_pip_offset_by_key.get(key, target_offset))
+	var smoothed := lerpf(current, target_offset, PIP_OFFSET_SMOOTH)
+	_pip_offset_by_key[key] = smoothed
+	return smoothed
+
+
+func _cell_is_glowing(cell_id: String) -> bool:
+	var state_value: Variant = _cell_state_by_id.get(cell_id, {})
+	if state_value is Dictionary:
+		return bool((state_value as Dictionary).get("glowing", false))
+	return false
+
+
+func _slot_fullness(cell_id: String, resource: String) -> float:
+	var state_value: Variant = _cell_state_by_id.get(cell_id, {})
+	if not state_value is Dictionary:
+		return 0.0
+	var slots_value: Variant = (state_value as Dictionary).get("slots", [])
+	if not slots_value is Array:
+		return 0.0
+	var slots: Array = slots_value as Array
+	for slot_value in slots:
+		if not slot_value is Dictionary:
+			continue
+		var slot: Dictionary = slot_value as Dictionary
+		if str(slot.get("resource", "")) == resource:
+			return clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0)
+	return 0.0
 
 
 func _draw_centered_text(layer: Control, font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color) -> void:
@@ -1674,7 +2086,7 @@ func _finish_drag(screen_pos: Vector2) -> void:
 			changed = true
 	elif _drag_source == DRAG_SOURCE_INVENTORY:
 		if _is_tile_inside(target_tile) and _is_tile_empty(target_tile):
-			var cell_to_place := _inventory_cells[_drag_inventory_index].duplicate(true)
+			var cell_to_place: Dictionary = _inventory_cells[_drag_inventory_index].duplicate(true)
 			_add_cell_to_board(cell_to_place, target_tile)
 			var replacement := _make_inventory_cell(_drag_inventory_index)
 			_inventory_cells[_drag_inventory_index] = replacement

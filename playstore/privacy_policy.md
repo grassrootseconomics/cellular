@@ -2,7 +2,7 @@
 
 Status: not release-ready.
 
-This file replaces the copied Social Soil privacy policy so the repository does not present old release text as current Cellular documentation.
+This file replaces the copied legacy privacy policy so the repository does not present old release text as current Cellular documentation.
 
 Cellular does not yet have a release build or final data behavior. Before publication, prepare and review a new privacy policy based on the actual shipped game, including:
 

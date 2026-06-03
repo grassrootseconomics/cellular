@@ -4,11 +4,11 @@ Last checked: 2026-06-03.
 
 ## Summary
 
-Cellular is close for Android and Play Store testing, but web publishing has one major blocker: Godot 4 C#/.NET projects currently cannot export to Web. Web release needs a separate web-safe runtime path before publication. Android Play Store release can proceed after build, QA, listing, policy, and testing work.
+Cellular is close for Android and Play Store testing. Godot 4 C#/.NET projects still cannot export directly to Web, so the web release uses a GDScript-only runtime shim exported from a temporary non-.NET project copy. Android Play Store release can proceed after build, QA, listing, policy, and testing work.
 
 ## Release Blockers
 
-- [ ] Decide web strategy: port the runtime needed for web to GDScript/non-.NET, create a separate web demo build, or skip playable web release for v1.
+- [ ] Finish validating the GDScript-only web runtime shim against Puzzle levels 1-44.
 - [ ] Verify Android export with Godot .NET 4.6.3 using the `Android-PlayAAB` preset.
 - [ ] Replace stale Play Store copy, screenshots, and privacy placeholders in `playstore/`; those files are not submission-ready.
 - [ ] Confirm `org.grassecon.cellular` is the final package id before first Play upload. Android package ids are effectively permanent after publishing.
@@ -30,8 +30,8 @@ Cellular is close for Android and Play Store testing, but web publishing has one
 
 ## Web Checklist
 
-- [ ] Resolve the Godot .NET web blocker first; official Godot docs say C# projects cannot currently export to Web.
-- [ ] Once web-safe, export a release Web build to `web/`.
+- [ ] Validate the GDScript shim through representative parity fixtures and all Puzzle levels 1-44.
+- [ ] Export a release Web build with `bash scripts/export_web_gdscript.sh`.
 - [ ] Preserve or copy `CNAME` into the deployed web output if using GitHub Pages or a custom domain.
 - [ ] Verify PWA icons, manifest, service worker, offline behavior, local save persistence, and mobile browser touch layout.
 - [ ] Serve with the required headers if using web features that need cross-origin isolation; the current Web preset enables PWA cross-origin isolation.

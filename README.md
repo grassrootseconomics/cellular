@@ -14,6 +14,10 @@ The backend milestone is a standalone C# simulation core under `sim/CellularSim`
 
 Godot visual testing has started with a small title screen and shipped Puzzle levels 1-20. The project now targets Godot .NET so GDScript can handle menus and UX while C# owns swaps, reactions, scoring, strain, inventory state, and generated level validation.
 
+## Audio Policy
+
+Cellular v0.0.x intentionally ships silent. `project.godot` uses Godot's `Dummy` audio driver so desktop, Android, and Web builds do not open playback or recording devices. Future sound work should deliberately remove or override the Dummy driver and add volume/mute UX at that time.
+
 ## Manual Verification
 
 Run tests manually from the repository root when needed:

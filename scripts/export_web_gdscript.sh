@@ -99,7 +99,44 @@ for line in lines:
         skip = False
     if not skip:
         out.append(line)
-path.write_text("\n".join(out) + "\n")
+text = "\n".join(out) + "\n"
+
+def ensure_project_settings(source, section, settings):
+    lines = source.splitlines()
+    header = f"[{section}]"
+    section_start = None
+    section_end = len(lines)
+    for index, line in enumerate(lines):
+        if line.strip() == header:
+            section_start = index
+            break
+    if section_start is None:
+        insertion = ["", header, ""]
+        insertion.extend(f"{key}={value}" for key, value in settings.items())
+        return source.rstrip() + "\n" + "\n".join(insertion) + "\n"
+    for index in range(section_start + 1, len(lines)):
+        if re.match(r"^\[[^\]]+\]$", lines[index].strip()):
+            section_end = index
+            break
+    for key, value in settings.items():
+        replacement = f"{key}={value}"
+        replaced = False
+        for index in range(section_start + 1, section_end):
+            if lines[index].strip().startswith(f"{key}="):
+                lines[index] = replacement
+                replaced = True
+                break
+        if not replaced:
+            lines.insert(section_end, replacement)
+            section_end += 1
+    return "\n".join(lines) + "\n"
+
+text = ensure_project_settings(text, "audio", {
+    'driver/driver': '"Dummy"',
+    'driver/enable_input': 'false',
+    'general/text_to_speech': 'false',
+})
+path.write_text(text)
 PY
 
 python3 - "$TMP_DIR/export_presets.cfg" "$CELLULAR_WEB_PWA" <<'PY'

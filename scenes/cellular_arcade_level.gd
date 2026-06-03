@@ -3,11 +3,12 @@ extends Control
 const ArcadeOverlayLayer = preload("res://scenes/cellular_arcade_overlay.gd")
 
 const BOARD_COLS := 5
-const BOARD_ROWS := 6
+const BOARD_ROWS := 5
 const BOARD_TILE_COUNT := BOARD_COLS * BOARD_ROWS
 const INVENTORY_SLOT_COUNT := 3
 const CLEAR_GROUP_MIN_SIZE := 4
 const CLEAR_EFFECT_MAX_SCALE_COUNT := 10
+const CLEAR_SETTLE_TICKS := 6
 const RESOURCE_LETTERS := ["A", "B", "C", "D", "E", "F", "G", "H"]
 const RESOURCE_COLORS := [
 	Color(0.18, 0.72, 0.78, 1.0),
@@ -31,13 +32,17 @@ const WIN_RECENT_FLOW_WINDOW_TICKS := 200
 const SWAP_ROUNDS_PER_TICK := 4
 const WIN_DURATION_TICKS := 3
 const SIM_TICK_SECONDS := 0.12
-const CLEAR_EFFECT_SECONDS := 0.88
+const CLEAR_EFFECT_SECONDS := 1.65
 const SCORE_PULSE_SECONDS := 0.72
 const HIGH_SCORE_PULSE_SECONDS := 1.18
 const HIGH_SCORE_SPARKLE_COUNT := 14
 const INVENTORY_FRESH_SECONDS := 1.55
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
+const INVENTORY_CELL_Y_OFFSET := 0.06
+const CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM := 4.0
+const CAMERA_ZOOM_STEP := 1.18
+const CAMERA_PINCH_MIN_DISTANCE := 18.0
 const PIP_ANGLE_SMOOTH := 0.14
 const PIP_OFFSET_SMOOTH := 0.16
 const HINT_MISSING_CENTER := Vector2(-100000000.0, -100000000.0)
@@ -69,7 +74,14 @@ var _needs: Dictionary = {}
 var _rocks: Dictionary = {}
 
 var _board_rect := Rect2()
+var _board_view_rect := Rect2()
 var _tile_size := 64.0
+var _fit_tile_size := 64.0
+var _camera_tile_size := 64.0
+var _camera_max_tile_size := 64.0
+var _camera_center_tiles := Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
+var _camera_initialized := false
+var _last_board_view_size := Vector2.ZERO
 var _inventory_centers: Array[Vector2] = []
 var _drag_source := DRAG_SOURCE_NONE
 var _drag_cell_id := ""
@@ -78,6 +90,15 @@ var _drag_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_original_tile := Vector2i.ZERO
 var _drag_touch_id := -1
+var _pan_active := false
+var _pan_last_pos := Vector2.ZERO
+var _pan_touch_id := -1
+var _touch_points := {}
+var _pinch_active := false
+var _pinch_touch_a := -1
+var _pinch_touch_b := -1
+var _pinch_last_distance := 0.0
+var _pinch_last_center := Vector2.ZERO
 
 var _hint_button: Button = null
 var _hint_pair: Array[String] = []
@@ -89,6 +110,8 @@ var _full_board_pending_check := false
 var _status_text := ""
 var _clear_effect_ids: Array[String] = []
 var _clear_effect_elapsed := 0.0
+var _pending_clear_ids: Array[String] = []
+var _pending_clear_started_tick := -1
 var _score_pulse_elapsed := SCORE_PULSE_SECONDS
 var _high_score_pulse_elapsed := HIGH_SCORE_PULSE_SECONDS
 var _high_score_sparkle_nonce := 0
@@ -345,8 +368,10 @@ func _start_run() -> void:
 	_status_text = ""
 	_clear_effect_ids.clear()
 	_clear_effect_elapsed = 0.0
+	_reset_pending_clear()
 	_score_pulse_elapsed = SCORE_PULSE_SECONDS
 	_high_score_pulse_elapsed = HIGH_SCORE_PULSE_SECONDS
+	_reset_camera_state()
 	_reset_score_pulse_visual()
 	_reset_high_score_pulse_visual()
 	if is_instance_valid(_game_over_panel):
@@ -789,6 +814,7 @@ func _clear_qualifying_groups() -> bool:
 		return true
 	var groups := _clearable_groups_from_snapshot()
 	if groups.is_empty():
+		_reset_pending_clear()
 		return false
 	var clear_ids: Array[String] = []
 	for group in groups:
@@ -796,7 +822,23 @@ func _clear_qualifying_groups() -> bool:
 			if not clear_ids.has(id):
 				clear_ids.append(id)
 	if clear_ids.is_empty():
+		_reset_pending_clear()
 		return false
+	clear_ids.sort()
+	var current_tick := int(_sim_snapshot.get("tick", 0))
+	if not _pending_clear_matches(clear_ids):
+		_pending_clear_ids = clear_ids.duplicate()
+		_pending_clear_started_tick = current_tick
+		_status_text = str("Amazing! ", clear_ids.size(), "-Cell Network Forming!")
+		_update_hud_text()
+		queue_redraw()
+		return true
+	_pending_clear_ids = clear_ids.duplicate()
+	if current_tick - _pending_clear_started_tick < CLEAR_SETTLE_TICKS:
+		_status_text = str("Amazing! ", clear_ids.size(), "-Cell Network Forming!")
+		_update_hud_text()
+		queue_redraw()
+		return true
 	var cleared_count := clear_ids.size()
 	var points := cleared_count + maxi(0, cleared_count - CLEAR_GROUP_MIN_SIZE)
 	var previous_high_score := int(Global.high_score)
@@ -804,8 +846,9 @@ func _clear_qualifying_groups() -> bool:
 	Global.add_score(points)
 	if _score > previous_high_score and int(Global.high_score) > previous_high_score:
 		_start_high_score_pulse()
-	_status_text = str("Amazing! ", cleared_count, "-Cells Cleared!")
+	_status_text = _clear_message(cleared_count)
 	_clear_hint(false)
+	_reset_pending_clear()
 	_start_clear_effect(clear_ids)
 	_update_hud_text()
 	queue_redraw()
@@ -820,6 +863,40 @@ func _start_clear_effect(clear_ids: Array[String]) -> void:
 	_score_pulse_elapsed = 0.0
 	_apply_score_pulse_visual()
 	_board_renderer_full_sync_needed = true
+
+
+func _clear_message(cleared_count: int) -> String:
+	match cleared_count:
+		4:
+			return "Amazing. 4 Cells Cleared!"
+		5:
+			return "Wow. 5 Cells Cleared!"
+		6:
+			return "How?! 6 Cells Cleared!"
+		7:
+			return "Are you kidding?! 7 Cells Cleared!"
+		8:
+			return "Super Clear! 8 Cells Cleared!"
+		9:
+			return "Now you are too good! 9 Cells Cleared!"
+		10:
+			return "Genius! 10 Cells Cleared!"
+		_:
+			return str("Time for a break! ", cleared_count, " Cells Cleared!")
+
+
+func _reset_pending_clear() -> void:
+	_pending_clear_ids.clear()
+	_pending_clear_started_tick = -1
+
+
+func _pending_clear_matches(clear_ids: Array[String]) -> bool:
+	if _pending_clear_ids.is_empty() or _pending_clear_started_tick < 0:
+		return false
+	for id in _pending_clear_ids:
+		if not clear_ids.has(id):
+			return false
+	return true
 
 
 func _finish_clear_effect() -> void:
@@ -995,7 +1072,7 @@ func _layout_scene() -> void:
 	var margin := _get_arcade_safe_edge_margin()
 	var portrait := safe_rect.size.y >= safe_rect.size.x
 	var compact_hud := portrait or safe_rect.size.x < 760.0 or short_edge < 620.0
-	var top_h := 96.0 if compact_hud else 68.0
+	var top_h := 106.0 if compact_hud else 76.0
 	var inventory_gap_factor := 0.22
 	var inventory_h_factor := INVENTORY_SLOT_SCALE + 0.10
 	var play_bottom_padding := maxf(2.0, margin * 0.35)
@@ -1004,31 +1081,48 @@ func _layout_scene() -> void:
 	var tile_by_w := maxf(28.0, (safe_rect.size.x - margin * 0.20) / float(BOARD_COLS))
 	var tile_by_h := maxf(28.0, playable_h / combined_h_denominator)
 	var max_tile := 176.0 if compact_hud else 190.0
-	_tile_size = floorf(clampf(minf(tile_by_w, tile_by_h), 30.0, max_tile))
-	var board_size := Vector2(_tile_size * BOARD_COLS, _tile_size * BOARD_ROWS)
-	var inventory_gap := _tile_size * inventory_gap_factor
-	var inventory_h := _tile_size * inventory_h_factor
-	var total_play_h := board_size.y + inventory_gap + inventory_h
-	var spare_play_h := maxf(0.0, playable_h - total_play_h)
-	var play_top: float = safe_rect.position.y + top_h + round(spare_play_h * 0.16)
-	var board_x: float = roundf(safe_rect.position.x + (safe_rect.size.x - board_size.x) * 0.5)
-	_board_rect = Rect2(Vector2(board_x, roundf(play_top)), board_size)
-
-	_inventory_centers.clear()
-	var inv_y := _board_rect.position.y + _board_rect.size.y + inventory_gap + inventory_h * 0.5
+	_fit_tile_size = floorf(clampf(minf(tile_by_w, tile_by_h), 30.0, max_tile))
+	var row_available_w := maxf(1.0, safe_rect.size.x - margin * 2.0)
 	var hint_w := 70.0 if compact_hud else 78.0
 	var hint_h := 42.0
+	var row_gap := maxf(8.0, _fit_tile_size * 0.08)
+	var inventory_width_tile_cap := maxf(30.0, (row_available_w - hint_w - row_gap) / (INVENTORY_SLOT_SCALE + float(INVENTORY_SLOT_COUNT - 1) * (INVENTORY_SLOT_SCALE + 0.12)))
+	var provisional_inventory_gap := _fit_tile_size * inventory_gap_factor
+	var provisional_inventory_h := _fit_tile_size * inventory_h_factor
+	var board_view_top: float = safe_rect.position.y + top_h
+	var provisional_board_view_h := maxf(1.0, safe_rect.position.y + safe_rect.size.y - play_bottom_padding - board_view_top - provisional_inventory_gap - provisional_inventory_h)
+	_board_view_rect = Rect2(Vector2(safe_rect.position.x, board_view_top), Vector2(safe_rect.size.x, provisional_board_view_h))
+	var camera_max_tile := maxf(_fit_tile_size, minf(minf(_arcade_camera_view_max_tile_size(), inventory_width_tile_cap), max_tile))
+	_camera_max_tile_size = camera_max_tile
+	if not _camera_initialized:
+		_camera_center_tiles = Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
+		_camera_tile_size = camera_max_tile
+		_camera_initialized = true
+	elif _last_board_view_size != _board_view_rect.size:
+		_camera_tile_size = minf(_camera_tile_size, camera_max_tile)
+	_last_board_view_size = _board_view_rect.size
+
+	_tile_size = clampf(_camera_tile_size, _fit_tile_size, camera_max_tile)
+	var inventory_gap := _tile_size * inventory_gap_factor
+	var inventory_h := _tile_size * inventory_h_factor
+	var board_view_h := maxf(1.0, safe_rect.position.y + safe_rect.size.y - play_bottom_padding - board_view_top - inventory_gap - inventory_h)
+	_board_view_rect = Rect2(Vector2(safe_rect.position.x, board_view_top), Vector2(safe_rect.size.x, board_view_h))
+	_camera_max_tile_size = maxf(_fit_tile_size, minf(minf(_arcade_camera_view_max_tile_size(), inventory_width_tile_cap), max_tile))
+	_clamp_arcade_camera(false)
+	_update_arcade_board_rect_from_camera()
+
+	_inventory_centers.clear()
+	var inv_y := _board_view_rect.position.y + _board_view_rect.size.y + inventory_gap + inventory_h * 0.5
 	var slot_size := _tile_size * INVENTORY_SLOT_SCALE
 	var slot_gap := _tile_size * (INVENTORY_SLOT_SCALE + 0.12)
-	var row_available_w := maxf(1.0, safe_rect.size.x - margin * 2.0)
-	var row_gap := maxf(8.0, _tile_size * 0.08)
+	row_gap = maxf(8.0, _tile_size * 0.08)
 	var fit_slot_gap := (row_available_w - hint_w - row_gap - slot_size) / maxf(1.0, float(INVENTORY_SLOT_COUNT - 1))
 	if fit_slot_gap >= slot_size:
 		slot_gap = clampf(minf(slot_gap, fit_slot_gap), slot_size, _tile_size * (INVENTORY_SLOT_SCALE + 0.12))
 	else:
 		slot_gap = maxf(_tile_size * 0.90, fit_slot_gap)
 	var row_width := hint_w + row_gap + slot_size + slot_gap * float(INVENTORY_SLOT_COUNT - 1)
-	var row_left := _board_rect.position.x + _board_rect.size.x * 0.5 - row_width * 0.5
+	var row_left := _board_view_rect.position.x + _board_view_rect.size.x * 0.5 - row_width * 0.5
 	var min_row_left := safe_rect.position.x + margin
 	var max_row_left := safe_rect.position.x + safe_rect.size.x - margin - row_width
 	row_left = clampf(row_left, min_row_left, maxf(min_row_left, max_row_left))
@@ -1046,7 +1140,7 @@ func _layout_scene() -> void:
 	if compact_hud:
 		_set_control_rect(_score_label, safe_rect.position + Vector2(margin, 42.0), Vector2(safe_rect.size.x - margin * 2.0, 28.0))
 		_set_control_rect(_high_score_label, safe_rect.position + Vector2(margin, 68.0), Vector2(safe_rect.size.x - margin * 2.0, 24.0))
-		_set_control_rect(_status_label, safe_rect.position + Vector2(margin, 90.0), Vector2(safe_rect.size.x - margin * 2.0, 20.0))
+		_set_control_rect(_status_label, safe_rect.position + Vector2(margin, 88.0), Vector2(safe_rect.size.x - margin * 2.0, 32.0))
 	else:
 		var center_left := safe_rect.position.x + margin + menu_w + 18.0
 		var center_right := safe_rect.position.x + safe_rect.size.x - margin - restart_w - 10.0
@@ -1055,7 +1149,7 @@ func _layout_scene() -> void:
 		var stat_w := maxf(90.0, (center_w - stat_gap) * 0.5)
 		_set_control_rect(_score_label, Vector2(center_left, safe_rect.position.y), Vector2(stat_w, 42.0))
 		_set_control_rect(_high_score_label, Vector2(center_left + stat_w + stat_gap, safe_rect.position.y), Vector2(maxf(90.0, center_w - stat_w - stat_gap), 42.0))
-		_set_control_rect(_status_label, safe_rect.position + Vector2(margin, 42.0), Vector2(safe_rect.size.x - margin * 2.0, 24.0))
+		_set_control_rect(_status_label, safe_rect.position + Vector2(margin, 42.0), Vector2(safe_rect.size.x - margin * 2.0, 34.0))
 	_style_hud()
 
 	if is_instance_valid(_overlay_layer):
@@ -1066,6 +1160,73 @@ func _layout_scene() -> void:
 	_board_renderer_full_sync_needed = true
 	_layout_game_over_panel(view_size)
 	_update_hud_text()
+
+
+func _arcade_camera_view_max_tile_size() -> float:
+	if _board_view_rect.size.x <= 1.0 or _board_view_rect.size.y <= 1.0:
+		return maxf(_fit_tile_size, 64.0)
+	var four_tile_size := minf(_board_view_rect.size.x, _board_view_rect.size.y) / CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM
+	return maxf(_fit_tile_size, four_tile_size)
+
+
+func _update_arcade_board_rect_from_camera() -> void:
+	_tile_size = clampf(_camera_tile_size, _fit_tile_size, _camera_max_tile_size)
+	var board_size := Vector2(_tile_size * float(BOARD_COLS), _tile_size * float(BOARD_ROWS))
+	var origin := _board_view_rect.get_center() - _camera_center_tiles * _tile_size
+	_board_rect = Rect2(origin, board_size)
+
+
+func _clamp_arcade_camera(resize_deadband: bool = true) -> void:
+	_camera_tile_size = minf(_camera_tile_size, _camera_max_tile_size)
+	if resize_deadband:
+		if _camera_tile_size < _fit_tile_size:
+			_camera_tile_size = _fit_tile_size
+	else:
+		_camera_tile_size = maxf(_camera_tile_size, _fit_tile_size)
+	var visible_tiles := Vector2(_board_view_rect.size.x / _camera_tile_size, _board_view_rect.size.y / _camera_tile_size)
+	if visible_tiles.x >= float(BOARD_COLS):
+		_camera_center_tiles.x = float(BOARD_COLS) * 0.5
+	else:
+		_camera_center_tiles.x = clampf(_camera_center_tiles.x, visible_tiles.x * 0.5, float(BOARD_COLS) - visible_tiles.x * 0.5)
+	if visible_tiles.y >= float(BOARD_ROWS):
+		_camera_center_tiles.y = float(BOARD_ROWS) * 0.5
+	else:
+		_camera_center_tiles.y = clampf(_camera_center_tiles.y, visible_tiles.y * 0.5, float(BOARD_ROWS) - visible_tiles.y * 0.5)
+
+
+func _screen_to_board_point(screen_pos: Vector2) -> Vector2:
+	if _tile_size <= 0.0:
+		return _camera_center_tiles
+	return (screen_pos - _board_rect.position) / _tile_size
+
+
+func _set_arcade_camera_tile_size(next_tile_size: float, focal_screen_pos: Vector2) -> void:
+	if not _camera_initialized:
+		return
+	var clamped_size := clampf(next_tile_size, _fit_tile_size, _camera_max_tile_size)
+	if is_equal_approx(clamped_size, _camera_tile_size):
+		return
+	var focal_board_point := _screen_to_board_point(focal_screen_pos)
+	_camera_tile_size = clamped_size
+	_camera_center_tiles = focal_board_point - (focal_screen_pos - _board_view_rect.get_center()) / _camera_tile_size
+	_clamp_arcade_camera(false)
+	_update_arcade_board_rect_from_camera()
+	_board_renderer_full_sync_needed = true
+	queue_redraw()
+
+
+func _zoom_arcade_camera(factor: float, focal_screen_pos: Vector2) -> void:
+	_set_arcade_camera_tile_size(_camera_tile_size * factor, focal_screen_pos)
+
+
+func _pan_arcade_camera_by_screen_delta(delta: Vector2) -> void:
+	if not _camera_initialized or _tile_size <= 0.0:
+		return
+	_camera_center_tiles -= delta / _tile_size
+	_clamp_arcade_camera()
+	_update_arcade_board_rect_from_camera()
+	_board_renderer_full_sync_needed = true
+	queue_redraw()
 
 
 func _layout_game_over_panel(view_size: Vector2) -> void:
@@ -1136,7 +1297,7 @@ func _style_hud() -> void:
 	_style_label(_score_label, 22, Color(0.88, 1.0, 0.96, 1.0))
 	_style_label(_high_score_label, 18, Color(0.78, 0.94, 1.0, 1.0))
 	_style_label(_fill_label, 15, Color(0.78, 0.94, 1.0, 1.0))
-	_style_label(_status_label, 15, Color(1.0, 0.84, 0.54, 1.0))
+	_style_label(_status_label, 22, Color(1.0, 0.84, 0.54, 1.0))
 
 
 func _style_button(button: Button) -> void:
@@ -1270,8 +1431,17 @@ func _update_hud_text() -> void:
 		_fill_label.text = ""
 	if is_instance_valid(_status_label):
 		_status_label.text = _hint_text if not _hint_text.is_empty() else _status_text
+		_status_label.add_theme_font_size_override("font_size", _status_font_size(_status_label.text))
 	if is_instance_valid(_game_over_score_label):
 		_game_over_score_label.text = str("Cells Cleared ", Global.format_score_value(_score), "  |  Most Cleared ", Global.format_score_value(Global.high_score))
+
+
+func _status_font_size(text: String) -> int:
+	if text.length() > 36:
+		return 18
+	if text.length() > 28:
+		return 20
+	return 22
 
 
 func _draw_arcade_overlay(layer: Control) -> void:
@@ -1285,10 +1455,12 @@ func _draw_arcade_overlay(layer: Control) -> void:
 
 
 func _draw_fallback_board(layer: Control) -> void:
-	layer.draw_rect(_board_rect.grow(_tile_size * 0.025), Color(0.006, 0.020, 0.024, 0.72), true)
+	layer.draw_rect(_board_view_rect, Color(0.006, 0.020, 0.024, 0.72), true)
 	for y in range(BOARD_ROWS):
 		for x in range(BOARD_COLS):
 			var rect := Rect2(_board_rect.position + Vector2(x, y) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
+			if not _board_view_rect.grow(4.0).intersects(rect, true):
+				continue
 			var shade: float = 0.075 if (x + y) % 2 == 0 else 0.095
 			layer.draw_rect(rect, Color(shade, shade + 0.040, shade + 0.048, 0.96), true)
 			layer.draw_rect(rect, Color(0.24, 0.42, 0.42, 0.20), false, maxf(1.0, _tile_size * 0.014))
@@ -1296,6 +1468,8 @@ func _draw_fallback_board(layer: Control) -> void:
 	_draw_fallback_recent_flows(layer)
 	for id in _board_cell_ids:
 		if _drag_source == DRAG_SOURCE_BOARD and id == _drag_cell_id:
+			continue
+		if not _board_view_rect.grow(_tile_size * 0.7).has_point(_tile_center(_get_cell_tile(id))):
 			continue
 		var cell: Dictionary = _board_cells.get(id, {})
 		_draw_cell(layer, cell, _tile_center(_get_cell_tile(id)), false)
@@ -1315,6 +1489,7 @@ func _draw_inventory(layer: Control, draw_cells: bool) -> void:
 		var slot_rect := Rect2(center - Vector2(slot_size * 0.5, slot_size * 0.5), Vector2(slot_size, slot_size))
 		var shadow_rect := slot_rect.grow(_tile_size * 0.018)
 		shadow_rect.position += Vector2(0.0, _tile_size * 0.055)
+		var cell_center := _inventory_visual_center(index)
 		if draw_cells:
 			layer.draw_rect(shadow_rect, Color(0.0, 0.012, 0.015, 0.50), true)
 			layer.draw_rect(slot_rect, Color(0.085, 0.120, 0.130, 0.98), true)
@@ -1332,9 +1507,9 @@ func _draw_inventory(layer: Control, draw_cells: bool) -> void:
 			else:
 				if fresh_strength > 0.0:
 					var cell_halo_radius := _tile_size * (0.50 + burst * 0.08)
-					layer.draw_circle(center, cell_halo_radius, Color(1.0, 0.90, 0.28, 0.18 * fresh_strength + 0.12 * burst))
-					layer.draw_arc(center, cell_halo_radius * 1.04, 0.0, TAU, 42, Color(1.0, 0.90, 0.30, 0.46 * fresh_strength), maxf(3.0, _tile_size * 0.052), true)
-				_draw_cell(layer, _inventory_cells[index], center, false, INVENTORY_CELL_SCALE + fresh_strength * 0.10 + burst * 0.07)
+					layer.draw_circle(cell_center, cell_halo_radius, Color(1.0, 0.90, 0.28, 0.18 * fresh_strength + 0.12 * burst))
+					layer.draw_arc(cell_center, cell_halo_radius * 1.04, 0.0, TAU, 42, Color(1.0, 0.90, 0.30, 0.46 * fresh_strength), maxf(3.0, _tile_size * 0.052), true)
+				_draw_cell(layer, _inventory_cells[index], cell_center, false, INVENTORY_CELL_SCALE + fresh_strength * 0.10 + burst * 0.07)
 		layer.draw_rect(shadow_rect, Color(0.0, 0.012, 0.015, 0.36), false, maxf(3.0, _tile_size * 0.040))
 		layer.draw_rect(slot_rect.grow(-_tile_size * 0.030), Color(1.0, 1.0, 1.0, 0.13), false, maxf(1.2, _tile_size * 0.016))
 		layer.draw_rect(slot_rect, Color(0.08, 0.25, 0.21, 0.72), false, maxf(5.0, _tile_size * 0.074))
@@ -1508,10 +1683,15 @@ func _draw_clear_effect_message(layer: Control, centers: Array[Vector2], scale: 
 		center += point
 	center /= float(centers.size())
 	center.y = clampf(center.y - _tile_size * (0.85 + 0.25 * scale), _board_rect.position.y + _tile_size * 0.42, _board_rect.position.y + _board_rect.size.y - _tile_size * 0.35)
-	var text := str("Amazing! ", _clear_effect_ids.size(), "-Cells Cleared!")
+	var text := _clear_message(_clear_effect_ids.size())
 	var font: Font = ThemeDB.fallback_font
-	var font_size := int(roundf(_tile_size * (0.25 + 0.07 * scale)))
-	var width := minf(_board_rect.size.x, _tile_size * (4.6 + scale * 1.2))
+	var font_size := int(roundf(_tile_size * (0.36 + 0.10 * scale)))
+	if text.length() > 28:
+		font_size = int(roundf(float(font_size) * 0.84))
+	if text.length() > 36:
+		font_size = int(roundf(float(font_size) * 0.76))
+	font_size = maxi(font_size, 22)
+	var width := minf(_board_rect.size.x * 0.96, _tile_size * (6.2 + scale * 2.4))
 	var origin := Vector2(center.x - width * 0.5, center.y + float(font_size) * 0.38)
 	var alpha := clampf(0.36 + flash * 0.46 + fade * 0.22, 0.0, 1.0)
 	var pad := Vector2(_tile_size * 0.18, _tile_size * 0.12)
@@ -1556,7 +1736,7 @@ func _hint_cell_center(id: String) -> Vector2:
 		if index >= _inventory_centers.size():
 			continue
 		if str(_inventory_cells[index].get("id", "")) == id:
-			return _inventory_centers[index]
+			return _inventory_visual_center(index)
 	return HINT_MISSING_CENTER
 
 
@@ -1804,7 +1984,7 @@ func _cell_visual_center(cell_id: String) -> Vector2:
 		if index >= _inventory_centers.size():
 			continue
 		if str(_inventory_cells[index].get("id", "")) == cell_id:
-			return _inventory_centers[index]
+			return _inventory_visual_center(index)
 	return HINT_MISSING_CENTER
 
 
@@ -1904,7 +2084,7 @@ func _sync_board_renderer() -> void:
 		return
 	var state := {
 		"boardRect": _board_rect,
-		"boardViewportRect": _board_rect,
+		"boardViewportRect": _board_view_rect,
 		"tileSize": _tile_size,
 		"boardCols": BOARD_COLS,
 		"boardRows": BOARD_ROWS,
@@ -1919,6 +2099,7 @@ func _sync_board_renderer() -> void:
 		"needs": _renderer_needs(),
 		"snapshot": _sim_snapshot,
 		"usingCsharpSim": _using_csharp_sim,
+		"usingSimState": is_instance_valid(_sim_bridge) and not _sim_snapshot.is_empty(),
 		"solved": false,
 		"circuitOverlayEnabled": true,
 		"fastDragMode": false,
@@ -2008,6 +2189,22 @@ func _draw() -> void:
 		_overlay_layer.queue_redraw()
 
 
+func _reset_camera_state() -> void:
+	_camera_initialized = false
+	_camera_center_tiles = Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
+	_camera_tile_size = 64.0
+	_camera_max_tile_size = 64.0
+	_last_board_view_size = Vector2.ZERO
+	_pan_active = false
+	_pan_touch_id = -1
+	_touch_points.clear()
+	_pinch_active = false
+	_pinch_touch_a = -1
+	_pinch_touch_b = -1
+	_pinch_last_distance = 0.0
+	_pinch_last_center = Vector2.ZERO
+
+
 func _gui_input(event: InputEvent) -> void:
 	if _game_over or _is_clear_effect_active():
 		return
@@ -2015,22 +2212,116 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				_begin_drag(mouse_event.position, -1)
+				if not _begin_drag(mouse_event.position, -1):
+					_begin_camera_pan(mouse_event.position, -1)
 			else:
-				_finish_drag(mouse_event.position)
+				if _drag_source != DRAG_SOURCE_NONE:
+					_finish_drag(mouse_event.position)
+				elif _pan_active and _pan_touch_id == -1:
+					_finish_camera_pan()
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_arcade_camera(CAMERA_ZOOM_STEP, mouse_event.position)
+		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_arcade_camera(1.0 / CAMERA_ZOOM_STEP, mouse_event.position)
 	elif event is InputEventMouseMotion:
 		if _drag_source != DRAG_SOURCE_NONE:
 			_update_drag((event as InputEventMouseMotion).position)
+		elif _pan_active and _pan_touch_id == -1:
+			_update_camera_pan((event as InputEventMouseMotion).position)
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
-			_begin_drag(touch.position, touch.index)
-		elif _drag_source != DRAG_SOURCE_NONE and touch.index == _drag_touch_id:
-			_finish_drag(touch.position)
+			_touch_points[touch.index] = touch.position
+			if _touch_points.size() >= 2:
+				_start_pinch_from_touches()
+			elif not _begin_drag(touch.position, touch.index):
+				_begin_camera_pan(touch.position, touch.index)
+		else:
+			if _drag_source != DRAG_SOURCE_NONE and touch.index == _drag_touch_id:
+				_finish_drag(touch.position)
+			elif _pan_active and touch.index == _pan_touch_id:
+				_finish_camera_pan()
+			_touch_points.erase(touch.index)
+			if _pinch_active and (touch.index == _pinch_touch_a or touch.index == _pinch_touch_b):
+				_finish_pinch()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
+		_touch_points[drag.index] = drag.position
 		if _drag_source != DRAG_SOURCE_NONE and drag.index == _drag_touch_id:
 			_update_drag(drag.position)
+		elif _pinch_active and (drag.index == _pinch_touch_a or drag.index == _pinch_touch_b):
+			_update_pinch_from_touches()
+		elif _pan_active and drag.index == _pan_touch_id:
+			_update_camera_pan(drag.position)
+
+
+func _begin_camera_pan(screen_pos: Vector2, touch_id: int = -1) -> void:
+	if not _board_view_rect.has_point(screen_pos):
+		return
+	_pan_active = true
+	_pan_last_pos = screen_pos
+	_pan_touch_id = touch_id
+	accept_event()
+
+
+func _update_camera_pan(screen_pos: Vector2) -> void:
+	if not _pan_active:
+		return
+	var delta := screen_pos - _pan_last_pos
+	_pan_last_pos = screen_pos
+	_pan_arcade_camera_by_screen_delta(delta)
+	accept_event()
+
+
+func _finish_camera_pan() -> void:
+	_pan_active = false
+	_pan_touch_id = -1
+
+
+func _start_pinch_from_touches() -> void:
+	var keys: Array = _touch_points.keys()
+	if keys.size() < 2:
+		return
+	_reset_drag()
+	_pinch_touch_a = int(keys[0])
+	_pinch_touch_b = int(keys[1])
+	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO)
+	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO)
+	var distance := a.distance_to(b)
+	if distance < CAMERA_PINCH_MIN_DISTANCE:
+		return
+	_pinch_active = true
+	_pinch_last_distance = distance
+	_pinch_last_center = (a + b) * 0.5
+	_pan_active = false
+	_pan_touch_id = -1
+	accept_event()
+
+
+func _update_pinch_from_touches() -> void:
+	if not _pinch_active:
+		return
+	if not _touch_points.has(_pinch_touch_a) or not _touch_points.has(_pinch_touch_b):
+		_finish_pinch()
+		return
+	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO)
+	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO)
+	var distance := a.distance_to(b)
+	if distance < CAMERA_PINCH_MIN_DISTANCE or _pinch_last_distance < CAMERA_PINCH_MIN_DISTANCE:
+		return
+	var center := (a + b) * 0.5
+	_pan_arcade_camera_by_screen_delta(center - _pinch_last_center)
+	_zoom_arcade_camera(distance / _pinch_last_distance, center)
+	_pinch_last_distance = distance
+	_pinch_last_center = center
+	accept_event()
+
+
+func _finish_pinch() -> void:
+	_pinch_active = false
+	_pinch_touch_a = -1
+	_pinch_touch_b = -1
+	_pinch_last_distance = 0.0
 
 
 func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
@@ -2054,7 +2345,7 @@ func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
 		_drag_cell_id = str(_inventory_cells[inventory_index].get("id", ""))
 		_drag_inventory_index = inventory_index
 		_drag_touch_id = touch_id
-		_drag_position = _inventory_centers[inventory_index]
+		_drag_position = _inventory_visual_center(inventory_index)
 		_drag_offset = _drag_position - screen_pos
 		_board_renderer_full_sync_needed = true
 		accept_event()
@@ -2121,9 +2412,15 @@ func _board_cell_at(screen_pos: Vector2) -> String:
 
 func _inventory_cell_at(screen_pos: Vector2) -> int:
 	for index in range(_inventory_centers.size()):
-		if index < _inventory_cells.size() and _inventory_centers[index].distance_to(screen_pos) <= _tile_size * 0.64:
+		if index < _inventory_cells.size() and _inventory_visual_center(index).distance_to(screen_pos) <= _tile_size * 0.64:
 			return index
 	return -1
+
+
+func _inventory_visual_center(index: int) -> Vector2:
+	if index < 0 or index >= _inventory_centers.size():
+		return HINT_MISSING_CENTER
+	return _inventory_centers[index] + Vector2(0.0, _tile_size * INVENTORY_CELL_Y_OFFSET)
 
 
 func _screen_to_tile(screen_pos: Vector2) -> Vector2i:

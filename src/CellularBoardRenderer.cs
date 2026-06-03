@@ -18,6 +18,7 @@ public partial class CellularBoardRenderer : Control
     private const string MycoWaitingSignature = "<waiting>";
     private const float InventorySlotScale = 1.28f;
     private const float InventoryCellScale = 1.10f;
+    private const float InventoryCellYOffset = 0.06f;
     private static readonly Color ZeroPipPulseColor = new(1.0f, 0.04f, 0.02f, 1.0f);
 
     private static readonly string[] ResourceLetters =
@@ -334,7 +335,7 @@ public partial class CellularBoardRenderer : Control
 
         var frames = Math.Max(1, _visualProfileFrames);
         GD.Print(
-            "[cellular-visual-profile] ",
+            "[cellular-visual-profile] renderer=csharp ",
             "frames=", frames,
             " cells=", _cells.Count,
             " visible_flows=", _visibleRecentFlows.Count,
@@ -885,6 +886,7 @@ public partial class CellularBoardRenderer : Control
                 var freshStrength = InventoryFreshStrength(cell);
                 var burst = Mathf.Sin((1.0f - freshStrength) * Mathf.Pi);
                 var slotSize = _tileSize * InventorySlotScale;
+                var cellCenter = InventoryVisualCenter(center);
 
                 DrawInventorySlotBacking(center, slotSize);
                 if (cell != _inventoryDragCell)
@@ -892,11 +894,11 @@ public partial class CellularBoardRenderer : Control
                     if (freshStrength > 0.0f)
                     {
                         var cellHaloRadius = _tileSize * (0.50f + burst * 0.08f);
-                        DrawCircle(center, cellHaloRadius, new Color(1.0f, 0.90f, 0.28f, 0.18f * freshStrength + 0.12f * burst));
-                        DrawArc(center, cellHaloRadius * 1.04f, 0.0f, Mathf.Tau, 48, new Color(1.0f, 0.90f, 0.30f, 0.46f * freshStrength), Mathf.Max(3.0f, _tileSize * 0.052f), antialiased: true);
+                        DrawCircle(cellCenter, cellHaloRadius, new Color(1.0f, 0.90f, 0.28f, 0.18f * freshStrength + 0.12f * burst));
+                        DrawArc(cellCenter, cellHaloRadius * 1.04f, 0.0f, Mathf.Tau, 48, new Color(1.0f, 0.90f, 0.30f, 0.46f * freshStrength), Mathf.Max(3.0f, _tileSize * 0.052f), antialiased: true);
                     }
 
-                    DrawCell(cell, center, dragging: false, clipToViewport: false, useSimState: false, visualScale: InventoryCellScale + freshStrength * 0.10f + burst * 0.07f);
+                    DrawCell(cell, cellCenter, dragging: false, clipToViewport: false, useSimState: false, visualScale: InventoryCellScale + freshStrength * 0.10f + burst * 0.07f);
                 }
 
                 DrawInventorySlotFrame(center, slotSize, 0.0f);
@@ -1642,17 +1644,18 @@ public partial class CellularBoardRenderer : Control
     private Vector2 ResourceVisualPoint(string cell, string resource)
     {
         var center = VisualCellCenter(cell);
-        if (!CellNeedsResource(cell, resource))
+        var isMyco = IsMycoCell(cell);
+        var needed = VisualNeedsForCell(cell, isMyco, useSimState: true);
+        if (!ContainsResource(needed, resource))
         {
             return center;
         }
 
-        return NeedPipCenterForResource(cell, resource, center);
+        return NeedPipCenterForResource(cell, resource, center, needed);
     }
 
-    private Vector2 NeedPipCenterForResource(string cell, string resource, Vector2 center)
+    private Vector2 NeedPipCenterForResource(string cell, string resource, Vector2 center, List<string> needed)
     {
-        var needed = _needs.GetValueOrDefault(cell) ?? [];
         var radius = _tileSize * (cell == _dragCell ? 0.43f : 0.39f);
         var pipRadius = NeedPipRadius(radius);
         var usedAngles = new List<float>(needed.Count);
@@ -1900,8 +1903,10 @@ public partial class CellularBoardRenderer : Control
             return overrideCenter;
         }
 
-        return _inventoryCenters.TryGetValue(cell, out var center) ? center : TileCenter(GetCellTile(cell));
+        return _inventoryCenters.TryGetValue(cell, out var center) ? InventoryVisualCenter(center) : TileCenter(GetCellTile(cell));
     }
+
+    private Vector2 InventoryVisualCenter(Vector2 center) => center + new Vector2(0.0f, _tileSize * InventoryCellYOffset);
 
     private float CellVisualScale(string cell) => _overrideCellScales.GetValueOrDefault(cell, 1.0f);
 

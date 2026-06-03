@@ -16,6 +16,7 @@ const STANDARD_MINIMUM_GROSS_SWAP := 1
 const RECENT_EVENT_WINDOW_TICKS := 12
 const POSSIBLE_SWAP_SNAPSHOT_LIMIT := 4096
 const LARGE_RECEIVE_LIMIT := 1073741824
+const ADAPTIVE_MYCO_EXACT_CANDIDATE_LIMIT := 12
 
 var _loaded := false
 var _last_error := ""
@@ -30,6 +31,11 @@ var _cell_index_by_id: Dictionary = {}
 var _occupancy: Dictionary = {}
 var _topology_version := 0
 var _adaptive_topology_version := -1
+var _adjacent_edges_topology_version := -1
+var _adjacent_edges_cache: Array[Dictionary] = []
+var _adjacent_indices_topology_version := -1
+var _adjacent_indices_cache: Array = []
+var _myco_neighbor_signatures: Dictionary = {}
 var _initial_myco_hints: Dictionary = {}
 var _events: Array[Dictionary] = []
 var _event_capacity := 65536
@@ -50,6 +56,13 @@ var _reacted_indices: Array[int] = []
 var _glow_refreshed_indices: Array[int] = []
 var _reserved_out: Dictionary = {}
 var _reserved_in: Dictionary = {}
+var _profile_enabled := false
+var _last_adaptive_profile: Dictionary = {}
+var _adaptive_deep_select_count := 0
+
+
+func _ready() -> void:
+	_profile_enabled = _has_user_arg("--puzzle-visual-profile")
 
 
 func get_last_error() -> String:
@@ -115,7 +128,6 @@ func move_cell(cell_id: String, x: int, y: int) -> bool:
 	cell["y"] = position.y
 	_occupancy[_position_key(position)] = index
 	_topology_version += 1
-	_refresh_adaptive_myco(true)
 	return true
 
 
@@ -123,6 +135,13 @@ func reset_with_current_layout() -> bool:
 	if not _loaded:
 		_last_error = "No loaded Cellular fixture to reset."
 		return false
+	var profile_start_usec := 0
+	var profile_state_usec := 0
+	var profile_cell_reset_usec := 0
+	var profile_adaptive_usec := 0
+	var profile_section_usec := 0
+	if _profile_enabled:
+		profile_start_usec = Time.get_ticks_usec()
 	_current_tick = 0
 	_events.clear()
 	_reaction_score = 0
@@ -133,20 +152,40 @@ func reset_with_current_layout() -> bool:
 	_won = false
 	_sustained_ticks = 0
 	_initial_myco_hints.clear()
-	_adaptive_topology_version = -1
+	if _profile_enabled:
+		profile_state_usec = Time.get_ticks_usec() - profile_start_usec
+		profile_section_usec = Time.get_ticks_usec()
 	for index in range(_cells.size()):
 		var cell: Dictionary = _cells[index]
 		cell["glow"] = 0
-		cell["strain"] = _new_strain()
+		_clear_strain(cell)
 		if _is_myco(cell):
-			var myco_slots: Array = cell["slots"] as Array
-			myco_slots.clear()
+			_reset_adaptive_myco_slot_quantities(cell)
 			continue
 		var slots: Array = cell["slots"] as Array
 		for slot_value in slots:
 			var slot: Dictionary = slot_value
 			slot["quantity"] = 0
-	_refresh_adaptive_myco(true)
+	if _profile_enabled:
+		profile_cell_reset_usec = Time.get_ticks_usec() - profile_section_usec
+		profile_section_usec = Time.get_ticks_usec()
+	_refresh_adaptive_myco(false)
+	if _profile_enabled:
+		profile_adaptive_usec = Time.get_ticks_usec() - profile_section_usec
+		print(str(
+			"[cellular-web-shim-profile] event=reset",
+			" cells=", _cells.size(),
+			" edges=", _get_adjacent_edges().size(),
+			" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec)),
+			" state_ms=", _profile_usecs_to_ms(float(profile_state_usec)),
+			" cell_reset_ms=", _profile_usecs_to_ms(float(profile_cell_reset_usec)),
+			" adaptive_ms=", _profile_usecs_to_ms(float(profile_adaptive_usec)),
+			" adaptive_passes=", int(_last_adaptive_profile.get("passes", 0)),
+			" adaptive_selected=", int(_last_adaptive_profile.get("selected", 0)),
+			" adaptive_changed=", int(_last_adaptive_profile.get("changed", 0)),
+			" adaptive_myco=", int(_last_adaptive_profile.get("myco", 0)),
+			" adaptive_deep=", int(_last_adaptive_profile.get("deep", 0))
+		))
 	_last_error = ""
 	return true
 
@@ -190,7 +229,7 @@ func add_myco_cell(kind: String, id: String, x: int, y: int, needs: Array) -> bo
 	_add_required_cell(id)
 	_topology_version += 1
 	_initial_myco_hints.erase(id)
-	_refresh_adaptive_myco(true)
+	_refresh_adaptive_myco(false)
 	_last_error = ""
 	return true
 
@@ -209,6 +248,7 @@ func get_snapshot() -> Dictionary:
 			"loaded": false,
 			"lastError": _last_error
 		}
+	_refresh_adaptive_myco(false)
 	return {
 		"loaded": true,
 		"tick": _current_tick,
@@ -242,6 +282,11 @@ func _reset_all_state() -> void:
 	_occupancy.clear()
 	_topology_version = 0
 	_adaptive_topology_version = -1
+	_adjacent_edges_topology_version = -1
+	_adjacent_edges_cache.clear()
+	_adjacent_indices_topology_version = -1
+	_adjacent_indices_cache.clear()
+	_myco_neighbor_signatures.clear()
 	_initial_myco_hints.clear()
 	_events.clear()
 	_current_tick = 0
@@ -261,6 +306,8 @@ func _reset_all_state() -> void:
 	_glow_refreshed_indices.clear()
 	_reserved_out.clear()
 	_reserved_in.clear()
+	_last_adaptive_profile.clear()
+	_adaptive_deep_select_count = 0
 
 
 func _default_options() -> Dictionary:
@@ -285,6 +332,29 @@ func _new_strain() -> Dictionary:
 		"sourceBlocked": 0,
 		"overCapacity": 0
 	}
+
+
+func _clear_strain(cell: Dictionary) -> void:
+	var strain_value: Variant = cell.get("strain", {})
+	if not strain_value is Dictionary:
+		cell["strain"] = _new_strain()
+		return
+	var strain: Dictionary = strain_value as Dictionary
+	strain["unmet"] = 0
+	strain["failed"] = 0
+	strain["sourceBlocked"] = 0
+	strain["overCapacity"] = 0
+
+
+func _profile_usecs_to_ms(usec: float) -> String:
+	return "%.3f" % (usec / 1000.0)
+
+
+func _has_user_arg(name: String) -> bool:
+	for arg in OS.get_cmdline_user_args():
+		if str(arg) == name:
+			return true
+	return false
 
 
 func _load_resources(fixture: Dictionary) -> bool:
@@ -543,41 +613,85 @@ func _refresh_adaptive_myco(force: bool) -> void:
 	if not force and _adaptive_topology_version == _topology_version:
 		return
 	var myco_count := 0
+	var myco_indices: Array[int] = []
 	for cell in _cells:
 		if _is_myco(cell):
-			var slots: Array = cell["slots"] as Array
-			slots.clear()
 			myco_count += 1
+			myco_indices.append(int(cell["index"]))
 	if myco_count == 0:
 		_adaptive_topology_version = _topology_version
+		_last_adaptive_profile = {"myco": 0, "passes": 0, "selected": 0, "changed": 0, "deep": 0}
 		return
-	var passes := maxi(1, myco_count)
-	var use_hints := _adaptive_topology_version < 0 and _current_tick == 0
-	for _pass_index in range(passes):
+	var full_refresh := force or _adaptive_topology_version < 0 or _myco_neighbor_signatures.is_empty()
+	var queue: Array[int] = []
+	var queued: Dictionary = {}
+	if full_refresh:
+		_myco_neighbor_signatures.clear()
+		for myco_index in myco_indices:
+			var myco: Dictionary = _cells[myco_index]
+			_cell_slots(myco).clear()
+			queue.append(myco_index)
+			queued[myco_index] = 1
+	else:
+		for myco_index in myco_indices:
+			var cell: Dictionary = _cells[myco_index]
+			var signature := _myco_neighbor_signature(myco_index)
+			var cell_id := str(cell["id"])
+			if str(_myco_neighbor_signatures.get(cell_id, "")) != signature:
+				_cell_slots(cell).clear()
+				queue.append(myco_index)
+				queued[myco_index] = 1
+	if queue.is_empty():
+		_adaptive_topology_version = _topology_version
+		_last_adaptive_profile = {"myco": myco_count, "passes": 0, "selected": 0, "changed": 0, "deep": 0}
+		return
+	var use_hints := full_refresh and _current_tick == 0
+	var profile_passes := 0
+	var profile_selected := 0
+	var profile_changed := 0
+	_adaptive_deep_select_count = 0
+	var cursor := 0
+	while cursor < queue.size():
 		var changed := false
-		for cell in _cells:
-			if not _is_myco(cell):
-				continue
+		var selected_this_pass := 0
+		var pass_end := queue.size()
+		while cursor < pass_end:
+			var myco_index := int(queue[cursor])
+			cursor += 1
+			var cell: Dictionary = _cells[myco_index]
 			var resources: Array[int] = _select_adaptive_myco_resources(cell, use_hints)
-			if _replace_adaptive_myco_slots(cell, resources):
+			selected_this_pass += 1
+			profile_selected += 1
+			var resources_changed := _replace_adaptive_myco_slots(cell, resources)
+			_myco_neighbor_signatures[str(cell["id"])] = _myco_neighbor_signature(myco_index)
+			if resources_changed:
 				changed = true
-		if not changed:
+				profile_changed += 1
+				_enqueue_waiting_myco_neighbors(myco_index, queue, queued)
+		profile_passes += 1
+		if selected_this_pass == 0:
+			break
+		if not changed and cursor >= queue.size():
 			break
 	_adaptive_topology_version = _topology_version
+	_last_adaptive_profile = {
+		"myco": myco_count,
+		"passes": profile_passes,
+		"selected": profile_selected,
+		"changed": profile_changed,
+		"deep": _adaptive_deep_select_count
+	}
 
 
 func _select_adaptive_myco_resources(myco: Dictionary, use_hints: bool) -> Array[int]:
 	var useful_neighbors: Array[Dictionary] = []
-	var edges: Array[Dictionary] = _get_adjacent_edges()
 	var myco_index := int(myco["index"])
-	for edge in edges:
-		var neighbor_index := -1
-		if int(edge["a"]) == myco_index:
-			neighbor_index = int(edge["b"])
-		elif int(edge["b"]) == myco_index:
-			neighbor_index = int(edge["a"])
-		if neighbor_index < 0:
-			continue
+	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
+	if myco_index < 0 or myco_index >= adjacent_indices.size():
+		return []
+	var neighbor_indices: Array = adjacent_indices[myco_index] as Array
+	for neighbor_index_value in neighbor_indices:
+		var neighbor_index := int(neighbor_index_value)
 		var neighbor: Dictionary = _cells[neighbor_index]
 		var neighbor_slots: Array = neighbor["slots"] as Array
 		if not _is_myco(neighbor) or neighbor_slots.size() > 0:
@@ -608,6 +722,7 @@ func _select_adaptive_myco_resources(myco: Dictionary, use_hints: bool) -> Array
 
 
 func _select_adaptive_myco_from_multiple_neighbors(myco: Dictionary, useful_neighbors: Array[Dictionary]) -> Array[int]:
+	_adaptive_deep_select_count += 1
 	var scores: Dictionary = {}
 	var local_offers: Array[int] = []
 	_add_connected_component_candidate_scores(myco, scores)
@@ -652,7 +767,7 @@ func _select_best_adaptive_myco_resource_set(myco: Dictionary, useful_neighbors:
 	var best_resources: Array[int] = []
 	var best_score := -2147483648
 	var best_hash := 2147483647
-	var candidate_limit := mini(12, candidates.size())
+	var candidate_limit := mini(ADAPTIVE_MYCO_EXACT_CANDIDATE_LIMIT, candidates.size())
 	if candidate_limit <= MAX_SLOTS:
 		var resources: Array[int] = []
 		for index in range(candidate_limit):
@@ -730,9 +845,66 @@ func _score_adaptive_myco_resource_set(resources: Array[int], useful_neighbors: 
 	return score + reciprocal_neighbors * reciprocal_neighbors * 180
 
 
+func _cell_slots(cell: Dictionary) -> Array:
+	return cell["slots"] as Array
+
+
+func _reset_adaptive_myco_slot_quantities(myco: Dictionary) -> void:
+	var slots: Array = _cell_slots(myco)
+	for slot_value in slots:
+		if not slot_value is Dictionary:
+			continue
+		var slot: Dictionary = slot_value
+		slot["role"] = ROLE_NEED
+		slot["quantity"] = ADAPTIVE_MYCO_STARTING_QUANTITY
+		slot["capacity"] = ADAPTIVE_MYCO_SLOT_CAPACITY
+
+
+func _myco_neighbor_signature(myco_index: int) -> String:
+	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
+	if myco_index < 0 or myco_index >= adjacent_indices.size():
+		return ""
+	var names: Array[String] = []
+	var neighbors: Array = adjacent_indices[myco_index] as Array
+	for neighbor_index_value in neighbors:
+		var neighbor_index := int(neighbor_index_value)
+		if neighbor_index >= 0 and neighbor_index < _cells.size():
+			var neighbor: Dictionary = _cells[neighbor_index]
+			names.append(str(neighbor["id"]))
+	names.sort()
+	var signature := ""
+	for name in names:
+		if signature.is_empty():
+			signature = name
+		else:
+			signature = str(signature, "|", name)
+	return signature
+
+
+func _enqueue_waiting_myco_neighbors(myco_index: int, queue: Array[int], queued: Dictionary) -> void:
+	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
+	if myco_index < 0 or myco_index >= adjacent_indices.size():
+		return
+	var neighbors: Array = adjacent_indices[myco_index] as Array
+	for neighbor_index_value in neighbors:
+		var neighbor_index := int(neighbor_index_value)
+		if neighbor_index < 0 or neighbor_index >= _cells.size():
+			continue
+		var neighbor: Dictionary = _cells[neighbor_index]
+		if not _is_myco(neighbor):
+			continue
+		if not _cell_slots(neighbor).is_empty():
+			continue
+		var enqueue_count := int(queued.get(neighbor_index, 0))
+		if enqueue_count >= _cells.size():
+			continue
+		queue.append(neighbor_index)
+		queued[neighbor_index] = enqueue_count + 1
+
+
 func _add_connected_component_candidate_scores(myco: Dictionary, scores: Dictionary) -> void:
 	var max_depth := 8
-	var edges: Array[Dictionary] = _get_adjacent_edges()
+	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
 	var queue: Array[Dictionary] = [{"cell": int(myco["index"]), "depth": 0}]
 	var visited: Dictionary = {int(myco["index"]): true}
 	var cursor := 0
@@ -745,12 +917,11 @@ func _add_connected_component_candidate_scores(myco: Dictionary, scores: Diction
 			_add_connected_cell_scores(_cells[cell_index], depth, scores)
 		if depth >= max_depth:
 			continue
-		for edge in edges:
-			var next := -1
-			if int(edge["a"]) == cell_index:
-				next = int(edge["b"])
-			elif int(edge["b"]) == cell_index:
-				next = int(edge["a"])
+		if cell_index < 0 or cell_index >= adjacent_indices.size():
+			continue
+		var neighbors: Array = adjacent_indices[cell_index] as Array
+		for next_value in neighbors:
+			var next := int(next_value)
 			if next >= 0 and not visited.has(next):
 				visited[next] = true
 				queue.append({"cell": next, "depth": depth + 1})
@@ -1441,6 +1612,8 @@ func _sort_diagnostic_groups(groups: Array) -> Array:
 
 
 func _get_adjacent_edges() -> Array[Dictionary]:
+	if _adjacent_edges_topology_version == _topology_version:
+		return _adjacent_edges_cache
 	var edges: Array[Dictionary] = []
 	var offsets: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]
 	for cell in _cells:
@@ -1462,7 +1635,27 @@ func _get_adjacent_edges() -> Array[Dictionary]:
 				second_index = cell_index
 			edges.append({"a": first_index, "b": second_index})
 	edges.sort_custom(Callable(self, "_compare_edges"))
-	return edges
+	_adjacent_edges_cache = edges
+	_adjacent_edges_topology_version = _topology_version
+	return _adjacent_edges_cache
+
+
+func _get_adjacent_indices_by_cell() -> Array:
+	if _adjacent_indices_topology_version == _topology_version:
+		return _adjacent_indices_cache
+	var adjacent: Array = []
+	for _cell in _cells:
+		adjacent.append([])
+	var edges: Array[Dictionary] = _get_adjacent_edges()
+	for edge in edges:
+		var a := int(edge["a"])
+		var b := int(edge["b"])
+		if a >= 0 and a < adjacent.size() and b >= 0 and b < adjacent.size():
+			(adjacent[a] as Array).append(b)
+			(adjacent[b] as Array).append(a)
+	_adjacent_indices_cache = adjacent
+	_adjacent_indices_topology_version = _topology_version
+	return _adjacent_indices_cache
 
 
 func _can_move_cell(cell_id: String, position: Vector2i) -> bool:

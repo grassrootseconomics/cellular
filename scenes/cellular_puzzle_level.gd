@@ -166,6 +166,15 @@ var _visual_profile_enabled := false
 var _visual_profile_print_every := 120
 var _visual_profile_duration_seconds := 0.0
 var _visual_profile_elapsed := 0.0
+var _visual_profile_drag_updates := 0
+var _visual_profile_drag_update_usec := 0
+var _visual_profile_drag_update_max_usec := 0
+var _visual_profile_scripted_actions := false
+var _visual_profile_scripted_step := 0
+var _visual_profile_scripted_step_elapsed := 0.0
+var _visual_profile_scripted_drag_cell := ""
+var _visual_profile_scripted_drag_start := Vector2.ZERO
+var _visual_profile_scripted_drag_end := Vector2.ZERO
 var _latest_report := ""
 var _latest_report_dirty := false
 var _level_high_velocity := 0
@@ -190,6 +199,196 @@ func _exit_tree() -> void:
 	_save_puzzle_level_state()
 
 
+func _profile_renderer_name() -> String:
+	if not is_instance_valid(_board_renderer):
+		return "fallback"
+	var script_value: Variant = _board_renderer.get_script()
+	if script_value is Script:
+		var script_path := (script_value as Script).resource_path
+		if script_path.ends_with("CellularBoardRendererGd.gd"):
+			return "gd"
+		if script_path.ends_with("CellularBoardRenderer.cs"):
+			return "csharp"
+	return "unknown"
+
+
+func _profile_usecs_to_ms(usec: float) -> String:
+	return "%.3f" % (usec / 1000.0)
+
+
+func _profile_tile_text(tile: Vector2i) -> String:
+	return "%d,%d" % [tile.x, tile.y]
+
+
+func _reset_drag_update_profile() -> void:
+	_visual_profile_drag_updates = 0
+	_visual_profile_drag_update_usec = 0
+	_visual_profile_drag_update_max_usec = 0
+
+
+func _process_visual_profile_scripted_actions(delta: float) -> void:
+	if not _visual_profile_scripted_actions:
+		return
+	if _visual_profile_scripted_step >= 5:
+		return
+	_visual_profile_scripted_step_elapsed += maxf(delta, 0.0)
+	if _visual_profile_scripted_step == 0:
+		if _visual_profile_scripted_step_elapsed < 0.45:
+			return
+		var normal_plan := _profile_drag_plan(false, "")
+		if normal_plan.is_empty():
+			print("[cellular-puzzle-profile] event=scripted_action kind=normal_drag skipped=true reason=no_valid_normal_cell")
+			_visual_profile_scripted_step = 2
+			_visual_profile_scripted_step_elapsed = 0.0
+			return
+		if _start_visual_profile_scripted_drag(normal_plan, "normal_drag"):
+			_visual_profile_scripted_step = 1
+		else:
+			_visual_profile_scripted_step = 2
+		_visual_profile_scripted_step_elapsed = 0.0
+	elif _visual_profile_scripted_step == 1:
+		if _advance_visual_profile_scripted_drag(delta, "normal_drag"):
+			_visual_profile_scripted_step = 2
+			_visual_profile_scripted_step_elapsed = 0.0
+	elif _visual_profile_scripted_step == 2:
+		if _visual_profile_scripted_step_elapsed < 0.45:
+			return
+		var before_cells := {}
+		for cell in _cells:
+			before_cells[cell] = true
+		_spawn_myco(CELL_KIND_RED_MYCO)
+		var spawned_myco := _profile_new_myco_after_spawn(before_cells)
+		if spawned_myco.is_empty():
+			spawned_myco = _profile_first_myco_cell()
+		if spawned_myco.is_empty():
+			print("[cellular-puzzle-profile] event=scripted_action kind=myco_spawn skipped=true reason=no_myco_available")
+			_visual_profile_scripted_step = 5
+			_visual_profile_scripted_step_elapsed = 0.0
+			return
+		_visual_profile_scripted_drag_cell = spawned_myco
+		_visual_profile_scripted_step = 3
+		_visual_profile_scripted_step_elapsed = 0.0
+	elif _visual_profile_scripted_step == 3:
+		if _visual_profile_scripted_step_elapsed < 0.35:
+			return
+		var myco_plan := _profile_drag_plan(true, _visual_profile_scripted_drag_cell)
+		if myco_plan.is_empty():
+			print(str("[cellular-puzzle-profile] event=scripted_action kind=myco_drag skipped=true cell=", _visual_profile_scripted_drag_cell, " reason=no_valid_target"))
+			_visual_profile_scripted_step = 5
+			_visual_profile_scripted_step_elapsed = 0.0
+			return
+		if _start_visual_profile_scripted_drag(myco_plan, "myco_drag"):
+			_visual_profile_scripted_step = 4
+		else:
+			_visual_profile_scripted_step = 5
+		_visual_profile_scripted_step_elapsed = 0.0
+	elif _visual_profile_scripted_step == 4:
+		if _advance_visual_profile_scripted_drag(delta, "myco_drag"):
+			_visual_profile_scripted_step = 5
+			_visual_profile_scripted_step_elapsed = 0.0
+			print("[cellular-puzzle-profile] event=scripted_action complete=true")
+
+
+func _start_visual_profile_scripted_drag(plan: Dictionary, kind: String) -> bool:
+	_visual_profile_scripted_drag_cell = str(plan.get("cell", ""))
+	var from_tile: Vector2i = plan.get("from", Vector2i.ZERO) as Vector2i
+	var to_tile: Vector2i = plan.get("to", from_tile) as Vector2i
+	_visual_profile_scripted_drag_start = _tile_center(from_tile)
+	_visual_profile_scripted_drag_end = _tile_center(to_tile)
+	print(str(
+		"[cellular-puzzle-profile] event=scripted_action",
+		" kind=", kind,
+		" cell=", _visual_profile_scripted_drag_cell,
+		" from=", _profile_tile_text(from_tile),
+		" to=", _profile_tile_text(to_tile)
+	))
+	var started := _begin_drag(_visual_profile_scripted_drag_start)
+	if not started:
+		print(str(
+			"[cellular-puzzle-profile] event=scripted_action",
+			" kind=", kind,
+			" cell=", _visual_profile_scripted_drag_cell,
+			" skipped=true reason=begin_drag_rejected"
+		))
+	return started
+
+
+func _advance_visual_profile_scripted_drag(_delta: float, _kind: String) -> bool:
+	var duration := 0.85
+	var t := clampf(_visual_profile_scripted_step_elapsed / duration, 0.0, 1.0)
+	var ease_t := t * t * (3.0 - 2.0 * t)
+	var position := _visual_profile_scripted_drag_start.lerp(_visual_profile_scripted_drag_end, ease_t)
+	if t < 1.0:
+		_update_drag(position)
+		return false
+	_finish_drag(_visual_profile_scripted_drag_end)
+	return true
+
+
+func _profile_drag_plan(require_myco: bool, preferred_cell: String) -> Dictionary:
+	if not preferred_cell.is_empty():
+		var preferred_plan := _profile_drag_plan_for_cell(preferred_cell, require_myco)
+		if not preferred_plan.is_empty():
+			return preferred_plan
+	for cell in _cells:
+		var plan := _profile_drag_plan_for_cell(cell, require_myco)
+		if not plan.is_empty():
+			return plan
+	return {}
+
+
+func _profile_drag_plan_for_cell(cell: String, require_myco: bool) -> Dictionary:
+	if cell.is_empty() or not _positions.has(cell):
+		return {}
+	if _is_myco_cell(cell) != require_myco:
+		return {}
+	var from_tile := _get_cell_tile(cell)
+	if not _profile_tile_is_visible(from_tile):
+		return {}
+	var to_tile := _profile_first_empty_tile(from_tile)
+	if to_tile == Vector2i(-1, -1):
+		return {}
+	return {"cell": cell, "from": from_tile, "to": to_tile}
+
+
+func _profile_first_empty_tile(excluded_tile: Vector2i) -> Vector2i:
+	var center_tile := Vector2i(int(_board_cols / 2), int(_board_rows / 2))
+	var best_tile := Vector2i(-1, -1)
+	var best_score := 1000000
+	for y in range(_board_rows):
+		for x in range(_board_cols):
+			var tile := Vector2i(x, y)
+			if tile == excluded_tile or not _is_tile_empty(tile):
+				continue
+			if not _profile_tile_is_visible(tile):
+				continue
+			var score := tile.distance_squared_to(center_tile)
+			if score < best_score:
+				best_score = score
+				best_tile = tile
+	return best_tile
+
+
+func _profile_tile_is_visible(tile: Vector2i) -> bool:
+	return _board_view_rect.grow(-minf(_tile_size * 0.12, 8.0)).has_point(_tile_center(tile))
+
+
+func _profile_new_myco_after_spawn(before_cells: Dictionary) -> String:
+	for cell in _cells:
+		if before_cells.has(cell):
+			continue
+		if _is_myco_cell(cell):
+			return cell
+	return ""
+
+
+func _profile_first_myco_cell() -> String:
+	for cell in _cells:
+		if _is_myco_cell(cell):
+			return cell
+	return ""
+
+
 func _process(delta: float) -> void:
 	if _visual_profile_enabled:
 		_visual_profile_elapsed += maxf(delta, 0.0)
@@ -198,6 +397,7 @@ func _process(delta: float) -> void:
 			print(str("[cellular-puzzle-profile] complete level=", _level_number, " fixture=", _fixture_override_path, " elapsed=", _visual_profile_elapsed))
 			get_tree().quit()
 			return
+	_process_visual_profile_scripted_actions(delta)
 	if not _using_csharp_sim or _drag_cell != "":
 		return
 	_sim_tick_accum += maxf(delta, 0.0)
@@ -256,6 +456,8 @@ func _parse_puzzle_debug_args() -> void:
 			_visual_profile_print_every = maxi(1, int(arg.trim_prefix("--puzzle-profile-print-every=")))
 		elif arg.begins_with("--puzzle-profile-duration="):
 			_visual_profile_duration_seconds = maxf(0.0, float(arg.trim_prefix("--puzzle-profile-duration=")))
+		elif arg == "--puzzle-profile-scripted-actions":
+			_visual_profile_scripted_actions = true
 
 
 func _normalize_fixture_override_path(path: String) -> String:
@@ -1463,11 +1665,27 @@ func _refresh_sim_snapshot() -> void:
 
 
 func _spawn_myco(kind: String) -> void:
+	var profile_start_usec := 0
+	var profile_add_usec := 0
+	var profile_snapshot_usec := 0
+	var profile_save_usec := 0
+	var profile_section_usec := 0
+	if _visual_profile_enabled:
+		profile_start_usec = Time.get_ticks_usec()
 	if not _using_csharp_sim or not is_instance_valid(_sim_bridge) or not _sim_bridge.has_method("add_myco_cell"):
 		_sim_status_message = "Myco requires the C# sim bridge"
 		_hint_text = ""
 		_update_level_text()
 		queue_redraw()
+		if _visual_profile_enabled:
+			print(str(
+				"[cellular-puzzle-profile] event=myco_spawn",
+				" renderer=", _profile_renderer_name(),
+				" kind=", kind,
+				" added=false",
+				" reason=no_bridge",
+				" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec))
+			))
 		return
 	var tile := _random_empty_tile()
 	if tile == Vector2i(-1, -1):
@@ -1475,25 +1693,71 @@ func _spawn_myco(kind: String) -> void:
 		_hint_text = ""
 		_update_level_text()
 		queue_redraw()
+		if _visual_profile_enabled:
+			print(str(
+				"[cellular-puzzle-profile] event=myco_spawn",
+				" renderer=", _profile_renderer_name(),
+				" kind=", kind,
+				" added=false",
+				" reason=no_empty_tile",
+				" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec))
+			))
 		return
 	var id := _next_myco_id(kind)
 	var needs_arg := Array()
+	if _visual_profile_enabled:
+		profile_section_usec = Time.get_ticks_usec()
 	var added_value: Variant = _sim_bridge.call("add_myco_cell", kind, id, tile.x, tile.y, needs_arg)
+	if _visual_profile_enabled:
+		profile_add_usec += Time.get_ticks_usec() - profile_section_usec
 	if not bool(added_value):
 		var error_value: Variant = _sim_bridge.call("get_last_error")
 		_sim_status_message = str(error_value)
 		_hint_text = ""
 		_update_level_text()
 		queue_redraw()
+		if _visual_profile_enabled:
+			print(str(
+				"[cellular-puzzle-profile] event=myco_spawn",
+				" renderer=", _profile_renderer_name(),
+				" kind=", kind,
+				" id=", id,
+				" tile=", _profile_tile_text(tile),
+				" added=false",
+				" reason=bridge_rejected",
+				" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec)),
+				" add_ms=", _profile_usecs_to_ms(float(profile_add_usec))
+			))
 		return
 	_clear_hint()
 	_sim_tick_accum = 0.0
+	if _visual_profile_enabled:
+		profile_section_usec = Time.get_ticks_usec()
 	_refresh_sim_snapshot()
+	if _visual_profile_enabled:
+		profile_snapshot_usec += Time.get_ticks_usec() - profile_section_usec
 	_sim_status_message = str("Added ", _myco_display_name(kind))
 	_board_renderer_full_sync_needed = true
+	if _visual_profile_enabled:
+		profile_section_usec = Time.get_ticks_usec()
 	_save_puzzle_level_state()
+	if _visual_profile_enabled:
+		profile_save_usec += Time.get_ticks_usec() - profile_section_usec
 	_update_level_text()
 	queue_redraw()
+	if _visual_profile_enabled:
+		print(str(
+			"[cellular-puzzle-profile] event=myco_spawn",
+			" renderer=", _profile_renderer_name(),
+			" kind=", kind,
+			" id=", id,
+			" tile=", _profile_tile_text(tile),
+			" added=true",
+			" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec)),
+			" add_ms=", _profile_usecs_to_ms(float(profile_add_usec)),
+			" snapshot_ms=", _profile_usecs_to_ms(float(profile_snapshot_usec)),
+			" save_ms=", _profile_usecs_to_ms(float(profile_save_usec))
+		))
 
 
 func _collect_myco_resource_names() -> Array[String]:
@@ -1912,6 +2176,7 @@ func _sync_board_renderer() -> void:
 		"needs": _needs,
 		"snapshot": _sim_snapshot,
 		"usingCsharpSim": _using_csharp_sim,
+		"usingSimState": is_instance_valid(_sim_bridge) and not _sim_snapshot.is_empty(),
 		"solved": _solved,
 		"circuitOverlayEnabled": _circuit_overlay_enabled,
 		"fastDragMode": false,
@@ -1955,10 +2220,7 @@ func _layout_board(view_size: Vector2) -> void:
 	if _board_view_rect.size.x <= 1.0 or _board_view_rect.size.y <= 1.0:
 		_set_board_view_rect(Vector2(18.0, 130.0), Vector2(maxf(1.0, view_size.x - 36.0), maxf(1.0, view_size.y - 208.0)))
 	_fit_tile_size = maxf(4.0, minf(_board_view_rect.size.x / float(_board_cols), _board_view_rect.size.y / float(_board_rows)))
-	var tiny_view: bool = minf(_board_view_rect.size.x, _board_view_rect.size.y) < 520.0
-	var readable_tile_size: float = CAMERA_TINY_READABLE_TILE_SIZE if tiny_view else CAMERA_READABLE_TILE_SIZE
-	var initial_tile_size: float = _fit_tile_size if _fit_tile_size >= readable_tile_size else readable_tile_size
-	initial_tile_size = clampf(initial_tile_size, _fit_tile_size, _camera_max_tile_size())
+	var initial_tile_size: float = _camera_max_tile_size()
 	var board_size: Vector2i = Vector2i(_board_cols, _board_rows)
 	var viewport_changed: bool = _last_board_view_size != _board_view_rect.size
 	if not _camera_initialized or _last_camera_board_size != board_size:
@@ -3040,6 +3302,9 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
+	var profile_start_usec := 0
+	if _visual_profile_enabled:
+		profile_start_usec = Time.get_ticks_usec()
 	if not _board_view_rect.has_point(screen_pos):
 		return false
 	var picked := _cell_at(screen_pos)
@@ -3051,34 +3316,77 @@ func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
 	_original_drag_tile = _get_cell_tile(picked)
 	_drag_position = _tile_center(_original_drag_tile)
 	_drag_offset = _drag_position - screen_pos
+	if _visual_profile_enabled:
+		_reset_drag_update_profile()
+		print(str(
+			"[cellular-puzzle-profile] event=drag_begin",
+			" renderer=", _profile_renderer_name(),
+			" cell=", picked,
+			" kind=", str(_cell_kind_by_id.get(picked, "")),
+			" tile=", _profile_tile_text(_original_drag_tile),
+			" elapsed_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec))
+		))
 	accept_event()
 	queue_redraw()
 	return true
 
 
 func _update_drag(screen_pos: Vector2) -> void:
+	var profile_start_usec := 0
+	if _visual_profile_enabled:
+		profile_start_usec = Time.get_ticks_usec()
 	_drag_position = screen_pos + _drag_offset
 	accept_event()
 	queue_redraw()
+	if _visual_profile_enabled:
+		var elapsed_usec := Time.get_ticks_usec() - profile_start_usec
+		_visual_profile_drag_updates += 1
+		_visual_profile_drag_update_usec += elapsed_usec
+		_visual_profile_drag_update_max_usec = maxi(_visual_profile_drag_update_max_usec, elapsed_usec)
 
 
 func _finish_drag(screen_pos: Vector2) -> void:
 	if _drag_cell == "":
 		return
+	var profile_start_usec := 0
+	var profile_move_usec := 0
+	var profile_reset_usec := 0
+	var profile_snapshot_usec := 0
+	var profile_save_usec := 0
+	var profile_check_usec := 0
+	var profile_section_usec := 0
+	var profile_cell := _drag_cell
+	var profile_kind := str(_cell_kind_by_id.get(profile_cell, ""))
+	var profile_origin := _original_drag_tile
+	if _visual_profile_enabled:
+		profile_start_usec = Time.get_ticks_usec()
 	_drag_position = screen_pos + _drag_offset
 	var tile := _screen_to_tile(_drag_position)
 	var moved := false
-	if _is_tile_inside(tile) and (_is_tile_empty(tile) or tile == _original_drag_tile):
+	var valid_drop := _is_tile_inside(tile) and (_is_tile_empty(tile) or tile == _original_drag_tile)
+	if valid_drop:
 		if _using_csharp_sim and is_instance_valid(_sim_bridge):
+			if _visual_profile_enabled:
+				profile_section_usec = Time.get_ticks_usec()
 			var moved_value: Variant = _sim_bridge.call("move_cell", _drag_cell, tile.x, tile.y)
+			if _visual_profile_enabled:
+				profile_move_usec += Time.get_ticks_usec() - profile_section_usec
 			if bool(moved_value):
+				if _visual_profile_enabled:
+					profile_section_usec = Time.get_ticks_usec()
 				var reset_value: Variant = _sim_bridge.call("reset_with_current_layout")
+				if _visual_profile_enabled:
+					profile_reset_usec += Time.get_ticks_usec() - profile_section_usec
 				if not bool(reset_value):
 					var error_value: Variant = _sim_bridge.call("get_last_error")
 					_sim_status_message = str("Move reset failed: ", error_value)
 					push_warning("Cellular C# sim bridge failed to reset moved layout: %s" % str(error_value))
 				_sim_tick_accum = 0.0
+				if _visual_profile_enabled:
+					profile_section_usec = Time.get_ticks_usec()
 				_refresh_sim_snapshot()
+				if _visual_profile_enabled:
+					profile_snapshot_usec += Time.get_ticks_usec() - profile_section_usec
 				_board_renderer_full_sync_needed = true
 				moved = true
 			else:
@@ -3096,8 +3404,39 @@ func _finish_drag(screen_pos: Vector2) -> void:
 	_drag_touch_id = -1
 	if moved:
 		_sim_status_message = ""
+		if _visual_profile_enabled:
+			profile_section_usec = Time.get_ticks_usec()
 		_save_puzzle_level_state()
+		if _visual_profile_enabled:
+			profile_save_usec += Time.get_ticks_usec() - profile_section_usec
+	if _visual_profile_enabled:
+		profile_section_usec = Time.get_ticks_usec()
 	_check_solution()
+	if _visual_profile_enabled:
+		profile_check_usec += Time.get_ticks_usec() - profile_section_usec
+		var drag_avg_update_usec := 0.0
+		if _visual_profile_drag_updates > 0:
+			drag_avg_update_usec = float(_visual_profile_drag_update_usec) / float(_visual_profile_drag_updates)
+		print(str(
+			"[cellular-puzzle-profile] event=drag_finish",
+			" renderer=", _profile_renderer_name(),
+			" cell=", profile_cell,
+			" kind=", profile_kind,
+			" from=", _profile_tile_text(profile_origin),
+			" to=", _profile_tile_text(tile),
+			" valid_drop=", valid_drop,
+			" moved=", moved,
+			" updates=", _visual_profile_drag_updates,
+			" update_avg_ms=", _profile_usecs_to_ms(drag_avg_update_usec),
+			" update_max_ms=", _profile_usecs_to_ms(float(_visual_profile_drag_update_max_usec)),
+			" total_ms=", _profile_usecs_to_ms(float(Time.get_ticks_usec() - profile_start_usec)),
+			" move_ms=", _profile_usecs_to_ms(float(profile_move_usec)),
+			" reset_ms=", _profile_usecs_to_ms(float(profile_reset_usec)),
+			" snapshot_ms=", _profile_usecs_to_ms(float(profile_snapshot_usec)),
+			" save_ms=", _profile_usecs_to_ms(float(profile_save_usec)),
+			" check_ms=", _profile_usecs_to_ms(float(profile_check_usec))
+		))
+		_reset_drag_update_profile()
 	accept_event()
 	queue_redraw()
 

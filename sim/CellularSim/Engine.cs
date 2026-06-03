@@ -68,6 +68,7 @@ public sealed class CellularEngine
     private int[,] _reservedOut = new int[0, 0];
     private int[,] _reservedIn = new int[0, 0];
     private long _adaptiveMycoTopologyVersion = long.MinValue;
+    private readonly Dictionary<string, string> _adaptiveMycoNeighborSignatures = new(StringComparer.Ordinal);
 
     public CellularEngine(GridWorld world, EngineOptions? options = null)
     {
@@ -117,6 +118,52 @@ public sealed class CellularEngine
     public long CurrentTick { get; private set; }
     public IReadOnlyList<SimEvent> Events => _events.Snapshot();
 
+    public void ResetStateWithCurrentLayout()
+    {
+        CurrentTick = 0;
+        _events.Clear();
+        _swapProposals.Clear();
+        _candidateSwapProposals.Clear();
+        _reactedCells.Clear();
+        _glowRefreshedCells.Clear();
+        _reachSeen.Clear();
+        _reachStack.Clear();
+        _winGraph.Clear();
+        Array.Clear(_flowResourceSeen);
+        EnsureReservationCapacity();
+        ClearReservations();
+
+        Score.ReactionScore = 0;
+        Score.FlowDiversityScore = 0;
+        Score.SettlementScore = 0;
+        Score.ResilienceScore = 0;
+        Score.RepairScore = 0;
+        Score.AutonomyScore = 0;
+        Score.StrainPenalty = 0;
+        Score.HoardingPenalty = 0;
+        Score.DeadLoopPenalty = 0;
+
+        Circuit.IsAliveThisTick = false;
+        Circuit.SustainedTicks = 0;
+        Circuit.IsWon = false;
+
+        foreach (var cell in World.Cells)
+        {
+            cell.GlowTicksRemaining = 0;
+            ResetStrain(cell.Strain);
+            if (cell.IsMyco)
+            {
+                ResetAdaptiveMycoSlotQuantities(cell);
+            }
+            else
+            {
+                ResetPoolQuantities(cell.Pool);
+            }
+        }
+
+        RefreshAdaptiveMyco();
+    }
+
     public void RefreshAdaptiveMyco(bool force = false)
     {
         if (!force && _adaptiveMycoTopologyVersion == World.TopologyVersion)
@@ -124,12 +171,33 @@ public sealed class CellularEngine
             return;
         }
 
-        var useInitialFixtureHints = _adaptiveMycoTopologyVersion == long.MinValue && CurrentTick == 0;
-        Dictionary<int, List<ResourceId>>? initialFixtureHints = null;
-        var mycoCount = 0;
+        var mycoCells = new List<CellState>();
         foreach (var cell in World.Cells)
         {
             if (cell.IsMyco)
+            {
+                mycoCells.Add(cell);
+            }
+        }
+
+        if (mycoCells.Count == 0)
+        {
+            _adaptiveMycoTopologyVersion = World.TopologyVersion;
+            return;
+        }
+
+        var fullRefresh = force
+            || _adaptiveMycoTopologyVersion == long.MinValue
+            || _adaptiveMycoNeighborSignatures.Count == 0;
+        var useInitialFixtureHints = fullRefresh && _adaptiveMycoTopologyVersion == long.MinValue && CurrentTick == 0;
+        Dictionary<int, List<ResourceId>>? initialFixtureHints = null;
+        var queue = new Queue<CellState>();
+        var queuedCounts = new Dictionary<int, int>();
+
+        if (fullRefresh)
+        {
+            _adaptiveMycoNeighborSignatures.Clear();
+            foreach (var cell in mycoCells)
             {
                 if (useInitialFixtureHints && cell.Pool.Slots.Count > 0)
                 {
@@ -143,43 +211,135 @@ public sealed class CellularEngine
                 }
 
                 cell.Pool.ClearSlots();
-                mycoCount++;
+                queue.Enqueue(cell);
+                queuedCounts[cell.Index] = 1;
+            }
+        }
+        else
+        {
+            foreach (var cell in mycoCells)
+            {
+                var signature = BuildMycoNeighborSignature(cell);
+                if (!_adaptiveMycoNeighborSignatures.TryGetValue(cell.Id, out var previousSignature)
+                    || !string.Equals(previousSignature, signature, StringComparison.Ordinal))
+                {
+                    cell.Pool.ClearSlots();
+                    queue.Enqueue(cell);
+                    queuedCounts[cell.Index] = 1;
+                }
             }
         }
 
-        if (mycoCount == 0)
+        while (queue.Count > 0)
         {
-            _adaptiveMycoTopologyVersion = World.TopologyVersion;
-            return;
-        }
+            var cell = queue.Dequeue();
 
-        var passes = Math.Max(1, mycoCount);
-        for (var pass = 0; pass < passes; pass++)
-        {
-            var changed = false;
-            foreach (var cell in World.Cells)
+            List<ResourceId>? hintedResources = null;
+            initialFixtureHints?.TryGetValue(cell.Index, out hintedResources);
+            var resources = SelectAdaptiveMycoResources(cell, hintedResources);
+            var changed = ReplaceAdaptiveMycoSlots(cell, resources);
+            _adaptiveMycoNeighborSignatures[cell.Id] = BuildMycoNeighborSignature(cell);
+
+            if (changed)
             {
-                if (!cell.IsMyco)
-                {
-                    continue;
-                }
-
-                List<ResourceId>? hintedResources = null;
-                initialFixtureHints?.TryGetValue(cell.Index, out hintedResources);
-                var resources = SelectAdaptiveMycoResources(cell, hintedResources);
-                if (ReplaceAdaptiveMycoSlots(cell, resources))
-                {
-                    changed = true;
-                }
-            }
-
-            if (!changed)
-            {
-                break;
+                EnqueueWaitingMycoNeighbors(cell, queue, queuedCounts);
             }
         }
 
         _adaptiveMycoTopologyVersion = World.TopologyVersion;
+    }
+
+    private void EnqueueWaitingMycoNeighbors(
+        CellState myco,
+        Queue<CellState> queue,
+        Dictionary<int, int> queuedCounts)
+    {
+        var edges = World.GetAdjacentEdges();
+        foreach (var edge in edges)
+        {
+            CellState? neighbor = null;
+            if (edge.A == myco.Index)
+            {
+                neighbor = World.Cells[edge.B];
+            }
+            else if (edge.B == myco.Index)
+            {
+                neighbor = World.Cells[edge.A];
+            }
+
+            if (neighbor is null || !neighbor.IsMyco || neighbor.Pool.Slots.Count > 0)
+            {
+                continue;
+            }
+
+            queuedCounts.TryGetValue(neighbor.Index, out var queuedCount);
+            if (queuedCount >= World.Cells.Count)
+            {
+                continue;
+            }
+
+            queue.Enqueue(neighbor);
+            queuedCounts[neighbor.Index] = queuedCount + 1;
+        }
+    }
+
+    private string BuildMycoNeighborSignature(CellState myco)
+    {
+        var names = new List<string>(4);
+        var edges = World.GetAdjacentEdges();
+        foreach (var edge in edges)
+        {
+            if (edge.A == myco.Index)
+            {
+                names.Add(World.Cells[edge.B].Id);
+            }
+            else if (edge.B == myco.Index)
+            {
+                names.Add(World.Cells[edge.A].Id);
+            }
+        }
+
+        names.Sort(StringComparer.Ordinal);
+        return string.Join("|", names);
+    }
+
+    private static void ResetStrain(StrainState strain)
+    {
+        strain.UnmetNeedTicks = 0;
+        strain.FailedSwapCount = 0;
+        strain.SourceBlockedTicks = 0;
+        strain.OverCapacityPressureTicks = 0;
+    }
+
+    private static void ResetPoolQuantities(SwapPoolState pool)
+    {
+        foreach (var slot in pool.Slots)
+        {
+            if (slot.Quantity > 0)
+            {
+                slot.Remove(slot.Quantity);
+            }
+        }
+    }
+
+    private static void ResetAdaptiveMycoSlotQuantities(CellState myco)
+    {
+        if (myco.Pool.Slots.Count == 0)
+        {
+            return;
+        }
+
+        var resources = new List<ResourceId>(myco.Pool.Slots.Count);
+        AddSlotResources(resources, myco.Pool.Slots);
+        myco.Pool.ClearSlots();
+        for (var i = 0; i < resources.Count && i < SwapPoolState.MaxSlots; i++)
+        {
+            myco.Pool.AddSlot(
+                resources[i],
+                PoolSlotRole.Need,
+                AdaptiveMycoStartingQuantity,
+                AdaptiveMycoSlotCapacity);
+        }
     }
 
     public void RunTicks(int count)

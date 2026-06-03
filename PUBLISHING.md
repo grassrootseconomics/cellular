@@ -21,6 +21,7 @@ Cellular is close for Android and Play Store testing. Godot 4 C#/.NET projects s
 - [ ] Verify Arcade: inventory generation, myco behavior, clears, game over, high score, reset progress, and mobile layout.
 - [ ] Test Android touch UX on narrow phone and tablet-like layouts.
 - [ ] Test title screen readability, buttons, animated title, icons, and no legacy art/audio showing.
+- [ ] Verify Cellular remains intentionally silent: `project.godot` uses `audio/driver/driver="Dummy"` and no OS mixer/speaker entry appears during desktop play.
 - [ ] Check exported package contents do not include solution spoilers, generated solver output, old scenes, old graphics, or old audio.
 - [ ] Run final checks when ready:
   - `dotnet build Cellular.csproj`
@@ -53,6 +54,7 @@ Cellular is close for Android and Play Store testing. Godot 4 C#/.NET projects s
 
 - [ ] Commit all intended cleanup/export changes; avoid committing local build outputs.
 - [ ] Keep old source scenes/assets in repo for now, but excluded from exports.
+- [ ] Keep the no-audio policy documented for v0.0.x; future sound work should intentionally replace the Dummy driver and add mute/volume UX.
 - [ ] Tag the release commit.
 - [ ] Record Godot version, .NET version, export preset, version code/name, and commit SHA.
 - [ ] Archive final AAB and Web build artifacts outside the repo or under ignored `build/`.

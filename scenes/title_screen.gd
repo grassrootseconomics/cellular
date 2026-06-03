@@ -3,7 +3,6 @@ extends Control
 const TITLE_COMPACT_SHORT_EDGE := 640.0
 const TITLE_TINY_SHORT_EDGE := 500.0
 const GE_LOGO_PATH := "res://graphics/ge-logo-horizontal-text.png"
-const TITLE_CELLULAR_BACKGROUND_PATH := "res://graphics/cellular-lapace.png"
 const TITLE_SCORE_STAR_COUNT := 12
 const TITLE_CELL_RENDERER_CS_PATH := "res://src/CellularBoardRenderer.cs"
 const TITLE_CELL_RENDERER_GD_PATH := "res://src/CellularBoardRendererGd.gd"
@@ -56,30 +55,8 @@ const TITLE_MOBILE_SAFE_BOTTOM_FALLBACK_MIN := 18.0
 const TITLE_MOBILE_SAFE_BOTTOM_FALLBACK_MAX := 40.0
 
 
-class TiledTitleBackground:
-	extends Control
-
-	var title_texture: Texture2D = null
-
-	func set_title_texture(texture: Texture2D) -> void:
-		title_texture = texture
-		queue_redraw()
-
-	func _draw() -> void:
-		if not is_instance_valid(title_texture):
-			return
-		var tile_size := title_texture.get_size()
-		tile_size.x = maxf(tile_size.x, 1.0)
-		tile_size.y = maxf(tile_size.y, 1.0)
-		var cols := int(ceil(size.x / tile_size.x)) + 1
-		var rows := int(ceil(size.y / tile_size.y)) + 1
-		for y in range(rows):
-			for x in range(cols):
-				draw_texture(title_texture, Vector2(tile_size.x * x, tile_size.y * y))
-
-
 var _ge_logo_texture: Texture2D = null
-var _title_soil_background: TiledTitleBackground = null
+var _title_soil_background: ColorRect = null
 var _title_art_background: TextureRect = null
 var _title_pending_layout_frames := 0
 var _last_score_label: Label = null
@@ -1138,69 +1115,15 @@ func _request_title_layout_refresh(frames: int = 3) -> void:
 	call_deferred("_apply_responsive_layout")
 
 
-func _load_title_texture(path: String) -> Texture2D:
-	if path != TITLE_CELLULAR_BACKGROUND_PATH or OS.has_feature("template") or _title_import_cache_exists(path):
-		var texture: Resource = load(path)
-		if texture is Texture2D:
-			return texture as Texture2D
-	if path == TITLE_CELLULAR_BACKGROUND_PATH and not OS.has_feature("template"):
-		var image := _load_png_image_from_file(path)
-		if is_instance_valid(image):
-			return ImageTexture.create_from_image(image)
-	return null
-
-
-func _title_import_cache_exists(path: String) -> bool:
-	var import_config := ConfigFile.new()
-	if import_config.load(str(path, ".import")) != OK:
-		return false
-	var dest_files = import_config.get_value("deps", "dest_files", [])
-	if typeof(dest_files) != TYPE_ARRAY:
-		return false
-	for dest_file in dest_files:
-		if typeof(dest_file) == TYPE_STRING and FileAccess.file_exists(dest_file):
-			return true
-	return false
-
-
-func _load_png_image_from_file(path: String) -> Image:
-	if not FileAccess.file_exists(path):
-		return null
-	var bytes := FileAccess.get_file_as_bytes(path)
-	if bytes.is_empty():
-		return null
-	var image := Image.new()
-	if image.load_png_from_buffer(bytes) != OK:
-		return null
-	return image
-
-
-func _configure_title_background_rect(rect: Control, z_index: int, texture_path: String, tiled: bool = false) -> void:
-	if not is_instance_valid(rect):
-		return
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rect.z_as_relative = false
-	rect.z_index = z_index
-	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED if tiled else CanvasItem.TEXTURE_REPEAT_DISABLED
-	var texture = _load_title_texture(texture_path)
-	if not is_instance_valid(texture):
-		return
-	if rect is TiledTitleBackground:
-		(rect as TiledTitleBackground).set_title_texture(texture)
-	elif rect is TextureRect:
-		var texture_rect := rect as TextureRect
-		texture_rect.texture = texture
-		texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		texture_rect.stretch_mode = TextureRect.STRETCH_TILE if tiled else TextureRect.STRETCH_KEEP_ASPECT_COVERED
-
-
 func _ensure_responsive_background_nodes() -> void:
 	if not is_instance_valid(_title_soil_background):
-		_title_soil_background = TiledTitleBackground.new()
-		_title_soil_background.name = "ResponsiveCellularBackground"
+		_title_soil_background = ColorRect.new()
+		_title_soil_background.name = "TitleBlackBackground"
+		_title_soil_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_title_soil_background.z_as_relative = false
+		_title_soil_background.z_index = -120
+		_title_soil_background.color = Color.BLACK
 		add_child(_title_soil_background)
-		_configure_title_background_rect(_title_soil_background, -120, TITLE_CELLULAR_BACKGROUND_PATH, true)
 	if is_instance_valid(_title_art_background):
 		_title_art_background.queue_free()
 		_title_art_background = null
@@ -1214,8 +1137,7 @@ func _layout_responsive_background(view_size: Vector2) -> void:
 		_title_soil_background.position = Vector2.ZERO
 		_title_soil_background.size = Vector2(ceil(view_size.x), ceil(view_size.y))
 		_title_soil_background.visible = true
-		_title_soil_background.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-		_title_soil_background.queue_redraw()
+		_title_soil_background.color = Color.BLACK
 
 
 func _apply_responsive_layout() -> void:
@@ -1253,7 +1175,12 @@ func _apply_responsive_layout() -> void:
 	var menu_box: VBoxContainer = $CenterContainer/VBoxContainer
 	if is_instance_valid(menu_box):
 		menu_box.custom_minimum_size = Vector2(clampf(safe_rect.size.x - 24.0, minf(180.0, safe_rect.size.x), minf(420.0, safe_rect.size.x)), 0.0)
-		menu_box.add_theme_constant_override("separation", 7 if compact else 9)
+		var menu_separation := 18
+		if compact:
+			menu_separation = 14
+		if tiny:
+			menu_separation = 11
+		menu_box.add_theme_constant_override("separation", menu_separation)
 	var cta_min_width: float = minf(220.0, safe_rect.size.x)
 	var cta_width = clampf(safe_rect.size.x - 48.0, cta_min_width, minf(340.0, maxf(cta_min_width, safe_rect.size.x)))
 	var cta_height = 62.0 if compact else 70.0
@@ -1334,7 +1261,7 @@ func _apply_responsive_layout() -> void:
 	var regen_label: Label = $CenterContainer/VBoxContainer/RegenerationLabel
 	if is_instance_valid(regen_label):
 		var title_width = clampf(view_size.x - 48.0, 340.0, 720.0)
-		var title_height_box = 88.0 if tiny else (98.0 if compact else 112.0)
+		var title_height_box = 96.0 if tiny else (108.0 if compact else 124.0)
 		regen_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		regen_label.custom_minimum_size = Vector2(title_width, title_height_box)
 		regen_label.text = "Cellular"

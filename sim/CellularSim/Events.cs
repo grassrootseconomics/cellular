@@ -91,4 +91,6 @@ internal sealed class EventBuffer
 
     public IEnumerable<TEvent> OfType<TEvent>()
         where TEvent : SimEvent => _events.OfType<TEvent>();
+
+    public void Clear() => _events.Clear();
 }

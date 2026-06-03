@@ -94,7 +94,7 @@ public partial class CellularSimBridge : Node
         var moved = _engine.World.MoveCell(cellId, new GridPosition(x, y));
         if (moved)
         {
-            _engine.RefreshAdaptiveMyco(force: true);
+            _engine.RefreshAdaptiveMyco();
         }
 
         return moved;
@@ -110,9 +110,9 @@ public partial class CellularSimBridge : Node
 
         try
         {
-            _engine.RefreshAdaptiveMyco(force: true);
-            var fixtureJson = BuildCleanFixtureJson(_loaded, _engine);
-            return LoadFixtureJson(fixtureJson);
+            _engine.ResetStateWithCurrentLayout();
+            _lastError = "";
+            return true;
         }
         catch (Exception ex)
         {
@@ -166,10 +166,9 @@ public partial class CellularSimBridge : Node
             var pool = new SwapPoolState();
             _engine.World.AddCell(new CellState(id, position, pool, cellKind));
             AddRequiredCell(_engine.Options, id);
-            _engine.RefreshAdaptiveMyco(force: true);
-
-            var fixtureJson = BuildCleanFixtureJson(_loaded, _engine);
-            return LoadFixtureJson(fixtureJson);
+            _engine.ResetStateWithCurrentLayout();
+            _lastError = "";
+            return true;
         }
         catch (Exception ex)
         {

@@ -134,13 +134,10 @@ public partial class CellularBoardRenderer : Control
 
     public void SetRenderState(GdDictionary state)
     {
-        _boardRect = GetRect2(state, "boardRect", _boardRect);
-        _boardViewportRect = GetRect2(state, "boardViewportRect", _boardRect);
-        if (_boardViewportRect.Size.X <= 1.0f || _boardViewportRect.Size.Y <= 1.0f)
-        {
-            _boardViewportRect = _boardRect;
-        }
-        _tileSize = GetFloat(state, "tileSize", _tileSize);
+        ApplyViewState(
+            GetRect2(state, "boardRect", _boardRect),
+            GetRect2(state, "boardViewportRect", _boardRect),
+            GetFloat(state, "tileSize", _tileSize));
         _boardCols = GetInt(state, "boardCols", _boardCols);
         _boardRows = GetInt(state, "boardRows", _boardRows);
         _boardVisible = GetBool(state, "boardVisible", true);
@@ -191,6 +188,26 @@ public partial class CellularBoardRenderer : Control
         RebuildSnapshotIndexes();
 
         QueueRedraw();
+    }
+
+    public void set_view_state(Rect2 boardRect, Rect2 boardViewportRect, float tileSize) =>
+        SetViewState(boardRect, boardViewportRect, tileSize);
+
+    public void SetViewState(Rect2 boardRect, Rect2 boardViewportRect, float tileSize)
+    {
+        ApplyViewState(boardRect, boardViewportRect, tileSize);
+        QueueRedraw();
+    }
+
+    private void ApplyViewState(Rect2 boardRect, Rect2 boardViewportRect, float tileSize)
+    {
+        _boardRect = boardRect;
+        _boardViewportRect = boardViewportRect;
+        if (_boardViewportRect.Size.X <= 1.0f || _boardViewportRect.Size.Y <= 1.0f)
+        {
+            _boardViewportRect = _boardRect;
+        }
+        _tileSize = tileSize;
     }
 
     public void set_drag_state(string dragCell, Vector2 dragPosition, Vector2I originalDragTile, bool fastDragMode) =>

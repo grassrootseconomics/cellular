@@ -144,6 +144,7 @@ var _sim_tick_accum := 0.0
 var _using_csharp_sim := false
 var _using_board_renderer := false
 var _board_renderer_full_sync_needed := true
+var _board_renderer_view_dirty := false
 var _board_renderer_has_state := false
 var _sim_status_message := ""
 var _hint_pair: Array[String] = []
@@ -2155,11 +2156,19 @@ func _sync_board_renderer() -> void:
 	if not is_instance_valid(_board_renderer) or not _board_renderer.has_method("set_render_state"):
 		_using_board_renderer = false
 		return
+	var view_updated := false
+	if _board_renderer_has_state and not _board_renderer_full_sync_needed and _board_renderer_view_dirty:
+		if _board_renderer.has_method("set_view_state"):
+			_board_renderer.call("set_view_state", _board_rect, _board_view_rect, _tile_size)
+			_board_renderer_view_dirty = false
+			view_updated = true
+		else:
+			_board_renderer_full_sync_needed = true
 	if _drag_cell != "" and _board_renderer_has_state and not _board_renderer_full_sync_needed and _board_renderer.has_method("set_drag_state"):
 		_board_renderer.call("set_drag_state", _drag_cell, _drag_position, _original_drag_tile, false)
 		return
 	if _board_renderer_has_state and not _board_renderer_full_sync_needed:
-		if _board_renderer is CanvasItem:
+		if not view_updated and _board_renderer is CanvasItem:
 			(_board_renderer as CanvasItem).queue_redraw()
 		return
 	var state := {
@@ -2190,6 +2199,7 @@ func _sync_board_renderer() -> void:
 	}
 	_board_renderer.call("set_render_state", state)
 	_board_renderer_full_sync_needed = false
+	_board_renderer_view_dirty = false
 	_board_renderer_has_state = true
 
 
@@ -2304,7 +2314,7 @@ func _set_camera_tile_size(next_tile_size: float, focal_screen_pos: Vector2) -> 
 	_camera_center_tiles = focal_board_point - (focal_screen_pos - _board_view_rect.get_center()) / _camera_tile_size
 	_clamp_camera(false)
 	_update_board_rect_from_camera()
-	_board_renderer_full_sync_needed = true
+	_board_renderer_view_dirty = true
 	queue_redraw()
 
 
@@ -2318,7 +2328,7 @@ func _pan_camera_by_screen_delta(delta: Vector2) -> void:
 	_camera_center_tiles -= delta / _tile_size
 	_clamp_camera()
 	_update_board_rect_from_camera()
-	_board_renderer_full_sync_needed = true
+	_board_renderer_view_dirty = true
 	queue_redraw()
 
 

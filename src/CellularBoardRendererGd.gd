@@ -117,11 +117,11 @@ func _ready() -> void:
 
 
 func set_render_state(state: Dictionary) -> void:
-	_board_rect = _dict_rect2(state, "boardRect", _board_rect)
-	_board_viewport_rect = _dict_rect2(state, "boardViewportRect", _board_rect)
-	if _board_viewport_rect.size.x <= 1.0 or _board_viewport_rect.size.y <= 1.0:
-		_board_viewport_rect = _board_rect
-	_tile_size = float(state.get("tileSize", _tile_size))
+	_apply_view_state(
+		_dict_rect2(state, "boardRect", _board_rect),
+		_dict_rect2(state, "boardViewportRect", _board_rect),
+		float(state.get("tileSize", _tile_size))
+	)
 	_board_cols = int(state.get("boardCols", _board_cols))
 	_board_rows = int(state.get("boardRows", _board_rows))
 	_board_visible = bool(state.get("boardVisible", true))
@@ -162,6 +162,19 @@ func set_render_state(state: Dictionary) -> void:
 	_read_cell_states()
 	_rebuild_snapshot_indexes()
 	queue_redraw()
+
+
+func set_view_state(board_rect: Rect2, board_viewport_rect: Rect2, tile_size: float) -> void:
+	_apply_view_state(board_rect, board_viewport_rect, tile_size)
+	queue_redraw()
+
+
+func _apply_view_state(board_rect: Rect2, board_viewport_rect: Rect2, tile_size: float) -> void:
+	_board_rect = board_rect
+	_board_viewport_rect = board_viewport_rect
+	if _board_viewport_rect.size.x <= 1.0 or _board_viewport_rect.size.y <= 1.0:
+		_board_viewport_rect = _board_rect
+	_tile_size = tile_size
 
 
 func set_drag_state(drag_cell: String, drag_position: Vector2, original_drag_tile: Vector2i, _fast_drag_mode: bool) -> void:

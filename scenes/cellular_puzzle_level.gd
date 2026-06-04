@@ -36,10 +36,21 @@ const RED_MYCO_RING_RADIUS := 0.54
 const RED_MYCO_RING_EDGE_COLOR := Color(0.86, 0.02, 0.04, 0.16)
 const RED_MYCO_RING_MID_COLOR := Color(0.92, 0.04, 0.06, 0.44)
 const RED_MYCO_RING_CORE_COLOR := Color(0.70, 0.00, 0.02, 0.88)
-const CELL_STRESS_GLOW_STRENGTH := 0.20
-const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
-const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
-const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_STRESS_GLOW_STRENGTH := 0.42
+const CELL_HEALTHY_GLOW_STRENGTH := 0.72
+const CELL_STRESS_GLOW_RADIUS_SCALE := 1.14
+const CELL_HEALTHY_GLOW_RADIUS_SCALE := 1.48
+const CELL_STRESS_GLOW_ALPHA_SCALE := 0.44
+const CELL_HEALTHY_GLOW_ALPHA_SCALE := 0.56
+const CELL_HEALTH_COLOR_CURVE := 0.52
+const CELL_HEALTH_RADIUS_CURVE := 0.42
+const CELL_HEALTH_ALPHA_CURVE := 0.46
+const CELL_GLOW_MID_RADIUS_FRACTION := 0.64
+const CELL_GLOW_INNER_RADIUS_FRACTION := 0.34
+const CELL_GLOW_OUTER_ALPHA_FRACTION := 0.34
+const CELL_GLOW_MID_ALPHA_FRACTION := 0.52
+const CELL_GLOW_INNER_ALPHA_FRACTION := 0.70
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.96, 0.04, 1.0)
 const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_PIP_MARK_SIZE_SCALE := 1.10
 const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
@@ -2601,59 +2612,99 @@ func _draw_circuit_component_halo(cells: Array, color: Color, complete: bool, st
 	if strength <= 0.0:
 		return
 	var tile_keys: Dictionary = {}
-	for cell_value in cells:
-		var cell := str(cell_value)
-		tile_keys[_component_tile_key(_get_cell_tile(cell))] = true
+	var cell_by_tile: Dictionary = {}
+	for build_value in cells:
+		var build_cell := str(build_value)
+		var cell_tile := _get_cell_tile(build_cell)
+		var cell_tile_key := _component_tile_key(cell_tile)
+		tile_keys[cell_tile_key] = true
+		cell_by_tile[cell_tile_key] = build_cell
 
 	var pulse: float = 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
-	var fill_alpha := (0.13 + pulse * 0.04) * strength
+	var fill_alpha := (0.12 + pulse * 0.04) * strength
 	var boundary_alpha := (0.56 + pulse * 0.14) * strength
 	var heat_radius := _tile_size * 0.56
 	var connector_width := _tile_size * 0.88
 	var boundary_width := 5.0
 	if complete:
-		fill_alpha = (0.28 + pulse * 0.10) * strength
 		boundary_alpha = (0.82 + pulse * 0.16) * strength
-		heat_radius = _tile_size * 0.64
-		connector_width = _tile_size * 0.96
 		boundary_width = 7.0
 
-	var heat := color
-	heat.a = fill_alpha
-	for cell_value in cells:
-		var cell := str(cell_value)
-		var tile := _get_cell_tile(cell)
-		var center := _tile_center(tile)
-		var right_tile := Vector2i(tile.x + 1, tile.y)
+	for connect_value in cells:
+		var connect_cell := str(connect_value)
+		var connect_tile := _get_cell_tile(connect_cell)
+		var connect_center := _tile_center(connect_tile)
+		var right_tile := Vector2i(connect_tile.x + 1, connect_tile.y)
 		if _component_has_tile(tile_keys, right_tile):
-			draw_line(center, _tile_center(right_tile), heat, connector_width, true)
-		var down_tile := Vector2i(tile.x, tile.y + 1)
+			var right_health := _average_overlay_health(connect_cell, str(cell_by_tile.get(_component_tile_key(right_tile), "")))
+			var right_heat := _overlay_health_color(right_health, color)
+			right_heat.a = fill_alpha * lerpf(0.24, 0.78, _health_alpha_amount(right_health))
+			draw_line(connect_center, _tile_center(right_tile), right_heat, connector_width * lerpf(0.32, 0.86, _health_radius_amount(right_health)), true)
+		var down_tile := Vector2i(connect_tile.x, connect_tile.y + 1)
 		if _component_has_tile(tile_keys, down_tile):
-			draw_line(center, _tile_center(down_tile), heat, connector_width, true)
+			var down_health := _average_overlay_health(connect_cell, str(cell_by_tile.get(_component_tile_key(down_tile), "")))
+			var down_heat := _overlay_health_color(down_health, color)
+			down_heat.a = fill_alpha * lerpf(0.24, 0.78, _health_alpha_amount(down_health))
+			draw_line(connect_center, _tile_center(down_tile), down_heat, connector_width * lerpf(0.32, 0.86, _health_radius_amount(down_health)), true)
 
-	for cell_value in cells:
-		var cell := str(cell_value)
-		var center := _tile_center(_get_cell_tile(cell))
-		var halo := color
-		halo.a = fill_alpha
-		draw_circle(center, heat_radius, halo)
+	for heat_value in cells:
+		var heat_cell := str(heat_value)
+		var heat_center := _tile_center(_get_cell_tile(heat_cell))
+		var heat_health := _overlay_cell_health(heat_cell)
+		var halo := _overlay_health_color(heat_health, color)
+		var pulse_boost := (0.04 + pulse * 0.04) * _health_pulse_amount(heat_health) * strength if complete else 0.0
+		halo.a = fill_alpha * lerpf(0.28, 1.0, _health_alpha_amount(heat_health)) + pulse_boost
+		draw_circle(heat_center, heat_radius * lerpf(0.54, 1.04, _health_radius_amount(heat_health)), halo)
 
-	for cell_value in cells:
-		var cell := str(cell_value)
-		var tile := _get_cell_tile(cell)
-		var tile_origin := _board_rect.position + Vector2(tile) * _tile_size
+	for boundary_value in cells:
+		var boundary_cell := str(boundary_value)
+		var boundary_tile := _get_cell_tile(boundary_cell)
+		var tile_origin := _board_rect.position + Vector2(boundary_tile) * _tile_size
 		var top_left := tile_origin
 		var top_right := tile_origin + Vector2(_tile_size, 0.0)
 		var bottom_left := tile_origin + Vector2(0.0, _tile_size)
 		var bottom_right := tile_origin + Vector2(_tile_size, _tile_size)
-		if not _component_has_tile(tile_keys, Vector2i(tile.x, tile.y - 1)):
+		if not _component_has_tile(tile_keys, Vector2i(boundary_tile.x, boundary_tile.y - 1)):
 			_draw_component_boundary_segment(top_left, top_right, color, boundary_alpha, boundary_width)
-		if not _component_has_tile(tile_keys, Vector2i(tile.x + 1, tile.y)):
+		if not _component_has_tile(tile_keys, Vector2i(boundary_tile.x + 1, boundary_tile.y)):
 			_draw_component_boundary_segment(top_right, bottom_right, color, boundary_alpha, boundary_width)
-		if not _component_has_tile(tile_keys, Vector2i(tile.x, tile.y + 1)):
+		if not _component_has_tile(tile_keys, Vector2i(boundary_tile.x, boundary_tile.y + 1)):
 			_draw_component_boundary_segment(bottom_right, bottom_left, color, boundary_alpha, boundary_width)
-		if not _component_has_tile(tile_keys, Vector2i(tile.x - 1, tile.y)):
+		if not _component_has_tile(tile_keys, Vector2i(boundary_tile.x - 1, boundary_tile.y)):
 			_draw_component_boundary_segment(bottom_left, top_left, color, boundary_alpha, boundary_width)
+
+
+func _overlay_cell_health(cell: String) -> float:
+	if cell.is_empty():
+		return 1.0
+	var health_info: Dictionary = _cell_need_health(cell)
+	if not bool(health_info.get("known", false)):
+		return 1.0
+	return clampf(float(health_info.get("health", 1.0)), 0.0, 1.0)
+
+
+func _average_overlay_health(first_cell: String, second_cell: String) -> float:
+	return (_overlay_cell_health(first_cell) + _overlay_cell_health(second_cell)) * 0.5
+
+
+func _overlay_health_color(need_health: float, _healthy_color: Color) -> Color:
+	return CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, _health_color_amount(need_health))
+
+
+func _health_color_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_COLOR_CURVE)
+
+
+func _health_radius_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_RADIUS_CURVE)
+
+
+func _health_alpha_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_ALPHA_CURVE)
+
+
+func _health_pulse_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), 1.35)
 
 
 func _component_tile_key(tile: Vector2i) -> String:
@@ -2883,17 +2934,19 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 	var glow_alpha: float = 0.46 if _cell_has_all_needs(cell) else 0.18
 	if _using_csharp_sim:
 		glow_alpha = 0.56 if _cell_is_glowing(cell) else 0.16
-	var need_health_info := _cell_need_health(cell)
+	var glow_health := 1.0
+	var glow_alpha_health := 1.0
+	var need_health_info: Dictionary = _cell_need_health(cell)
 	var has_need_health := bool(need_health_info.get("known", false))
 	var need_health := float(need_health_info.get("health", 1.0))
 	if has_need_health:
-		var health := need_health * need_health * (3.0 - 2.0 * need_health)
-		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
-		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cell_is_glowing(cell) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
-		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
-	if live_complete and (not has_need_health or need_health >= 0.95):
-		body_glow_color = CELL_HEALTHY_GLOW_COLOR
-		glow_alpha = 0.72
+		var color_health := _health_color_amount(need_health)
+		var radius_health := _health_radius_amount(need_health)
+		var alpha_health := _health_alpha_amount(need_health)
+		glow_health = radius_health
+		glow_alpha_health = alpha_health
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, color_health)
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, CELL_HEALTHY_GLOW_STRENGTH, alpha_health)
 	var reaction_alpha := _recent_reaction_alpha(cell)
 	if reaction_alpha > 0.0:
 		var reaction_health := need_health if has_need_health else 1.0
@@ -2901,14 +2954,22 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 			body_glow_color = body_glow_color.lerp(CELL_HEALTHY_GLOW_COLOR, reaction_alpha * reaction_health)
 			glow_alpha = maxf(glow_alpha, lerpf(CELL_STRESS_GLOW_STRENGTH, 0.52 + reaction_alpha * 0.28, reaction_health))
 			draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18 * reaction_health))
-	draw_circle(center, radius * (1.16 + (0.04 if live_complete and (not has_need_health or need_health >= 0.95) else 0.0)), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.28))
+	var glow_radius_scale := lerpf(CELL_STRESS_GLOW_RADIUS_SCALE, CELL_HEALTHY_GLOW_RADIUS_SCALE, glow_health)
+	var glow_alpha_scale := lerpf(CELL_STRESS_GLOW_ALPHA_SCALE, CELL_HEALTHY_GLOW_ALPHA_SCALE, glow_alpha_health)
+	var glow_alpha_value := glow_alpha * glow_alpha_scale
+	var glow_thickness := maxf(0.0, glow_radius_scale - 1.0)
+	draw_circle(center, radius * glow_radius_scale, Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_OUTER_ALPHA_FRACTION))
+	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_MID_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_MID_ALPHA_FRACTION))
+	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_INNER_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_INNER_ALPHA_FRACTION))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72))
 	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
 	if kind == CELL_KIND_RED_MYCO:
 		_draw_red_myco_ring(center, radius)
 	if live_complete:
+		var pulse_health := _health_pulse_amount(need_health) if has_need_health else 1.0
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
-		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, 0.28 + solved_pulse * 0.18), 3.0, true)
+		if pulse_health > 0.02:
+			draw_arc(center, radius * (1.07 + pulse_health * 0.03 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, (0.18 + solved_pulse * 0.24) * pulse_health), 3.0, true)
 	if _using_csharp_sim and not is_myco and not produced_resource.is_empty():
 		_draw_fullness_arc(center, radius * 1.07, _display_fullness(cell, produced_resource, _slot_fullness(cell, produced_resource)), color, 6.0)
 	var font := get_theme_default_font()
@@ -3918,14 +3979,16 @@ func _slot_fullness(cell: String, resource: String) -> float:
 
 
 func _cell_need_health(cell: String) -> Dictionary:
-	if not _using_csharp_sim:
-		return {"known": false, "health": 1.0}
 	var state := _get_cell_state(cell)
 	var slots_value: Variant = state.get("slots", [])
 	if not slots_value is Array:
 		return {"known": false, "health": 1.0}
 	var health := 1.0
+	var met_need_count := 0
+	var need_count := 0
 	var found_need := false
+	# Health is the fraction of live Need slots with any resource, so variable
+	# need counts scale without assuming three pips.
 	var slots: Array = slots_value as Array
 	for slot_value in slots:
 		if not slot_value is Dictionary:
@@ -3934,7 +3997,11 @@ func _cell_need_health(cell: String) -> Dictionary:
 		if str(slot.get("role", "")) != "Need":
 			continue
 		found_need = true
-		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+		need_count += 1
+		if int(slot.get("quantity", 0)) > 0 or float(slot.get("fullness", 0.0)) > 0.0:
+			met_need_count += 1
+	if found_need:
+		health = clampf(float(met_need_count) / float(maxi(1, need_count)), 0.0, 1.0)
 	return {"known": found_need, "health": health}
 
 

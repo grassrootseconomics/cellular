@@ -1423,10 +1423,12 @@ func _on_reset_puzzle_progress_pressed() -> void:
 
 func _on_reset_puzzle_progress_confirmed() -> void:
 	_hide_puzzle_reset_confirm_panel()
-	if Global.has_method("reset_cellular_puzzle_progress"):
+	if Global.has_method("reset_all_cellular_progress"):
+		Global.reset_all_cellular_progress()
+	elif Global.has_method("reset_cellular_puzzle_progress"):
 		Global.reset_cellular_puzzle_progress()
-	if Global.has_method("reset_arcade_progress"):
-		Global.reset_arcade_progress()
+		if Global.has_method("reset_arcade_progress"):
+			Global.reset_arcade_progress()
 	_refresh_cellular_title_stats()
 	_request_title_layout_refresh(2)
 

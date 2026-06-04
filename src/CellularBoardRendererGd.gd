@@ -18,12 +18,23 @@ const LOOKUP_KEY_SEPARATOR := "||"
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
 const INVENTORY_CELL_Y_OFFSET := 0.06
-const CELL_STRESS_GLOW_STRENGTH := 0.20
-const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
-const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
+const CELL_STRESS_GLOW_STRENGTH := 0.42
+const CELL_HEALTHY_GLOW_STRENGTH := 0.72
+const CELL_STRESS_GLOW_RADIUS_SCALE := 1.14
+const CELL_HEALTHY_GLOW_RADIUS_SCALE := 1.48
+const CELL_STRESS_GLOW_ALPHA_SCALE := 0.44
+const CELL_HEALTHY_GLOW_ALPHA_SCALE := 0.56
+const CELL_HEALTH_COLOR_CURVE := 0.52
+const CELL_HEALTH_RADIUS_CURVE := 0.42
+const CELL_HEALTH_ALPHA_CURVE := 0.46
+const CELL_GLOW_MID_RADIUS_FRACTION := 0.64
+const CELL_GLOW_INNER_RADIUS_FRACTION := 0.34
+const CELL_GLOW_OUTER_ALPHA_FRACTION := 0.34
+const CELL_GLOW_MID_ALPHA_FRACTION := 0.52
+const CELL_GLOW_INNER_ALPHA_FRACTION := 0.70
 const NEED_PIP_MARK_SIZE_SCALE := 1.10
 const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
-const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.96, 0.04, 1.0)
 const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_STATE_MISSING := "missing"
 const NEED_STATE_AVAILABLE := "available"
@@ -426,18 +437,21 @@ func _draw_simple_strong_groups(diagnostics: Dictionary) -> void:
 		if group_cells.size() < 2:
 			continue
 		var color := _circuit_group_color(group_index)
-		var fill := color
-		fill.a = 0.14 + pulse * 0.06
 		var edge := color.lightened(0.28)
 		edge.a = 0.62 + pulse * 0.18
-		for cell in group_cells:
-			if _positions.has(cell):
-				draw_circle(_tile_center(_get_cell_tile(cell)), _tile_size * 0.58, fill)
-		for cell in group_cells:
-			if not _positions.has(cell):
+		for simple_cell in group_cells:
+			if _positions.has(simple_cell):
+				var simple_health := _overlay_cell_health(simple_cell)
+				var simple_fill := _overlay_health_color(simple_health, color)
+				simple_fill.a = (0.12 + pulse * 0.04) * lerpf(0.28, 1.0, _health_alpha_amount(simple_health))
+				draw_circle(_tile_center(_get_cell_tile(simple_cell)), _tile_size * 0.58 * lerpf(0.54, 1.04, _health_radius_amount(simple_health)), simple_fill)
+		for simple_rect_cell in group_cells:
+			if not _positions.has(simple_rect_cell):
 				continue
-			var rect := _tile_rect(_get_cell_tile(cell)).grow(-2.0)
-			draw_rect(rect, Color(color.r, color.g, color.b, 0.08 + pulse * 0.04), true)
+			var simple_rect_health := _overlay_cell_health(simple_rect_cell)
+			var simple_rect_fill := _overlay_health_color(simple_rect_health, color)
+			var rect := _tile_rect(_get_cell_tile(simple_rect_cell)).grow(-2.0)
+			draw_rect(rect, Color(simple_rect_fill.r, simple_rect_fill.g, simple_rect_fill.b, (0.06 + pulse * 0.03) * lerpf(0.28, 1.0, _health_alpha_amount(simple_rect_health))), true)
 			draw_rect(rect, edge, false, maxf(3.0, _tile_size * 0.045))
 
 
@@ -446,16 +460,19 @@ func _draw_circuit_component_halo(cells: Array[String], color: Color, complete: 
 	if strength <= 0.0:
 		return
 	var tiles := {}
+	var cell_by_tile := {}
 	for cell in cells:
 		if _positions.has(cell):
-			tiles[_tile_key(_get_cell_tile(cell))] = _get_cell_tile(cell)
+			var cell_tile := _get_cell_tile(cell)
+			var cell_tile_key := _tile_key(cell_tile)
+			tiles[cell_tile_key] = cell_tile
+			cell_by_tile[cell_tile_key] = cell
 	var pulse := 0.5 + sin(Time.get_ticks_msec() / (105.0 if complete else 190.0)) * 0.5
-	var fill_alpha := ((0.28 + pulse * 0.10) if complete else (0.13 + pulse * 0.04)) * strength
+	var fill_alpha := (0.12 + pulse * 0.04) * strength
 	var boundary_alpha := ((0.82 + pulse * 0.16) if complete else (0.56 + pulse * 0.14)) * strength
-	var heat_radius := _tile_size * (0.64 if complete else 0.56)
-	var connector_width := _tile_size * (0.96 if complete else 0.88)
+	var heat_radius := _tile_size * 0.56
+	var connector_width := _tile_size * 0.88
 	var boundary_width := 7.0 if complete else 5.0
-	var heat := Color(color.r, color.g, color.b, fill_alpha)
 	for tile_connect_value in tiles.values():
 		if not tile_connect_value is Vector2i:
 			continue
@@ -465,19 +482,30 @@ func _draw_circuit_component_halo(cells: Array[String], color: Color, complete: 
 		if tiles.has(_tile_key(right_connect)):
 			var right_center_connect := _tile_center(right_connect)
 			if _line_intersects_viewport(center_connect, right_center_connect, connector_width):
-				draw_line(center_connect, right_center_connect, heat, connector_width, true)
+				var right_link_health := _average_overlay_health(str(cell_by_tile.get(_tile_key(tile_connect), "")), str(cell_by_tile.get(_tile_key(right_connect), "")))
+				var right_link_heat := _overlay_health_color(right_link_health, color)
+				right_link_heat.a = fill_alpha * lerpf(0.24, 0.78, _health_alpha_amount(right_link_health))
+				draw_line(center_connect, right_center_connect, right_link_heat, connector_width * lerpf(0.32, 0.86, _health_radius_amount(right_link_health)), true)
 		var down_connect := Vector2i(tile_connect.x, tile_connect.y + 1)
 		if tiles.has(_tile_key(down_connect)):
 			var down_center_connect := _tile_center(down_connect)
 			if _line_intersects_viewport(center_connect, down_center_connect, connector_width):
-				draw_line(center_connect, down_center_connect, heat, connector_width, true)
+				var down_link_health := _average_overlay_health(str(cell_by_tile.get(_tile_key(tile_connect), "")), str(cell_by_tile.get(_tile_key(down_connect), "")))
+				var down_link_heat := _overlay_health_color(down_link_health, color)
+				down_link_heat.a = fill_alpha * lerpf(0.24, 0.78, _health_alpha_amount(down_link_health))
+				draw_line(center_connect, down_center_connect, down_link_heat, connector_width * lerpf(0.32, 0.86, _health_radius_amount(down_link_health)), true)
 	for tile_heat_value in tiles.values():
 		if not tile_heat_value is Vector2i:
 			continue
 		var tile_heat: Vector2i = tile_heat_value as Vector2i
 		var center_heat := _tile_center(tile_heat)
-		if _point_intersects_viewport(center_heat, heat_radius):
-			draw_circle(center_heat, heat_radius, heat)
+		var tile_health := _overlay_cell_health(str(cell_by_tile.get(_tile_key(tile_heat), "")))
+		var cell_heat_radius := heat_radius * lerpf(0.54, 1.04, _health_radius_amount(tile_health))
+		if _point_intersects_viewport(center_heat, cell_heat_radius):
+			var tile_heat_color := _overlay_health_color(tile_health, color)
+			var pulse_boost := (0.04 + pulse * 0.04) * _health_pulse_amount(tile_health) * strength if complete else 0.0
+			tile_heat_color.a = fill_alpha * lerpf(0.28, 1.0, _health_alpha_amount(tile_health)) + pulse_boost
+			draw_circle(center_heat, cell_heat_radius, tile_heat_color)
 	for tile_boundary_value in tiles.values():
 		if not tile_boundary_value is Vector2i:
 			continue
@@ -495,6 +523,39 @@ func _draw_circuit_component_halo(cells: Array[String], color: Color, complete: 
 			_draw_component_boundary_segment(bottom_right, bottom_left, color, boundary_alpha, boundary_width)
 		if not tiles.has(_tile_key(Vector2i(tile_boundary.x - 1, tile_boundary.y))):
 			_draw_component_boundary_segment(bottom_left, top_left, color, boundary_alpha, boundary_width)
+
+
+func _overlay_cell_health(cell: String) -> float:
+	if cell.is_empty():
+		return 1.0
+	var health_info: Dictionary = _cached_need_health(cell)
+	if not bool(health_info.get("known", false)):
+		return 1.0
+	return clampf(float(health_info.get("health", 1.0)), 0.0, 1.0)
+
+
+func _average_overlay_health(first_cell: String, second_cell: String) -> float:
+	return (_overlay_cell_health(first_cell) + _overlay_cell_health(second_cell)) * 0.5
+
+
+func _overlay_health_color(need_health: float, _healthy_color: Color) -> Color:
+	return CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, _health_color_amount(need_health))
+
+
+func _health_color_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_COLOR_CURVE)
+
+
+func _health_radius_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_RADIUS_CURVE)
+
+
+func _health_alpha_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_ALPHA_CURVE)
+
+
+func _health_pulse_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), 1.35)
 
 
 func _draw_component_boundary_segment(start: Vector2, finish: Vector2, color: Color, alpha: float, width: float) -> void:
@@ -751,17 +812,19 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 	var live_complete := _circuit_alive_now()
 	var body_glow_color := color
 	var glow_alpha := 0.56 if _cached_cell_is_glowing(cell) else 0.16
-	var need_health_info := _cached_need_health(cell)
+	var glow_health := 1.0
+	var glow_alpha_health := 1.0
+	var need_health_info: Dictionary = _cached_need_health(cell)
 	var has_need_health := bool(need_health_info.get("known", false))
 	var need_health := float(need_health_info.get("health", 1.0))
 	if has_need_health:
-		var health := need_health * need_health * (3.0 - 2.0 * need_health)
-		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
-		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cached_cell_is_glowing(cell) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
-		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
-	if live_complete and (not has_need_health or need_health >= 0.95):
-		body_glow_color = CELL_HEALTHY_GLOW_COLOR
-		glow_alpha = 0.72
+		var color_health := _health_color_amount(need_health)
+		var radius_health := _health_radius_amount(need_health)
+		var alpha_health := _health_alpha_amount(need_health)
+		glow_health = radius_health
+		glow_alpha_health = alpha_health
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, color_health)
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, CELL_HEALTHY_GLOW_STRENGTH, alpha_health)
 	var reaction_alpha := _cached_recent_reaction_alpha(cell)
 	if reaction_alpha > 0.0:
 		var reaction_health := need_health if has_need_health else 1.0
@@ -769,14 +832,22 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 			body_glow_color = body_glow_color.lerp(CELL_HEALTHY_GLOW_COLOR, reaction_alpha * reaction_health)
 			glow_alpha = maxf(glow_alpha, lerpf(CELL_STRESS_GLOW_STRENGTH, 0.52 + reaction_alpha * 0.28, reaction_health))
 			draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18 * reaction_health * clear_alpha))
-	draw_circle(center, radius * (1.16 + (0.04 if live_complete and (not has_need_health or need_health >= 0.95) else 0.0)), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.28 * clear_alpha))
+	var glow_radius_scale := lerpf(CELL_STRESS_GLOW_RADIUS_SCALE, CELL_HEALTHY_GLOW_RADIUS_SCALE, glow_health)
+	var glow_alpha_scale := lerpf(CELL_STRESS_GLOW_ALPHA_SCALE, CELL_HEALTHY_GLOW_ALPHA_SCALE, glow_alpha_health)
+	var glow_alpha_value := glow_alpha * glow_alpha_scale * clear_alpha
+	var glow_thickness := maxf(0.0, glow_radius_scale - 1.0)
+	draw_circle(center, radius * glow_radius_scale, Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_OUTER_ALPHA_FRACTION))
+	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_MID_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_MID_ALPHA_FRACTION))
+	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_INNER_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_INNER_ALPHA_FRACTION))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72 * clear_alpha))
 	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68 * clear_alpha), 3.0, true)
 	if kind == CELL_KIND_RED_MYCO:
 		_draw_red_myco_ring(center, radius, clear_alpha)
 	if live_complete:
+		var pulse_health := _health_pulse_amount(need_health) if has_need_health else 1.0
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
-		draw_arc(center, radius * (1.07 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, (0.28 + solved_pulse * 0.18) * clear_alpha), 3.0, true)
+		if pulse_health > 0.02:
+			draw_arc(center, radius * (1.07 + pulse_health * 0.03 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, (0.18 + solved_pulse * 0.24) * pulse_health * clear_alpha), 3.0, true)
 	if _using_sim_state and not is_myco and not produced.is_empty():
 		_draw_fullness_arc(center, radius * 1.07, _displayed_fullness(cell, produced, _cached_slot_fullness(cell, produced)), color, 6.0)
 	var font := get_theme_default_font()
@@ -1192,7 +1263,11 @@ func _need_health(cell: String) -> Dictionary:
 	if not slots_value is Array:
 		return {"known": false, "health": 1.0}
 	var health := 1.0
+	var met_need_count := 0
+	var need_count := 0
 	var found_need := false
+	# Health is the fraction of live Need slots with any resource, so variable
+	# need counts scale without assuming three pips.
 	var slots: Array = slots_value as Array
 	for slot_value in slots:
 		if not slot_value is Dictionary:
@@ -1201,7 +1276,11 @@ func _need_health(cell: String) -> Dictionary:
 		if str(slot.get("role", "")) != "Need":
 			continue
 		found_need = true
-		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+		need_count += 1
+		if int(slot.get("quantity", 0)) > 0 or float(slot.get("fullness", 0.0)) > 0.0:
+			met_need_count += 1
+	if found_need:
+		health = clampf(float(met_need_count) / float(maxi(1, need_count)), 0.0, 1.0)
 	return {"known": found_need, "health": health}
 
 

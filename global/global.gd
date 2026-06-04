@@ -9,6 +9,7 @@ var last_rank_key := 0
 const HIGH_SCORE_SAVE_PATH := "user://high_score.cfg"
 const CELLULAR_PROGRESS_SAVE_PATH := "user://cellular_progress.cfg"
 const CELLULAR_PUZZLE_STATE_SAVE_PATH := "user://cellular_puzzle_state.cfg"
+const CELLULAR_RESET_PENDING_PATH := "user://cellular_reset_pending.flag"
 const CELLULAR_PUZZLE_FINAL_LEVEL := 44
 const GAMEPLAY_SPEED_NORMAL := 0
 const GAMEPLAY_SPEED_FAST := 1
@@ -455,6 +456,7 @@ var stage_colors = {
 func _ready() -> void:
 	load_high_score()
 	load_cellular_progress()
+	_complete_pending_cellular_progress_reset()
 	var seeded = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
@@ -486,19 +488,26 @@ func load_high_score() -> void:
 		last_rank_key = 0
 
 
-func save_high_score() -> void:
+func save_high_score() -> int:
 	var cfg := ConfigFile.new()
 	cfg.set_value("scores", "high_score", max(0, high_score))
 	cfg.set_value("scores", "last_score", max(0, last_score))
 	cfg.set_value("scores", "last_rank_key", last_rank_key)
-	cfg.save(HIGH_SCORE_SAVE_PATH)
+	var err := cfg.save(HIGH_SCORE_SAVE_PATH)
+	if err != OK:
+		push_warning("Could not save Cellular arcade progress: %s" % str(err))
+	return err
 
 
 func reset_arcade_progress() -> void:
+	_apply_arcade_progress_reset_state()
+	save_high_score()
+
+
+func _apply_arcade_progress_reset_state() -> void:
 	high_score = 0
 	last_score = 0
 	last_rank_key = 0
-	save_high_score()
 
 
 func load_cellular_progress() -> void:
@@ -517,7 +526,7 @@ func load_cellular_progress() -> void:
 		cellular_puzzle_level_high_velocities.clear()
 
 
-func save_cellular_progress() -> void:
+func save_cellular_progress() -> int:
 	var cfg := ConfigFile.new()
 	cellular_puzzle_highest_level = clampi(maxi(1, cellular_puzzle_highest_level), 1, CELLULAR_PUZZLE_FINAL_LEVEL)
 	cellular_puzzle_current_level = clampi(maxi(1, cellular_puzzle_current_level), 1, maxi(1, cellular_puzzle_highest_level))
@@ -525,16 +534,71 @@ func save_cellular_progress() -> void:
 	cfg.set_value("puzzle", "current_level", cellular_puzzle_current_level)
 	for key in cellular_puzzle_level_high_velocities.keys():
 		cfg.set_value("puzzle_velocities", str(key), maxi(0, int(cellular_puzzle_level_high_velocities.get(key, 0))))
-	cfg.save(CELLULAR_PROGRESS_SAVE_PATH)
+	var err := cfg.save(CELLULAR_PROGRESS_SAVE_PATH)
+	if err != OK:
+		push_warning("Could not save Cellular puzzle progress: %s" % str(err))
+	return err
 
 
 func reset_cellular_puzzle_progress() -> void:
+	_apply_cellular_puzzle_progress_reset_state()
+	save_cellular_progress()
+	_remove_saved_cellular_puzzle_state()
+
+
+func _apply_cellular_puzzle_progress_reset_state() -> void:
 	cellular_puzzle_highest_level = 1
 	cellular_puzzle_current_level = 1
 	cellular_puzzle_level_high_velocities.clear()
-	save_cellular_progress()
+
+
+func reset_all_cellular_progress() -> void:
+	_write_cellular_reset_pending_marker()
+	_apply_cellular_puzzle_progress_reset_state()
+	_apply_arcade_progress_reset_state()
+	var progress_err := save_cellular_progress()
+	var score_err := save_high_score()
+	var state_err := _remove_saved_cellular_puzzle_state()
+	if progress_err == OK and score_err == OK and state_err == OK:
+		_remove_cellular_reset_pending_marker()
+
+
+func _complete_pending_cellular_progress_reset() -> void:
+	if not FileAccess.file_exists(CELLULAR_RESET_PENDING_PATH):
+		return
+	_apply_cellular_puzzle_progress_reset_state()
+	_apply_arcade_progress_reset_state()
+	var progress_err := save_cellular_progress()
+	var score_err := save_high_score()
+	var state_err := _remove_saved_cellular_puzzle_state()
+	if progress_err == OK and score_err == OK and state_err == OK:
+		_remove_cellular_reset_pending_marker()
+
+
+func _write_cellular_reset_pending_marker() -> void:
+	var file := FileAccess.open(CELLULAR_RESET_PENDING_PATH, FileAccess.WRITE)
+	if file == null:
+		push_warning("Could not write Cellular reset marker: %s" % str(FileAccess.get_open_error()))
+		return
+	file.store_line("reset_progress=1")
+	file.flush()
+	file.close()
+
+
+func _remove_cellular_reset_pending_marker() -> void:
+	if FileAccess.file_exists(CELLULAR_RESET_PENDING_PATH):
+		var err := DirAccess.remove_absolute(ProjectSettings.globalize_path(CELLULAR_RESET_PENDING_PATH))
+		if err != OK:
+			push_warning("Could not remove Cellular reset marker: %s" % str(err))
+
+
+func _remove_saved_cellular_puzzle_state() -> int:
 	if FileAccess.file_exists(CELLULAR_PUZZLE_STATE_SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(CELLULAR_PUZZLE_STATE_SAVE_PATH))
+		var err := DirAccess.remove_absolute(ProjectSettings.globalize_path(CELLULAR_PUZZLE_STATE_SAVE_PATH))
+		if err != OK:
+			push_warning("Could not remove saved Cellular puzzle state: %s" % str(err))
+			return err
+	return OK
 
 
 func record_cellular_puzzle_level_complete(level_number: int) -> bool:

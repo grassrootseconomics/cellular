@@ -9,6 +9,11 @@ const INVENTORY_SLOT_COUNT := 3
 const CLEAR_GROUP_MIN_SIZE := 4
 const CLEAR_EFFECT_MAX_SCALE_COUNT := 10
 const CLEAR_SETTLE_TICKS := 6
+const NORMAL_MIN_NEEDS := 3
+const NORMAL_MAX_NEEDS := 3
+const NORMAL_ONE_NEED_WEIGHT := 20
+const NORMAL_TWO_NEEDS_WEIGHT := 35
+const NORMAL_THREE_NEEDS_WEIGHT := 45
 const RESOURCE_LETTERS := ["A", "B", "C", "D", "E", "F", "G", "H"]
 const RESOURCE_COLORS := [
 	Color(0.18, 0.72, 0.78, 1.0),
@@ -45,10 +50,21 @@ const CAMERA_ZOOM_STEP := 1.18
 const CAMERA_PINCH_MIN_DISTANCE := 18.0
 const PIP_ANGLE_SMOOTH := 0.14
 const PIP_OFFSET_SMOOTH := 0.16
-const CELL_STRESS_GLOW_STRENGTH := 0.20
-const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
-const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
-const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_STRESS_GLOW_STRENGTH := 0.42
+const CELL_HEALTHY_GLOW_STRENGTH := 0.72
+const CELL_STRESS_GLOW_RADIUS_SCALE := 1.14
+const CELL_HEALTHY_GLOW_RADIUS_SCALE := 1.48
+const CELL_STRESS_GLOW_ALPHA_SCALE := 0.44
+const CELL_HEALTHY_GLOW_ALPHA_SCALE := 0.56
+const CELL_HEALTH_COLOR_CURVE := 0.52
+const CELL_HEALTH_RADIUS_CURVE := 0.42
+const CELL_HEALTH_ALPHA_CURVE := 0.46
+const CELL_GLOW_MID_RADIUS_FRACTION := 0.64
+const CELL_GLOW_INNER_RADIUS_FRACTION := 0.34
+const CELL_GLOW_OUTER_ALPHA_FRACTION := 0.34
+const CELL_GLOW_MID_ALPHA_FRACTION := 0.52
+const CELL_GLOW_INNER_ALPHA_FRACTION := 0.70
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.96, 0.04, 1.0)
 const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_PIP_MARK_SIZE_SCALE := 1.10
 const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
@@ -400,11 +416,12 @@ func _start_run() -> void:
 func _make_arcade_cell(use_inventory_context: bool = false, ignored_inventory_index: int = -1) -> Dictionary:
 	_cell_sequence += 1
 	var produced := _choose_produced_resource(use_inventory_context, ignored_inventory_index)
+	var need_count := _choose_normal_need_count()
 	return {
 		"id": "arcade-cell-%04d" % _cell_sequence,
 		"kind": "Standard",
 		"produced": produced,
-		"needs": _choose_needs_for_resource(produced, use_inventory_context, ignored_inventory_index)
+		"needs": _choose_needs_for_resource(produced, need_count, use_inventory_context, ignored_inventory_index)
 	}
 
 
@@ -468,7 +485,37 @@ func _choose_produced_resource(use_inventory_context: bool = false, ignored_inve
 	return _weighted_resource_choice(weighted, "")
 
 
-func _choose_needs_for_resource(produced: String, use_inventory_context: bool = false, ignored_inventory_index: int = -1) -> Array[String]:
+func _choose_normal_need_count() -> int:
+	var min_needs := clampi(NORMAL_MIN_NEEDS, 1, 3)
+	var max_needs := clampi(NORMAL_MAX_NEEDS, min_needs, 3)
+	if min_needs == max_needs:
+		return min_needs
+	var total_weight := 0
+	for count in range(min_needs, max_needs + 1):
+		total_weight += _normal_need_count_weight(count)
+	var roll := _rng.randi_range(1, maxi(1, total_weight))
+	var accumulated := 0
+	for count in range(min_needs, max_needs + 1):
+		accumulated += _normal_need_count_weight(count)
+		if roll <= accumulated:
+			return count
+	return max_needs
+
+
+func _normal_need_count_weight(count: int) -> int:
+	match count:
+		1:
+			return NORMAL_ONE_NEED_WEIGHT
+		2:
+			return NORMAL_TWO_NEEDS_WEIGHT
+		3:
+			return NORMAL_THREE_NEEDS_WEIGHT
+		_:
+			return 1
+
+
+func _choose_needs_for_resource(produced: String, target_count: int, use_inventory_context: bool = false, ignored_inventory_index: int = -1) -> Array[String]:
+	target_count = clampi(target_count, 1, 3)
 	var needs: Array[String] = []
 	var weighted: Array[String] = []
 	for resource in _board_produced_resources():
@@ -487,7 +534,7 @@ func _choose_needs_for_resource(produced: String, use_inventory_context: bool = 
 	for resource in RESOURCE_LETTERS:
 		if resource != produced:
 			_append_weighted(weighted, resource, 1)
-	while needs.size() < 3:
+	while needs.size() < target_count:
 		var next := _weighted_resource_choice(weighted, produced)
 		if next.is_empty():
 			break
@@ -499,11 +546,11 @@ func _choose_needs_for_resource(produced: String, use_inventory_context: bool = 
 			for resource in RESOURCE_LETTERS:
 				if resource != produced and not needs.has(resource):
 					weighted.append(resource)
-	if needs.size() < 3:
+	if needs.size() < target_count:
 		for resource in RESOURCE_LETTERS:
 			if resource != produced and not needs.has(resource):
 				needs.append(resource)
-			if needs.size() >= 3:
+			if needs.size() >= target_count:
 				break
 	return needs
 
@@ -1561,27 +1608,59 @@ func _draw_fallback_circuit_groups(layer: Control) -> void:
 		if cells.size() < CLEAR_GROUP_MIN_SIZE:
 			continue
 		var all_on_board := true
-		for cell_value in cells:
-			if not _board_cells.has(str(cell_value)):
+		for board_check_value in cells:
+			if not _board_cells.has(str(board_check_value)):
 				all_on_board = false
 				break
 		if not all_on_board:
 			continue
 		var color := _fallback_group_color(group_index)
-		var fill := color
-		fill.a = 0.15 + pulse * 0.06
 		var edge := color.lightened(0.24)
 		edge.a = 0.64 + pulse * 0.20
-		for cell_value in cells:
-			var id := str(cell_value)
-			var center := _tile_center(_get_cell_tile(id))
-			layer.draw_circle(center, _tile_size * 0.58, fill)
-		for cell_value in cells:
-			var id := str(cell_value)
-			var tile := _get_cell_tile(id)
+		for circle_value in cells:
+			var circle_id := str(circle_value)
+			var center := _tile_center(_get_cell_tile(circle_id))
+			var circle_health := _overlay_cell_health(circle_id)
+			var circle_fill := _overlay_health_color(circle_health, color)
+			circle_fill.a = (0.12 + pulse * 0.04) * lerpf(0.28, 1.0, _health_alpha_amount(circle_health))
+			layer.draw_circle(center, _tile_size * 0.58 * lerpf(0.54, 1.04, _health_radius_amount(circle_health)), circle_fill)
+		for rect_value in cells:
+			var rect_id := str(rect_value)
+			var tile := _get_cell_tile(rect_id)
+			var rect_health := _overlay_cell_health(rect_id)
+			var rect_fill := _overlay_health_color(rect_health, color)
 			var rect := Rect2(_board_rect.position + Vector2(tile) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
-			layer.draw_rect(rect, Color(color.r, color.g, color.b, 0.08 + pulse * 0.04), true)
+			layer.draw_rect(rect, Color(rect_fill.r, rect_fill.g, rect_fill.b, (0.06 + pulse * 0.03) * lerpf(0.28, 1.0, _health_alpha_amount(rect_health))), true)
 			layer.draw_rect(rect, edge, false, maxf(3.0, _tile_size * 0.045))
+
+
+func _overlay_cell_health(cell_id: String) -> float:
+	if cell_id.is_empty():
+		return 1.0
+	var health_info: Dictionary = _cell_need_health(cell_id)
+	if not bool(health_info.get("known", false)):
+		return 1.0
+	return clampf(float(health_info.get("health", 1.0)), 0.0, 1.0)
+
+
+func _overlay_health_color(need_health: float, _healthy_color: Color) -> Color:
+	return CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, _health_color_amount(need_health))
+
+
+func _health_color_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_COLOR_CURVE)
+
+
+func _health_radius_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_RADIUS_CURVE)
+
+
+func _health_alpha_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), CELL_HEALTH_ALPHA_CURVE)
+
+
+func _health_pulse_amount(need_health: float) -> float:
+	return pow(clampf(need_health, 0.0, 1.0), 1.35)
 
 
 func _draw_fallback_recent_flows(layer: Control) -> void:
@@ -1758,14 +1837,25 @@ func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: boo
 	var cell_id := str(cell.get("id", ""))
 	var body_glow_color := color
 	var glow_alpha := 0.52 if _cell_is_glowing(cell_id) else 0.18
-	var need_health_info := _cell_need_health(cell_id)
+	var glow_health := 1.0
+	var glow_alpha_health := 1.0
+	var need_health_info: Dictionary = _cell_need_health(cell_id)
 	if bool(need_health_info.get("known", false)):
 		var need_health := float(need_health_info.get("health", 1.0))
-		var health := need_health * need_health * (3.0 - 2.0 * need_health)
-		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
-		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cell_is_glowing(cell_id) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
-		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
-	layer.draw_circle(center, radius * 1.20, Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.24))
+		var color_health := _health_color_amount(need_health)
+		var radius_health := _health_radius_amount(need_health)
+		var alpha_health := _health_alpha_amount(need_health)
+		glow_health = radius_health
+		glow_alpha_health = alpha_health
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, color_health)
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, CELL_HEALTHY_GLOW_STRENGTH, alpha_health)
+	var glow_radius_scale := lerpf(CELL_STRESS_GLOW_RADIUS_SCALE, CELL_HEALTHY_GLOW_RADIUS_SCALE, glow_health)
+	var glow_alpha_scale := lerpf(CELL_STRESS_GLOW_ALPHA_SCALE, CELL_HEALTHY_GLOW_ALPHA_SCALE, glow_alpha_health)
+	var glow_alpha_value := glow_alpha * glow_alpha_scale
+	var glow_thickness := maxf(0.0, glow_radius_scale - 1.0)
+	layer.draw_circle(center, radius * glow_radius_scale, Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_OUTER_ALPHA_FRACTION))
+	layer.draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_MID_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_MID_ALPHA_FRACTION))
+	layer.draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_INNER_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_INNER_ALPHA_FRACTION))
 	layer.draw_circle(center + Vector2(0.0, radius * 0.08), radius * 1.04, Color(0.0, 0.0, 0.0, 0.30))
 	layer.draw_circle(center, radius, Color(color.r, color.g, color.b, 0.74))
 	layer.draw_arc(center, radius * 0.96, 0.0, TAU, 42, Color(0.95, 1.0, 0.96, 0.66), maxf(2.0, radius * 0.080), true)
@@ -2081,7 +2171,11 @@ func _cell_need_health(cell_id: String) -> Dictionary:
 	if not slots_value is Array:
 		return {"known": false, "health": 1.0}
 	var health := 1.0
+	var met_need_count := 0
+	var need_count := 0
 	var found_need := false
+	# Health is the fraction of live Need slots with any resource, so variable
+	# need counts scale without assuming three pips.
 	var slots: Array = slots_value as Array
 	for slot_value in slots:
 		if not slot_value is Dictionary:
@@ -2090,7 +2184,11 @@ func _cell_need_health(cell_id: String) -> Dictionary:
 		if str(slot.get("role", "")) != "Need":
 			continue
 		found_need = true
-		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+		need_count += 1
+		if int(slot.get("quantity", 0)) > 0 or float(slot.get("fullness", 0.0)) > 0.0:
+			met_need_count += 1
+	if found_need:
+		health = clampf(float(met_need_count) / float(maxi(1, need_count)), 0.0, 1.0)
 	return {"known": found_need, "health": health}
 
 

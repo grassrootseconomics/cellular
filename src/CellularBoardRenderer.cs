@@ -21,12 +21,23 @@ public partial class CellularBoardRenderer : Control
     private const float InventorySlotScale = 1.28f;
     private const float InventoryCellScale = 1.10f;
     private const float InventoryCellYOffset = 0.06f;
-    private const float CellStressGlowStrength = 0.20f;
-    private const float CellHealthyIdleGlowStrength = 0.36f;
-    private const float CellHealthyActiveGlowStrength = 0.56f;
+    private const float CellStressGlowStrength = 0.42f;
+    private const float CellHealthyGlowStrength = 0.72f;
+    private const float CellStressGlowRadiusScale = 1.14f;
+    private const float CellHealthyGlowRadiusScale = 1.48f;
+    private const float CellStressGlowAlphaScale = 0.44f;
+    private const float CellHealthyGlowAlphaScale = 0.56f;
+    private const float CellHealthColorCurve = 0.52f;
+    private const float CellHealthRadiusCurve = 0.42f;
+    private const float CellHealthAlphaCurve = 0.46f;
+    private const float CellGlowMidRadiusFraction = 0.64f;
+    private const float CellGlowInnerRadiusFraction = 0.34f;
+    private const float CellGlowOuterAlphaFraction = 0.34f;
+    private const float CellGlowMidAlphaFraction = 0.52f;
+    private const float CellGlowInnerAlphaFraction = 0.70f;
     private const float NeedPipMarkSizeScale = 1.10f;
     private const float NeedPipMarkWeightScale = 1.10f;
-    private static readonly Color CellStressGlowColor = new(1.0f, 0.78f, 0.24f, 1.0f);
+    private static readonly Color CellStressGlowColor = new(1.0f, 0.96f, 0.04f, 1.0f);
     private static readonly Color CellHealthyGlowColor = new(0.30f, 1.0f, 0.84f, 1.0f);
     private static readonly Color ZeroPipPulseColor = new(1.0f, 0.0f, 0.0f, 1.0f);
 
@@ -540,18 +551,20 @@ public partial class CellularBoardRenderer : Control
         }
 
         var tiles = new HashSet<Vector2I>();
+        var cellByTile = new Dictionary<Vector2I, string>();
         foreach (var cell in cells)
         {
-            tiles.Add(GetCellTile(cell));
+            var tile = GetCellTile(cell);
+            tiles.Add(tile);
+            cellByTile[tile] = cell;
         }
 
         var pulse = 0.5f + Mathf.Sin(Time.GetTicksMsec() / (complete ? 105.0f : 190.0f)) * 0.5f;
-        var fillAlpha = (complete ? 0.28f + pulse * 0.10f : 0.13f + pulse * 0.04f) * strength;
+        var fillAlpha = (0.12f + pulse * 0.04f) * strength;
         var boundaryAlpha = (complete ? 0.82f + pulse * 0.16f : 0.56f + pulse * 0.14f) * strength;
-        var heatRadius = _tileSize * (complete ? 0.64f : 0.56f);
-        var connectorWidth = _tileSize * (complete ? 0.96f : 0.88f);
+        var heatRadius = _tileSize * 0.56f;
+        var connectorWidth = _tileSize * 0.88f;
         var boundaryWidth = complete ? 7.0f : 5.0f;
-        var heat = color with { A = fillAlpha };
 
         foreach (var tile in tiles)
         {
@@ -562,7 +575,9 @@ public partial class CellularBoardRenderer : Control
                 var rightCenter = TileCenter(right);
                 if (LineIntersectsViewport(center, rightCenter, connectorWidth))
                 {
-                    DrawLine(center, rightCenter, heat, connectorWidth, antialiased: true);
+                    var linkHealth = AverageOverlayHealth(cellByTile[tile], cellByTile[right]);
+                    var linkHeat = OverlayHealthColor(linkHealth, color) with { A = fillAlpha * Mathf.Lerp(0.24f, 0.78f, HealthAlphaAmount(linkHealth)) };
+                    DrawLine(center, rightCenter, linkHeat, connectorWidth * Mathf.Lerp(0.32f, 0.86f, HealthRadiusAmount(linkHealth)), antialiased: true);
                 }
             }
 
@@ -572,7 +587,9 @@ public partial class CellularBoardRenderer : Control
                 var downCenter = TileCenter(down);
                 if (LineIntersectsViewport(center, downCenter, connectorWidth))
                 {
-                    DrawLine(center, downCenter, heat, connectorWidth, antialiased: true);
+                    var linkHealth = AverageOverlayHealth(cellByTile[tile], cellByTile[down]);
+                    var linkHeat = OverlayHealthColor(linkHealth, color) with { A = fillAlpha * Mathf.Lerp(0.24f, 0.78f, HealthAlphaAmount(linkHealth)) };
+                    DrawLine(center, downCenter, linkHeat, connectorWidth * Mathf.Lerp(0.32f, 0.86f, HealthRadiusAmount(linkHealth)), antialiased: true);
                 }
             }
         }
@@ -580,9 +597,13 @@ public partial class CellularBoardRenderer : Control
         foreach (var tile in tiles)
         {
             var center = TileCenter(tile);
-            if (PointIntersectsViewport(center, heatRadius))
+            var health = CellNeedHealthForOverlay(cellByTile[tile]);
+            var cellHeatRadius = heatRadius * Mathf.Lerp(0.54f, 1.04f, HealthRadiusAmount(health));
+            if (PointIntersectsViewport(center, cellHeatRadius))
             {
-                DrawCircle(center, heatRadius, heat);
+                var pulseBoost = complete ? (0.04f + pulse * 0.04f) * HealthPulseAmount(health) * strength : 0.0f;
+                var heat = OverlayHealthColor(health, color) with { A = fillAlpha * Mathf.Lerp(0.28f, 1.0f, HealthAlphaAmount(health)) + pulseBoost };
+                DrawCircle(center, cellHeatRadius, heat);
             }
         }
 
@@ -615,6 +636,29 @@ public partial class CellularBoardRenderer : Control
             }
         }
     }
+
+    private float CellNeedHealthForOverlay(string cell) =>
+        TryNeedHealth(cell, out var health) ? Mathf.Clamp(health, 0.0f, 1.0f) : 1.0f;
+
+    private float AverageOverlayHealth(string firstCell, string secondCell) =>
+        (CellNeedHealthForOverlay(firstCell) + CellNeedHealthForOverlay(secondCell)) * 0.5f;
+
+    private static Color OverlayHealthColor(float needHealth, Color healthyColor)
+    {
+        return CellStressGlowColor.Lerp(CellHealthyGlowColor, HealthColorAmount(needHealth));
+    }
+
+    private static float HealthColorAmount(float needHealth) =>
+        Mathf.Pow(Mathf.Clamp(needHealth, 0.0f, 1.0f), CellHealthColorCurve);
+
+    private static float HealthRadiusAmount(float needHealth) =>
+        Mathf.Pow(Mathf.Clamp(needHealth, 0.0f, 1.0f), CellHealthRadiusCurve);
+
+    private static float HealthAlphaAmount(float needHealth) =>
+        Mathf.Pow(Mathf.Clamp(needHealth, 0.0f, 1.0f), CellHealthAlphaCurve);
+
+    private static float HealthPulseAmount(float needHealth) =>
+        Mathf.Pow(Mathf.Clamp(needHealth, 0.0f, 1.0f), 1.35f);
 
     private void DrawComponentBoundarySegment(Vector2 start, Vector2 finish, Color color, float alpha, float width)
     {
@@ -990,18 +1034,18 @@ public partial class CellularBoardRenderer : Control
         var glowAlpha = hasLiveState
             ? (CellIsGlowing(cell) ? 0.56f : 0.16f)
             : (useSimState && CellHasAllNeeds(cell) ? 0.46f : 0.18f);
+        var glowHealth = 1.0f;
+        var glowAlphaHealth = 1.0f;
         var hasNeedHealth = TryNeedHealth(cell, out var needHealth);
         if (hasNeedHealth)
         {
-            var health = needHealth * needHealth * (3.0f - 2.0f * needHealth);
-            bodyGlowColor = CellStressGlowColor.Lerp(CellHealthyGlowColor, health);
-            var healthyGlowStrength = CellIsGlowing(cell) ? CellHealthyActiveGlowStrength : CellHealthyIdleGlowStrength;
-            glowAlpha = Mathf.Lerp(CellStressGlowStrength, healthyGlowStrength, health);
-        }
-        if (liveComplete && (!hasNeedHealth || needHealth >= 0.95f))
-        {
-            bodyGlowColor = CellHealthyGlowColor;
-            glowAlpha = 0.72f;
+            var colorHealth = HealthColorAmount(needHealth);
+            var radiusHealth = HealthRadiusAmount(needHealth);
+            var alphaHealth = HealthAlphaAmount(needHealth);
+            glowHealth = radiusHealth;
+            glowAlphaHealth = alphaHealth;
+            bodyGlowColor = CellStressGlowColor.Lerp(CellHealthyGlowColor, colorHealth);
+            glowAlpha = Mathf.Lerp(CellStressGlowStrength, CellHealthyGlowStrength, alphaHealth);
         }
 
         var reactionAlpha = hasLiveState ? RecentReactionAlpha(cell) : 0.0f;
@@ -1016,7 +1060,13 @@ public partial class CellularBoardRenderer : Control
             }
         }
 
-        DrawCircle(center, radius * (1.16f + (liveComplete && (!hasNeedHealth || needHealth >= 0.95f) ? 0.04f : 0.0f)), new Color(bodyGlowColor.R, bodyGlowColor.G, bodyGlowColor.B, glowAlpha * 0.28f * clearAlpha));
+        var glowRadiusScale = Mathf.Lerp(CellStressGlowRadiusScale, CellHealthyGlowRadiusScale, glowHealth);
+        var glowAlphaScale = Mathf.Lerp(CellStressGlowAlphaScale, CellHealthyGlowAlphaScale, glowAlphaHealth);
+        var glowAlphaValue = glowAlpha * glowAlphaScale * clearAlpha;
+        var glowThickness = Mathf.Max(0.0f, glowRadiusScale - 1.0f);
+        DrawCircle(center, radius * glowRadiusScale, new Color(bodyGlowColor.R, bodyGlowColor.G, bodyGlowColor.B, glowAlphaValue * CellGlowOuterAlphaFraction));
+        DrawCircle(center, radius * (1.0f + glowThickness * CellGlowMidRadiusFraction), new Color(bodyGlowColor.R, bodyGlowColor.G, bodyGlowColor.B, glowAlphaValue * CellGlowMidAlphaFraction));
+        DrawCircle(center, radius * (1.0f + glowThickness * CellGlowInnerRadiusFraction), new Color(bodyGlowColor.R, bodyGlowColor.G, bodyGlowColor.B, glowAlphaValue * CellGlowInnerAlphaFraction));
         DrawCircle(center, radius, new Color(color.R, color.G, color.B, 0.72f * clearAlpha));
         DrawArc(center, radius * 0.96f, 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.92f, 1.0f, 0.95f, 0.68f * clearAlpha), 3.0f, antialiased: true);
         if (clearing)
@@ -1033,8 +1083,12 @@ public partial class CellularBoardRenderer : Control
         var font = GetThemeDefaultFont();
         if (liveComplete)
         {
+            var pulseHealth = hasNeedHealth ? HealthPulseAmount(needHealth) : 1.0f;
             var solvedPulse = 0.5f + Mathf.Sin(Time.GetTicksMsec() / 160.0f) * 0.5f;
-            DrawArc(center, radius * (1.07f + solvedPulse * 0.03f), 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.62f, 1.0f, 0.88f, (0.28f + solvedPulse * 0.18f) * clearAlpha), 3.0f, antialiased: true);
+            if (pulseHealth > 0.02f)
+            {
+                DrawArc(center, radius * (1.07f + pulseHealth * 0.03f + solvedPulse * 0.03f), 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.62f, 1.0f, 0.88f, (0.18f + solvedPulse * 0.24f) * pulseHealth * clearAlpha), 3.0f, antialiased: true);
+            }
         }
 
         if (!clearing && hasLiveState && !isMyco && !string.IsNullOrEmpty(produced))
@@ -1910,7 +1964,11 @@ public partial class CellularBoardRenderer : Control
             return false;
         }
 
+        var metNeedCount = 0;
+        var needCount = 0;
         var foundNeed = false;
+        // Health is the fraction of live Need slots with any resource, so it
+        // scales naturally if future cells use more or fewer than three needs.
         foreach (var slot in state.Slots.Values)
         {
             if (slot.Role != "Need")
@@ -1919,7 +1977,16 @@ public partial class CellularBoardRenderer : Control
             }
 
             foundNeed = true;
-            health = Mathf.Min(health, Mathf.Clamp(slot.Fullness, 0.0f, 1.0f));
+            needCount++;
+            if (slot.Quantity > 0 || slot.Fullness > 0.0f)
+            {
+                metNeedCount++;
+            }
+        }
+
+        if (foundNeed)
+        {
+            health = Mathf.Clamp((float)metNeedCount / Math.Max(1, needCount), 0.0f, 1.0f);
         }
 
         return foundNeed;

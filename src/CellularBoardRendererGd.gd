@@ -56,7 +56,25 @@ const RESOURCE_COLORS := [
 	Color(0.95, 0.74, 0.24, 1.0),
 	Color(0.36, 0.52, 0.95, 1.0),
 	Color(0.92, 0.30, 0.50, 1.0),
-	Color(0.24, 0.80, 0.56, 1.0)
+	Color(0.24, 0.80, 0.56, 1.0),
+	Color(0.18, 0.61, 0.94, 1.0),
+	Color(0.71, 0.85, 0.25, 1.0),
+	Color(0.85, 0.30, 0.75, 1.0),
+	Color(0.95, 0.55, 0.18, 1.0),
+	Color(0.27, 0.82, 0.74, 1.0),
+	Color(0.49, 0.45, 0.95, 1.0),
+	Color(0.94, 0.35, 0.35, 1.0),
+	Color(0.65, 0.89, 0.29, 1.0),
+	Color(0.29, 0.78, 0.95, 1.0),
+	Color(0.62, 0.36, 0.86, 1.0),
+	Color(0.73, 0.71, 0.28, 1.0),
+	Color(0.94, 0.55, 0.43, 1.0),
+	Color(0.16, 0.75, 0.63, 1.0),
+	Color(0.43, 0.60, 0.95, 1.0),
+	Color(0.95, 0.36, 0.66, 1.0),
+	Color(0.37, 0.75, 0.35, 1.0),
+	Color(0.73, 0.52, 0.95, 1.0),
+	Color(0.85, 0.60, 0.20, 1.0)
 ]
 const CIRCUIT_GROUP_COLORS := [
 	Color(0.30, 1.00, 0.84, 1.0),
@@ -217,18 +235,18 @@ func _draw() -> void:
 		_draw_circuit_flow_groups()
 		_draw_recent_flows()
 		_draw_drag_sticky_connections()
+		_draw_inventory_slot_backings()
+		_draw_hint()
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
 		_draw_cell(cell, _visual_cell_center(cell), false, true, _cell_visual_scale(cell))
 	if _board_visible:
-		_draw_inventory_cells()
+		_draw_inventory_cells(false)
 	if not _drag_cell.is_empty():
 		_draw_cell(_drag_cell, _drag_position, true, true, _cell_visual_scale(_drag_cell))
 	if _board_visible and not _inventory_drag_cell.is_empty():
 		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
-	if _board_visible:
-		_draw_hint()
 	if _myco_transition_animation_active:
 		queue_redraw()
 
@@ -250,22 +268,22 @@ func _draw_profiled() -> void:
 		section_start_usec = Time.get_ticks_usec()
 		_draw_drag_sticky_connections()
 		_visual_profile_sticky_usec += Time.get_ticks_usec() - section_start_usec
+		section_start_usec = Time.get_ticks_usec()
+		_draw_inventory_slot_backings()
+		_draw_hint()
+		_visual_profile_hint_usec += Time.get_ticks_usec() - section_start_usec
 	section_start_usec = Time.get_ticks_usec()
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
 		_draw_cell(cell, _visual_cell_center(cell), false, true, _cell_visual_scale(cell))
 	if _board_visible:
-		_draw_inventory_cells()
+		_draw_inventory_cells(false)
 	if not _drag_cell.is_empty():
 		_draw_cell(_drag_cell, _drag_position, true, true, _cell_visual_scale(_drag_cell))
 	if _board_visible and not _inventory_drag_cell.is_empty():
 		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
 	_visual_profile_cells_usec += Time.get_ticks_usec() - section_start_usec
-	section_start_usec = Time.get_ticks_usec()
-	if _board_visible:
-		_draw_hint()
-	_visual_profile_hint_usec += Time.get_ticks_usec() - section_start_usec
 	var frame_usec := Time.get_ticks_usec() - frame_start_usec
 	_visual_profile_frame_usec += frame_usec
 	_visual_profile_max_frame_usec = maxi(_visual_profile_max_frame_usec, frame_usec)
@@ -762,7 +780,15 @@ func _draw_hint() -> void:
 	draw_arc(b_center, _tile_size * 0.49, 0.0, TAU, _arc_segments(_tile_size * 0.49), color, 5.0, true)
 
 
-func _draw_inventory_cells() -> void:
+func _draw_inventory_slot_backings() -> void:
+	for cell in _inventory_cells:
+		if not _inventory_centers.has(cell):
+			continue
+		var center: Vector2 = _inventory_centers[cell] as Vector2
+		_draw_inventory_slot_backing(center, _tile_size * INVENTORY_SLOT_SCALE)
+
+
+func _draw_inventory_cells(draw_backings: bool = true) -> void:
 	for cell in _inventory_cells:
 		if not _inventory_centers.has(cell):
 			continue
@@ -771,7 +797,8 @@ func _draw_inventory_cells() -> void:
 		var burst := sin((1.0 - fresh) * PI)
 		var slot_size := _tile_size * INVENTORY_SLOT_SCALE
 		var cell_center := _inventory_visual_center(center)
-		_draw_inventory_slot_backing(center, slot_size)
+		if draw_backings:
+			_draw_inventory_slot_backing(center, slot_size)
 		if cell != _inventory_drag_cell:
 			if fresh > 0.0:
 				var halo_radius := _tile_size * (0.50 + burst * 0.08)

@@ -65,7 +65,25 @@ public partial class CellularBoardRenderer : Control
         new(0.95f, 0.74f, 0.24f, 1.0f),
         new(0.36f, 0.52f, 0.95f, 1.0f),
         new(0.92f, 0.30f, 0.50f, 1.0f),
-        new(0.24f, 0.80f, 0.56f, 1.0f)
+        new(0.24f, 0.80f, 0.56f, 1.0f),
+        new(0.18f, 0.61f, 0.94f, 1.0f),
+        new(0.71f, 0.85f, 0.25f, 1.0f),
+        new(0.85f, 0.30f, 0.75f, 1.0f),
+        new(0.95f, 0.55f, 0.18f, 1.0f),
+        new(0.27f, 0.82f, 0.74f, 1.0f),
+        new(0.49f, 0.45f, 0.95f, 1.0f),
+        new(0.94f, 0.35f, 0.35f, 1.0f),
+        new(0.65f, 0.89f, 0.29f, 1.0f),
+        new(0.29f, 0.78f, 0.95f, 1.0f),
+        new(0.62f, 0.36f, 0.86f, 1.0f),
+        new(0.73f, 0.71f, 0.28f, 1.0f),
+        new(0.94f, 0.55f, 0.43f, 1.0f),
+        new(0.16f, 0.75f, 0.63f, 1.0f),
+        new(0.43f, 0.60f, 0.95f, 1.0f),
+        new(0.95f, 0.36f, 0.66f, 1.0f),
+        new(0.37f, 0.75f, 0.35f, 1.0f),
+        new(0.73f, 0.52f, 0.95f, 1.0f),
+        new(0.85f, 0.60f, 0.20f, 1.0f)
     ];
 
     private const float RedMycoRingRadius = 0.54f;
@@ -257,6 +275,8 @@ public partial class CellularBoardRenderer : Control
             DrawCircuitFlowGroups();
             DrawRecentFlows();
             DrawDragStickyConnections();
+            DrawInventorySlotBackings();
+            DrawHint();
         }
 
         foreach (var cell in _cells)
@@ -271,7 +291,7 @@ public partial class CellularBoardRenderer : Control
 
         if (_boardVisible)
         {
-            DrawInventoryCells();
+            DrawInventoryCells(drawBackings: false);
         }
 
         if (!string.IsNullOrEmpty(_dragCell))
@@ -282,7 +302,6 @@ public partial class CellularBoardRenderer : Control
         if (_boardVisible)
         {
             DrawInventoryDragCell();
-            DrawHint();
         }
     }
 
@@ -319,6 +338,14 @@ public partial class CellularBoardRenderer : Control
         _visualProfileStickyUsec += Time.GetTicksUsec() - sectionStart;
 
         sectionStart = Time.GetTicksUsec();
+        if (_boardVisible)
+        {
+            DrawInventorySlotBackings();
+            DrawHint();
+        }
+        _visualProfileHintUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
         foreach (var cell in _cells)
         {
             if (cell == _dragCell)
@@ -331,7 +358,7 @@ public partial class CellularBoardRenderer : Control
 
         if (_boardVisible)
         {
-            DrawInventoryCells();
+            DrawInventoryCells(drawBackings: false);
         }
 
         if (!string.IsNullOrEmpty(_dragCell))
@@ -344,13 +371,6 @@ public partial class CellularBoardRenderer : Control
             DrawInventoryDragCell();
         }
         _visualProfileCellsUsec += Time.GetTicksUsec() - sectionStart;
-
-        sectionStart = Time.GetTicksUsec();
-        if (_boardVisible)
-        {
-            DrawHint();
-        }
-        _visualProfileHintUsec += Time.GetTicksUsec() - sectionStart;
 
         var frameUsec = Time.GetTicksUsec() - frameStart;
         _visualProfileFrameUsec += frameUsec;
@@ -947,7 +967,18 @@ public partial class CellularBoardRenderer : Control
         DrawArc(b, _tileSize * 0.49f, 0.0f, Mathf.Tau, ArcSegments(_tileSize * 0.49f), hintColor, 5.0f, antialiased: true);
     }
 
-    private void DrawInventoryCells()
+    private void DrawInventorySlotBackings()
+    {
+        foreach (var cell in _inventoryCells)
+        {
+            if (_inventoryCenters.TryGetValue(cell, out var center))
+            {
+                DrawInventorySlotBacking(center, _tileSize * InventorySlotScale);
+            }
+        }
+    }
+
+    private void DrawInventoryCells(bool drawBackings = true)
     {
         foreach (var cell in _inventoryCells)
         {
@@ -958,7 +989,11 @@ public partial class CellularBoardRenderer : Control
                 var slotSize = _tileSize * InventorySlotScale;
                 var cellCenter = InventoryVisualCenter(center);
 
-                DrawInventorySlotBacking(center, slotSize);
+                if (drawBackings)
+                {
+                    DrawInventorySlotBacking(center, slotSize);
+                }
+
                 if (cell != _inventoryDragCell)
                 {
                     if (freshStrength > 0.0f)

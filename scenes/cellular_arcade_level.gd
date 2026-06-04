@@ -24,7 +24,25 @@ const RESOURCE_COLORS := [
 	Color(0.95, 0.74, 0.24, 1.0),
 	Color(0.36, 0.52, 0.95, 1.0),
 	Color(0.92, 0.30, 0.50, 1.0),
-	Color(0.24, 0.80, 0.56, 1.0)
+	Color(0.24, 0.80, 0.56, 1.0),
+	Color(0.18, 0.61, 0.94, 1.0),
+	Color(0.71, 0.85, 0.25, 1.0),
+	Color(0.85, 0.30, 0.75, 1.0),
+	Color(0.95, 0.55, 0.18, 1.0),
+	Color(0.27, 0.82, 0.74, 1.0),
+	Color(0.49, 0.45, 0.95, 1.0),
+	Color(0.94, 0.35, 0.35, 1.0),
+	Color(0.65, 0.89, 0.29, 1.0),
+	Color(0.29, 0.78, 0.95, 1.0),
+	Color(0.62, 0.36, 0.86, 1.0),
+	Color(0.73, 0.71, 0.28, 1.0),
+	Color(0.94, 0.55, 0.43, 1.0),
+	Color(0.16, 0.75, 0.63, 1.0),
+	Color(0.43, 0.60, 0.95, 1.0),
+	Color(0.95, 0.36, 0.66, 1.0),
+	Color(0.37, 0.75, 0.35, 1.0),
+	Color(0.73, 0.52, 0.95, 1.0),
+	Color(0.85, 0.60, 0.20, 1.0)
 ]
 const RED_MYCO_INVENTORY_CHANCE := 15
 const SOURCE_QUANTITY_PER_TICK := 32
@@ -1549,15 +1567,17 @@ func _status_font_size(text: String) -> int:
 
 func _draw_arcade_overlay(layer: Control) -> void:
 	if not _using_board_renderer:
-		_draw_fallback_board(layer)
+		_draw_fallback_board(layer, false)
+		_draw_inventory(layer, false)
+		_draw_hint_overlay(layer)
+		_draw_fallback_board_cells(layer)
 		_draw_inventory(layer, true)
 		_draw_inventory_drag(layer)
-		_draw_hint_overlay(layer)
 	_draw_clear_effect_overlay(layer)
 	_draw_high_score_sparkles(layer)
 
 
-func _draw_fallback_board(layer: Control) -> void:
+func _draw_fallback_board(layer: Control, draw_cells: bool = true) -> void:
 	layer.draw_rect(_board_view_rect, Color(0.006, 0.020, 0.024, 0.72), true)
 	for y in range(BOARD_ROWS):
 		for x in range(BOARD_COLS):
@@ -1569,6 +1589,11 @@ func _draw_fallback_board(layer: Control) -> void:
 			layer.draw_rect(rect, Color(0.24, 0.42, 0.42, 0.20), false, maxf(1.0, _tile_size * 0.014))
 	_draw_fallback_circuit_groups(layer)
 	_draw_fallback_recent_flows(layer)
+	if draw_cells:
+		_draw_fallback_board_cells(layer)
+
+
+func _draw_fallback_board_cells(layer: Control) -> void:
 	for id in _board_cell_ids:
 		if _drag_source == DRAG_SOURCE_BOARD and id == _drag_cell_id:
 			continue
@@ -1593,16 +1618,11 @@ func _draw_inventory(layer: Control, draw_cells: bool) -> void:
 		var shadow_rect := slot_rect.grow(_tile_size * 0.018)
 		shadow_rect.position += Vector2(0.0, _tile_size * 0.055)
 		var cell_center := _inventory_visual_center(index)
-		if draw_cells:
+		if not draw_cells:
 			layer.draw_rect(shadow_rect, Color(0.0, 0.012, 0.015, 0.50), true)
 			layer.draw_rect(slot_rect, Color(0.085, 0.120, 0.130, 0.98), true)
 			layer.draw_rect(slot_rect.grow(-_tile_size * 0.045), Color(0.115, 0.158, 0.165, 0.55), true)
 			layer.draw_rect(slot_rect.grow(-_tile_size * 0.030), Color(0.24, 0.42, 0.42, 0.20), false, maxf(1.4, _tile_size * 0.018))
-		if not draw_cells:
-			layer.draw_rect(shadow_rect, Color(0.0, 0.012, 0.015, 0.30), false, maxf(3.0, _tile_size * 0.040))
-			layer.draw_rect(slot_rect.grow(-_tile_size * 0.030), Color(1.0, 1.0, 1.0, 0.13), false, maxf(1.2, _tile_size * 0.016))
-			layer.draw_rect(slot_rect, Color(0.08, 0.25, 0.21, 0.72), false, maxf(5.0, _tile_size * 0.074))
-			layer.draw_rect(slot_rect.grow(-_tile_size * 0.022), Color(0.54, 1.0, 0.84, 0.82), false, maxf(3.2, _tile_size * 0.046))
 			continue
 		if index < _inventory_cells.size():
 			if _drag_source == DRAG_SOURCE_INVENTORY and index == _drag_inventory_index:
@@ -2760,10 +2780,12 @@ func _clear_hint(update_hud: bool = true) -> void:
 
 func _arcade_hint_candidates() -> Array:
 	var candidates: Array = []
+	var component_ids_by_cell: Dictionary = _board_component_ids_by_cell()
 	for inv_cell in _inventory_cells:
 		for board_id in _board_cell_ids:
 			var board_cell: Dictionary = _board_cells.get(board_id, {})
-			var inventory_score := _inventory_hint_score(inv_cell, board_cell)
+			var board_component_ids: Array[String] = _component_ids_for_board_cell(board_id, component_ids_by_cell)
+			var inventory_score := _inventory_hint_score_for_component(inv_cell, board_cell, board_component_ids)
 			if inventory_score <= 0.0:
 				continue
 			candidates.append({
@@ -2779,9 +2801,13 @@ func _arcade_hint_candidates() -> Array:
 			var b_id := _board_cell_ids[j]
 			if _get_cell_tile(a_id).distance_squared_to(_get_cell_tile(b_id)) == 1:
 				continue
+			var a_component_ids: Array[String] = _component_ids_for_board_cell(a_id, component_ids_by_cell)
+			var b_component_ids: Array[String] = _component_ids_for_board_cell(b_id, component_ids_by_cell)
+			if _components_overlap(a_component_ids, b_component_ids):
+				continue
 			var a_cell: Dictionary = _board_cells.get(a_id, {})
 			var b_cell: Dictionary = _board_cells.get(b_id, {})
-			var board_score := _hint_pair_score(a_cell, b_cell)
+			var board_score := _hint_pair_score_for_components(a_cell, b_cell, a_component_ids, b_component_ids)
 			if board_score <= 0.0:
 				continue
 			candidates.append({
@@ -2806,48 +2832,282 @@ func _compare_hint_candidates(a: Variant, b: Variant) -> bool:
 
 
 func _inventory_hint_score(inventory_cell: Dictionary, board_cell: Dictionary) -> float:
-	var inventory_to_board := _cell_offer_match_count(inventory_cell, board_cell)
-	var board_to_inventory := _cell_offer_match_count(board_cell, inventory_cell)
-	if inventory_to_board <= 0 and board_to_inventory <= 0:
+	var component_ids_by_cell: Dictionary = _board_component_ids_by_cell()
+	var board_id := str(board_cell.get("id", ""))
+	var board_component_ids: Array[String] = _component_ids_for_board_cell(board_id, component_ids_by_cell)
+	return _inventory_hint_score_for_component(inventory_cell, board_cell, board_component_ids)
+
+
+func _inventory_hint_score_for_component(inventory_cell: Dictionary, board_cell: Dictionary, board_component_ids: Array[String]) -> float:
+	var board_id := str(board_cell.get("id", ""))
+	if board_component_ids.is_empty() and not board_id.is_empty():
+		board_component_ids = [board_id]
+	var inventory_to_board: Dictionary = _hint_cell_to_component_score(inventory_cell, board_component_ids, board_id)
+	var board_to_inventory: Dictionary = _hint_component_to_cell_score(board_component_ids, board_id, inventory_cell)
+	var forward_score := float(inventory_to_board.get("score", 0.0))
+	var reverse_score := float(board_to_inventory.get("score", 0.0))
+	var forward_matches := int(inventory_to_board.get("matches", 0))
+	var reverse_matches := int(board_to_inventory.get("matches", 0))
+	var forward_empty_matches := int(inventory_to_board.get("emptyMatches", 0))
+	var inventory_is_red_myco := _cell_is_red_myco(inventory_cell)
+	if forward_matches <= 0 and reverse_matches <= 0:
 		return 0.0
-	var score := float(inventory_to_board * 4 + board_to_inventory * 2)
-	if inventory_to_board > 0 and board_to_inventory > 0:
-		score += 5.0
-	if _cell_has_main_need_match(inventory_cell, board_cell):
-		score += 4.0
-	if _cell_has_main_need_match(board_cell, inventory_cell):
-		score += 4.0
-	if _cell_is_red_myco(inventory_cell):
-		score += 1.0
+	if forward_matches <= 0 and not inventory_is_red_myco:
+		return 0.0
+	if reverse_matches <= 0 and forward_empty_matches <= 0 and not inventory_is_red_myco:
+		return 0.0
+	var score := forward_score + reverse_score
+	if forward_matches > 0 and reverse_matches > 0:
+		score += 90.0
+	elif forward_matches > 0:
+		score = forward_score * 0.22 + float(forward_empty_matches) * 12.0
+	if forward_empty_matches > 0:
+		score += float(forward_empty_matches) * (60.0 if reverse_matches > 0 else 0.0)
+	if inventory_is_red_myco:
+		score += 35.0
 	return score
 
 
 func _hint_pair_score(a: Dictionary, b: Dictionary) -> float:
-	var a_to_b := _cell_offer_match_count(a, b)
-	var b_to_a := _cell_offer_match_count(b, a)
-	if a_to_b <= 0 or b_to_a <= 0:
+	var component_ids_by_cell: Dictionary = _board_component_ids_by_cell()
+	var a_component_ids: Array[String] = _component_ids_for_board_cell(str(a.get("id", "")), component_ids_by_cell)
+	var b_component_ids: Array[String] = _component_ids_for_board_cell(str(b.get("id", "")), component_ids_by_cell)
+	if _components_overlap(a_component_ids, b_component_ids):
 		return 0.0
-	var score := float(a_to_b + b_to_a)
-	if _cell_has_main_need_match(a, b):
-		score += 5.0
-	if _cell_has_main_need_match(b, a):
-		score += 5.0
-	if _cell_is_red_myco(a) or _cell_is_red_myco(b):
-		score += 1.0
+	return _hint_pair_score_for_components(a, b, a_component_ids, b_component_ids)
+
+
+func _hint_pair_score_for_components(a: Dictionary, b: Dictionary, a_component_ids: Array[String], b_component_ids: Array[String]) -> float:
+	var a_id := str(a.get("id", ""))
+	var b_id := str(b.get("id", ""))
+	var a_to_b: Dictionary = _hint_component_to_component_score(a_component_ids, b_component_ids, a_id, b_id)
+	var b_to_a: Dictionary = _hint_component_to_component_score(b_component_ids, a_component_ids, b_id, a_id)
+	var a_to_b_matches := int(a_to_b.get("matches", 0))
+	var b_to_a_matches := int(b_to_a.get("matches", 0))
+	if a_to_b_matches <= 0 and b_to_a_matches <= 0:
+		return 0.0
+	var match_count := a_to_b_matches + b_to_a_matches
+	var empty_match_count := int(a_to_b.get("emptyMatches", 0)) + int(b_to_a.get("emptyMatches", 0))
+	var direct_match_count := int(a_to_b.get("directMatches", 0)) + int(b_to_a.get("directMatches", 0))
+	var has_red_myco := _cell_is_red_myco(a) or _cell_is_red_myco(b)
+	var score := float(a_to_b.get("score", 0.0)) + float(b_to_a.get("score", 0.0))
+	if a_to_b_matches > 0 and b_to_a_matches > 0:
+		score += 120.0
+		score += float(empty_match_count) * 44.0
+		score += float(direct_match_count) * 28.0
+	else:
+		if match_count < 2 and not has_red_myco:
+			return 0.0
+		score *= 0.12
+		score += float(empty_match_count) * 4.0
+		score += float(maxi(0, match_count - 1)) * 3.0
+	if has_red_myco:
+		score += 18.0
 	return score
 
 
-func _cell_offer_match_count(source: Dictionary, target: Dictionary) -> int:
-	var count := 0
-	for resource in _cell_offer_resources(source):
-		if _cell_accepts_resource_doc(target, resource):
-			count += 1
-	return count
+func _board_component_ids_by_cell() -> Dictionary:
+	var result: Dictionary = {}
+	var all_ids: Array[String] = []
+	for id in _board_cell_ids:
+		all_ids.append(id)
+	for component_value in _connected_board_subgroups(all_ids):
+		var component_ids := _strings_from_variant_array(component_value)
+		for id in component_ids:
+			result[id] = component_ids
+	return result
 
 
-func _cell_has_main_need_match(a: Dictionary, b: Dictionary) -> bool:
-	var produced := str(a.get("produced", ""))
-	return not produced.is_empty() and _cell_needs_resource_doc(b, produced)
+func _component_ids_for_board_cell(cell_id: String, component_ids_by_cell: Dictionary) -> Array[String]:
+	var component_ids: Array[String] = []
+	var value: Variant = component_ids_by_cell.get(cell_id, [])
+	if value is Array:
+		for id_value in value as Array:
+			var id := str(id_value)
+			if _board_cells.has(id) and not component_ids.has(id):
+				component_ids.append(id)
+	if component_ids.is_empty() and _board_cells.has(cell_id):
+		component_ids.append(cell_id)
+	return component_ids
+
+
+func _components_overlap(a_component_ids: Array[String], b_component_ids: Array[String]) -> bool:
+	for id in a_component_ids:
+		if b_component_ids.has(id):
+			return true
+	return false
+
+
+func _hint_cell_to_component_score(source_cell: Dictionary, target_component_ids: Array[String], target_focus_id: String) -> Dictionary:
+	var source_offers := _hint_offer_resources_for_cell(source_cell, target_component_ids)
+	return _hint_offers_to_component_score(source_offers, target_component_ids, target_focus_id)
+
+
+func _hint_component_to_cell_score(source_component_ids: Array[String], source_focus_id: String, target_cell: Dictionary) -> Dictionary:
+	var target_context_ids: Array[String] = []
+	for context_id in source_component_ids:
+		target_context_ids.append(context_id)
+	var target_needs := _hint_need_resources_for_cell(target_cell, target_context_ids)
+	var target_id := str(target_cell.get("id", ""))
+	var result := _empty_hint_score()
+	for source_id in source_component_ids:
+		var source_cell: Dictionary = _board_cells.get(source_id, {})
+		var source_offers := _hint_offer_resources_for_cell(source_cell, [])
+		var source_is_focus := source_id == source_focus_id
+		for resource in source_offers:
+			if not target_needs.has(resource):
+				continue
+			var need_is_empty := _cell_need_is_empty(target_id, resource)
+			var weight := 10.0
+			if source_is_focus and need_is_empty:
+				weight = 42.0
+			elif source_is_focus or need_is_empty:
+				weight = 24.0
+			_add_hint_match_score(result, weight, need_is_empty, source_is_focus)
+	return result
+
+
+func _hint_component_to_component_score(source_component_ids: Array[String], target_component_ids: Array[String], source_focus_id: String, target_focus_id: String) -> Dictionary:
+	var result := _empty_hint_score()
+	for source_id in source_component_ids:
+		var source_cell: Dictionary = _board_cells.get(source_id, {})
+		var source_offers := _hint_offer_resources_for_cell(source_cell, [])
+		var source_is_focus := source_id == source_focus_id
+		if source_offers.is_empty():
+			continue
+		for target_id in target_component_ids:
+			var target_cell: Dictionary = _board_cells.get(target_id, {})
+			var target_needs := _hint_need_resources_for_cell(target_cell, target_component_ids)
+			var target_is_focus := target_id == target_focus_id
+			for resource in source_offers:
+				if not target_needs.has(resource):
+					continue
+				var need_is_empty := _cell_need_is_empty(target_id, resource)
+				var weight := 10.0
+				if source_is_focus and target_is_focus:
+					weight = 70.0 if need_is_empty else 44.0
+				elif source_is_focus or target_is_focus:
+					weight = 44.0 if need_is_empty else 24.0
+				elif need_is_empty:
+					weight = 24.0
+				_add_hint_match_score(result, weight, need_is_empty, source_is_focus and target_is_focus)
+	return result
+
+
+func _hint_offers_to_component_score(offer_resources: Array[String], target_component_ids: Array[String], target_focus_id: String) -> Dictionary:
+	var result := _empty_hint_score()
+	for target_id in target_component_ids:
+		var target_cell: Dictionary = _board_cells.get(target_id, {})
+		var target_needs := _hint_need_resources_for_cell(target_cell, target_component_ids)
+		var target_is_focus := target_id == target_focus_id
+		for resource in offer_resources:
+			if not target_needs.has(resource):
+				continue
+			var need_is_empty := _cell_need_is_empty(target_id, resource)
+			var weight := 16.0
+			if target_is_focus and need_is_empty:
+				weight = 58.0
+			elif target_is_focus or need_is_empty:
+				weight = 34.0
+			_add_hint_match_score(result, weight, need_is_empty, target_is_focus)
+	return result
+
+
+func _empty_hint_score() -> Dictionary:
+	return {
+		"score": 0.0,
+		"matches": 0,
+		"emptyMatches": 0,
+		"directMatches": 0
+	}
+
+
+func _add_hint_match_score(score_data: Dictionary, weight: float, empty_match: bool, direct_match: bool) -> void:
+	score_data["score"] = float(score_data.get("score", 0.0)) + weight
+	score_data["matches"] = int(score_data.get("matches", 0)) + 1
+	if empty_match:
+		score_data["emptyMatches"] = int(score_data.get("emptyMatches", 0)) + 1
+	if direct_match:
+		score_data["directMatches"] = int(score_data.get("directMatches", 0)) + 1
+
+
+func _hint_offer_resources_for_cell(cell: Dictionary, context_component_ids: Array[String]) -> Array[String]:
+	if _cell_is_red_myco(cell):
+		var red_myco_needs := _cell_need_resources_doc(cell)
+		var id := str(cell.get("id", ""))
+		if red_myco_needs.is_empty() and not _board_cells.has(id):
+			return _predict_myco_resources_for_component(context_component_ids)
+		return red_myco_needs
+	var resources: Array[String] = []
+	var produced := str(cell.get("produced", ""))
+	if not produced.is_empty():
+		resources.append(produced)
+	return resources
+
+
+func _hint_need_resources_for_cell(cell: Dictionary, context_component_ids: Array[String]) -> Array[String]:
+	if _cell_is_red_myco(cell):
+		var red_myco_needs := _cell_need_resources_doc(cell)
+		var id := str(cell.get("id", ""))
+		if red_myco_needs.is_empty() and not _board_cells.has(id):
+			return _predict_myco_resources_for_component(context_component_ids)
+		return red_myco_needs
+	return _cell_need_resources_doc(cell)
+
+
+func _predict_myco_resources_for_component(component_ids: Array[String]) -> Array[String]:
+	var resources: Array[String] = []
+	for id in component_ids:
+		var cell: Dictionary = _board_cells.get(id, {})
+		for offer in _cell_offer_resources(cell):
+			_append_unique_hint_resource(resources, offer)
+			if resources.size() >= 4:
+				return resources
+	for id in component_ids:
+		var cell: Dictionary = _board_cells.get(id, {})
+		for need in _cell_need_resources_doc(cell):
+			_append_unique_hint_resource(resources, need)
+			if resources.size() >= 4:
+				return resources
+	return resources
+
+
+func _append_unique_hint_resource(resources: Array[String], resource: String) -> void:
+	if not resource.is_empty() and not resources.has(resource):
+		resources.append(resource)
+
+
+func _cell_need_resources_doc(cell: Dictionary) -> Array[String]:
+	var resources: Array[String] = []
+	var needs_value: Variant = cell.get("needs", [])
+	if not needs_value is Array:
+		return resources
+	for need in needs_value:
+		var resource := str(need)
+		if not resource.is_empty() and not resources.has(resource):
+			resources.append(resource)
+	return resources
+
+
+func _cell_need_is_empty(cell_id: String, resource: String) -> bool:
+	if cell_id.is_empty() or resource.is_empty():
+		return false
+	var state_value: Variant = _cell_state_by_id.get(cell_id, {})
+	if not state_value is Dictionary:
+		return false
+	var slots_value: Variant = (state_value as Dictionary).get("slots", [])
+	if not slots_value is Array:
+		return false
+	for slot_value in slots_value as Array:
+		if not slot_value is Dictionary:
+			continue
+		var slot := slot_value as Dictionary
+		if str(slot.get("role", "")) != "Need":
+			continue
+		if str(slot.get("resource", "")) != resource:
+			continue
+		return int(slot.get("quantity", 0)) <= 0 and float(slot.get("fullness", 0.0)) <= 0.0
+	return false
 
 
 func _cell_offer_resources(cell: Dictionary) -> Array[String]:

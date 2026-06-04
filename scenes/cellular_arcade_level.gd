@@ -9,6 +9,7 @@ const INVENTORY_SLOT_COUNT := 3
 const CLEAR_GROUP_MIN_SIZE := 4
 const CLEAR_EFFECT_MAX_SCALE_COUNT := 10
 const CLEAR_SETTLE_TICKS := 6
+const FULL_BOARD_GAME_OVER_GRACE_SECONDS := 5.0
 const NORMAL_MIN_NEEDS := 3
 const NORMAL_MAX_NEEDS := 3
 const NORMAL_ONE_NEED_WEIGHT := 20
@@ -126,11 +127,15 @@ var _pinch_last_center := Vector2.ZERO
 
 var _hint_button: Button = null
 var _hint_pair: Array[String] = []
-var _hint_cursor := 0
+var _hint_inventory_cursor := 0
+var _hint_board_cursor := 0
+var _hint_next_inventory_board := true
 var _hint_text := ""
 var _score := 0
 var _game_over := false
 var _full_board_pending_check := false
+var _full_board_game_over_grace_elapsed := 0.0
+var _run_had_new_high_score := false
 var _status_text := ""
 var _clear_effect_ids: Array[String] = []
 var _clear_effect_elapsed := 0.0
@@ -193,6 +198,7 @@ func _process(delta: float) -> void:
 	var inventory_fresh_active := _has_inventory_fresh_animation()
 	var hud_pulse_active := score_pulse_active or high_score_pulse_active
 	if _is_clear_effect_active():
+		_reset_full_board_game_over_grace()
 		_clear_effect_elapsed += maxf(delta, 0.0)
 		_board_renderer_full_sync_needed = true
 		if _clear_effect_elapsed >= CLEAR_EFFECT_SECONDS:
@@ -209,12 +215,17 @@ func _process(delta: float) -> void:
 		if ticked:
 			_refresh_sim_snapshot()
 			var cleared := _clear_qualifying_groups()
-			if not cleared and _full_board_pending_check and _is_board_full():
+			if cleared:
+				_reset_full_board_game_over_grace()
+			elif _update_full_board_game_over_grace(delta):
 				_show_game_over()
+			queue_redraw()
+		elif _update_full_board_game_over_grace(delta):
+			_show_game_over()
 			queue_redraw()
 		elif hud_pulse_active or inventory_fresh_active:
 			queue_redraw()
-	elif _full_board_pending_check and _is_board_full():
+	elif _update_full_board_game_over_grace(delta):
 		_show_game_over()
 	elif _has_live_visual_animation() or hud_pulse_active or inventory_fresh_active:
 		queue_redraw()
@@ -351,6 +362,7 @@ func _create_hud() -> void:
 	_game_over_score_label.name = "GameOverScoreLabel"
 	_game_over_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_game_over_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_game_over_score_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_game_over_panel.add_child(_game_over_score_label)
 
 	_game_over_restart_button = Button.new()
@@ -386,8 +398,12 @@ func _start_run() -> void:
 	Global.score = 0
 	_game_over = false
 	_full_board_pending_check = false
+	_full_board_game_over_grace_elapsed = 0.0
+	_run_had_new_high_score = false
 	_hint_pair.clear()
-	_hint_cursor = 0
+	_hint_inventory_cursor = 0
+	_hint_board_cursor = 0
+	_hint_next_inventory_board = true
 	_hint_text = ""
 	_status_text = ""
 	_clear_effect_ids.clear()
@@ -746,6 +762,7 @@ func _reload_sim_from_board() -> void:
 	_sim_snapshot.clear()
 	_cell_state_by_id.clear()
 	_full_board_pending_check = _is_board_full()
+	_reset_full_board_game_over_grace()
 	if _board_cell_ids.is_empty():
 		_status_text = ""
 		_board_renderer_full_sync_needed = true
@@ -764,6 +781,7 @@ func _reload_sim_from_board() -> void:
 	_status_text = ""
 	_refresh_sim_snapshot()
 	_full_board_pending_check = _is_board_full()
+	_reset_full_board_game_over_grace()
 
 
 func _build_fixture_document() -> Dictionary:
@@ -900,6 +918,7 @@ func _clear_qualifying_groups() -> bool:
 	_score += points
 	Global.add_score(points)
 	if _score > previous_high_score and int(Global.high_score) > previous_high_score:
+		_run_had_new_high_score = true
 		_start_high_score_pulse()
 	_status_text = _clear_message(cleared_count)
 	_clear_hint(false)
@@ -915,6 +934,7 @@ func _start_clear_effect(clear_ids: Array[String]) -> void:
 	for id in clear_ids:
 		_clear_effect_ids.append(id)
 	_clear_effect_elapsed = 0.0
+	_reset_full_board_game_over_grace()
 	_score_pulse_elapsed = 0.0
 	_apply_score_pulse_visual()
 	_board_renderer_full_sync_needed = true
@@ -968,6 +988,7 @@ func _finish_clear_effect() -> void:
 		if index >= _inventory_cells.size():
 			_inventory_cells.append(_make_inventory_cell())
 	_full_board_pending_check = false
+	_reset_full_board_game_over_grace()
 	_update_hud_text()
 	_board_renderer_full_sync_needed = true
 
@@ -1077,6 +1098,7 @@ func _show_game_over() -> void:
 	if _game_over:
 		return
 	_game_over = true
+	_reset_full_board_game_over_grace()
 	Global.record_last_score(_score)
 	_update_hud_text()
 	if is_instance_valid(_game_over_panel):
@@ -1088,6 +1110,25 @@ func _show_game_over() -> void:
 
 func _is_board_full() -> bool:
 	return _board_cell_ids.size() >= BOARD_TILE_COUNT
+
+
+func _reset_full_board_game_over_grace() -> void:
+	_full_board_game_over_grace_elapsed = 0.0
+
+
+func _update_full_board_game_over_grace(delta: float) -> bool:
+	if _game_over or _is_clear_effect_active():
+		_reset_full_board_game_over_grace()
+		return false
+	if not _full_board_pending_check or not _is_board_full():
+		_full_board_pending_check = false
+		_reset_full_board_game_over_grace()
+		return false
+	if not _pending_clear_ids.is_empty():
+		_reset_full_board_game_over_grace()
+		return false
+	_full_board_game_over_grace_elapsed += maxf(delta, 0.0)
+	return _full_board_game_over_grace_elapsed >= FULL_BOARD_GAME_OVER_GRACE_SECONDS
 
 
 func _random_empty_board_tile() -> Vector2i:
@@ -1287,19 +1328,19 @@ func _pan_arcade_camera_by_screen_delta(delta: Vector2) -> void:
 func _layout_game_over_panel(view_size: Vector2) -> void:
 	if not is_instance_valid(_game_over_panel):
 		return
-	var panel_size := Vector2(minf(360.0, view_size.x - 32.0), 230.0)
+	var panel_size := Vector2(minf(380.0, view_size.x - 32.0), 250.0)
 	var panel_pos := (view_size - panel_size) * 0.5
 	_set_control_rect(_game_over_panel, panel_pos, panel_size)
 	_game_over_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.07, 0.08, 0.94), Color(0.45, 1.0, 0.82, 0.84), 3, 8))
-	_set_control_rect(_game_over_title, Vector2(18.0, 20.0), Vector2(panel_size.x - 36.0, 50.0))
-	_set_control_rect(_game_over_score_label, Vector2(18.0, 78.0), Vector2(panel_size.x - 36.0, 50.0))
+	_set_control_rect(_game_over_title, Vector2(22.0, 22.0), Vector2(panel_size.x - 44.0, 48.0))
+	_set_control_rect(_game_over_score_label, Vector2(24.0, 82.0), Vector2(panel_size.x - 48.0, 76.0))
 	var button_w := (panel_size.x - 52.0) * 0.5
-	_set_control_rect(_game_over_restart_button, Vector2(18.0, 154.0), Vector2(button_w, 48.0))
-	_set_control_rect(_game_over_menu_button, Vector2(34.0 + button_w, 154.0), Vector2(button_w, 48.0))
+	_set_control_rect(_game_over_restart_button, Vector2(18.0, 178.0), Vector2(button_w, 48.0))
+	_set_control_rect(_game_over_menu_button, Vector2(34.0 + button_w, 178.0), Vector2(button_w, 48.0))
 	_style_button(_game_over_restart_button)
 	_style_button(_game_over_menu_button)
 	_style_label(_game_over_title, 31, Color(0.88, 1.0, 0.96, 1.0))
-	_style_label(_game_over_score_label, 20, Color(0.78, 0.95, 0.92, 1.0))
+	_style_label(_game_over_score_label, 22, Color(0.78, 0.95, 0.92, 1.0))
 
 
 func _get_arcade_safe_edge_margin() -> float:
@@ -1488,7 +1529,14 @@ func _update_hud_text() -> void:
 		_status_label.text = _hint_text if not _hint_text.is_empty() else _status_text
 		_status_label.add_theme_font_size_override("font_size", _status_font_size(_status_label.text))
 	if is_instance_valid(_game_over_score_label):
-		_game_over_score_label.text = str("Cells Cleared ", Global.format_score_value(_score), "  |  Most Cleared ", Global.format_score_value(Global.high_score))
+		_game_over_score_label.text = _game_over_score_text()
+
+
+func _game_over_score_text() -> String:
+	var cleared_text := str(Global.format_score_value(_score), " Cells Cleared!")
+	if _run_had_new_high_score:
+		return str(cleared_text, "\nHigh Score!")
+	return str(cleared_text, "\nMost Cells Cleared ", Global.format_score_value(Global.high_score))
 
 
 func _status_font_size(text: String) -> int:
@@ -1502,9 +1550,9 @@ func _status_font_size(text: String) -> int:
 func _draw_arcade_overlay(layer: Control) -> void:
 	if not _using_board_renderer:
 		_draw_fallback_board(layer)
-		_draw_hint_overlay(layer)
 		_draw_inventory(layer, true)
 		_draw_inventory_drag(layer)
+		_draw_hint_overlay(layer)
 	_draw_clear_effect_overlay(layer)
 	_draw_high_score_sparkles(layer)
 
@@ -2651,13 +2699,54 @@ func _on_hint_pressed() -> void:
 		_update_hud_text()
 		queue_redraw()
 		return
-	var candidate: Dictionary = candidates[_hint_cursor % candidates.size()] as Dictionary
-	_hint_cursor += 1
+	var inventory_candidates: Array = []
+	var board_candidates: Array = []
+	for candidate_value in candidates:
+		if not candidate_value is Dictionary:
+			continue
+		var candidate_entry: Dictionary = candidate_value as Dictionary
+		var candidate_kind := str(candidate_entry.get("kind", ""))
+		if candidate_kind == "inventory":
+			inventory_candidates.append(candidate_entry)
+		elif candidate_kind == "board":
+			board_candidates.append(candidate_entry)
+	var candidate: Dictionary = _select_arcade_hint_candidate(inventory_candidates, board_candidates)
+	if candidate.is_empty():
+		_hint_pair.clear()
+		_hint_text = "No useful connection found"
+		_board_renderer_full_sync_needed = true
+		_update_hud_text()
+		queue_redraw()
+		return
 	_hint_pair = [str(candidate.get("a", "")), str(candidate.get("b", ""))]
 	_hint_text = str(candidate.get("text", "Hint: connect these cells"))
 	_board_renderer_full_sync_needed = true
 	_update_hud_text()
 	queue_redraw()
+
+
+func _select_arcade_hint_candidate(inventory_candidates: Array, board_candidates: Array) -> Dictionary:
+	if not inventory_candidates.is_empty() and not board_candidates.is_empty():
+		if _hint_next_inventory_board:
+			var inventory_candidate: Dictionary = inventory_candidates[_hint_inventory_cursor % inventory_candidates.size()] as Dictionary
+			_hint_inventory_cursor += 1
+			_hint_next_inventory_board = false
+			return inventory_candidate
+		var board_candidate: Dictionary = board_candidates[_hint_board_cursor % board_candidates.size()] as Dictionary
+		_hint_board_cursor += 1
+		_hint_next_inventory_board = true
+		return board_candidate
+	if not inventory_candidates.is_empty():
+		var inventory_only_candidate: Dictionary = inventory_candidates[_hint_inventory_cursor % inventory_candidates.size()] as Dictionary
+		_hint_inventory_cursor += 1
+		_hint_next_inventory_board = false
+		return inventory_only_candidate
+	if not board_candidates.is_empty():
+		var board_only_candidate: Dictionary = board_candidates[_hint_board_cursor % board_candidates.size()] as Dictionary
+		_hint_board_cursor += 1
+		_hint_next_inventory_board = true
+		return board_only_candidate
+	return {}
 
 
 func _clear_hint(update_hud: bool = true) -> void:
@@ -2680,6 +2769,7 @@ func _arcade_hint_candidates() -> Array:
 			candidates.append({
 				"a": str(inv_cell.get("id", "")),
 				"b": board_id,
+				"kind": "inventory",
 				"score": inventory_score + 100.0,
 				"text": str("Hint: place ", _cell_hint_mark(inv_cell), " next to ", _cell_hint_mark(board_cell))
 			})
@@ -2697,6 +2787,7 @@ func _arcade_hint_candidates() -> Array:
 			candidates.append({
 				"a": a_id,
 				"b": b_id,
+				"kind": "board",
 				"score": board_score,
 				"text": str("Hint: connect ", _cell_hint_mark(a_cell), " with ", _cell_hint_mark(b_cell))
 			})

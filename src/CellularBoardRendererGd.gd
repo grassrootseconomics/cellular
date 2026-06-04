@@ -217,7 +217,6 @@ func _draw() -> void:
 		_draw_circuit_flow_groups()
 		_draw_recent_flows()
 		_draw_drag_sticky_connections()
-		_draw_hint()
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
@@ -228,6 +227,8 @@ func _draw() -> void:
 		_draw_cell(_drag_cell, _drag_position, true, true, _cell_visual_scale(_drag_cell))
 	if _board_visible and not _inventory_drag_cell.is_empty():
 		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
+	if _board_visible:
+		_draw_hint()
 	if _myco_transition_animation_active:
 		queue_redraw()
 
@@ -249,9 +250,6 @@ func _draw_profiled() -> void:
 		section_start_usec = Time.get_ticks_usec()
 		_draw_drag_sticky_connections()
 		_visual_profile_sticky_usec += Time.get_ticks_usec() - section_start_usec
-		section_start_usec = Time.get_ticks_usec()
-		_draw_hint()
-		_visual_profile_hint_usec += Time.get_ticks_usec() - section_start_usec
 	section_start_usec = Time.get_ticks_usec()
 	for cell in _cells:
 		if cell == _drag_cell:
@@ -264,6 +262,10 @@ func _draw_profiled() -> void:
 	if _board_visible and not _inventory_drag_cell.is_empty():
 		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
 	_visual_profile_cells_usec += Time.get_ticks_usec() - section_start_usec
+	section_start_usec = Time.get_ticks_usec()
+	if _board_visible:
+		_draw_hint()
+	_visual_profile_hint_usec += Time.get_ticks_usec() - section_start_usec
 	var frame_usec := Time.get_ticks_usec() - frame_start_usec
 	_visual_profile_frame_usec += frame_usec
 	_visual_profile_max_frame_usec = maxi(_visual_profile_max_frame_usec, frame_usec)

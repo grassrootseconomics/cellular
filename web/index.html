@@ -94,6 +94,22 @@ body {
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 <link rel="manifest" href="index.manifest.json">
 
+			<meta name="cellular-version" content="0.0.3">
+		<meta name="cellular-release" content="0.0.3-20260604154941">
+	<script>
+if (location.search.indexOf('cellular-clear-service-worker=1') !== -1 && 'serviceWorker' in navigator) {
+	navigator.serviceWorker.getRegistrations().then((registrations) => {
+		return Promise.all(registrations.map((registration) => registration.unregister()));
+	}).then(() => {
+		if ('caches' in window) {
+			return caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+		}
+	}).then(() => {
+		location.replace(location.pathname);
+	});
+}
+</script>
+
 	</head>
 	<body>
 		<canvas id="canvas">
@@ -112,7 +128,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":3818220,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":3833228,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

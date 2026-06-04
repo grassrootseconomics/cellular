@@ -257,7 +257,6 @@ public partial class CellularBoardRenderer : Control
             DrawCircuitFlowGroups();
             DrawRecentFlows();
             DrawDragStickyConnections();
-            DrawHint();
         }
 
         foreach (var cell in _cells)
@@ -283,6 +282,7 @@ public partial class CellularBoardRenderer : Control
         if (_boardVisible)
         {
             DrawInventoryDragCell();
+            DrawHint();
         }
     }
 
@@ -319,13 +319,6 @@ public partial class CellularBoardRenderer : Control
         _visualProfileStickyUsec += Time.GetTicksUsec() - sectionStart;
 
         sectionStart = Time.GetTicksUsec();
-        if (_boardVisible)
-        {
-            DrawHint();
-        }
-        _visualProfileHintUsec += Time.GetTicksUsec() - sectionStart;
-
-        sectionStart = Time.GetTicksUsec();
         foreach (var cell in _cells)
         {
             if (cell == _dragCell)
@@ -351,6 +344,13 @@ public partial class CellularBoardRenderer : Control
             DrawInventoryDragCell();
         }
         _visualProfileCellsUsec += Time.GetTicksUsec() - sectionStart;
+
+        sectionStart = Time.GetTicksUsec();
+        if (_boardVisible)
+        {
+            DrawHint();
+        }
+        _visualProfileHintUsec += Time.GetTicksUsec() - sectionStart;
 
         var frameUsec = Time.GetTicksUsec() - frameStart;
         _visualProfileFrameUsec += frameUsec;

@@ -6,6 +6,9 @@ const PIP_ANGLE_SMOOTH := 0.14
 const PIP_OFFSET_SMOOTH := 0.16
 const ZERO_PIP_PULSE_PERIOD_MSEC := 3000
 const ZERO_PIP_PULSE_FADE_MSEC := 1000
+const ZERO_PIP_PULSE_GLOW_SCALE := 1.20
+const ZERO_PIP_PULSE_BRIGHTNESS_SCALE := 1.20
+const ZERO_PIP_PULSE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const MYCO_FADE_OUT_MSEC := 1000
 const MYCO_ADAPT_TRANSITION_MSEC := 2000
 const MYCO_WAITING_SIGNATURE := "<waiting>"
@@ -15,6 +18,13 @@ const LOOKUP_KEY_SEPARATOR := "||"
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
 const INVENTORY_CELL_Y_OFFSET := 0.06
+const CELL_STRESS_GLOW_STRENGTH := 0.20
+const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
+const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
+const NEED_PIP_MARK_SIZE_SCALE := 1.10
+const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_STATE_MISSING := "missing"
 const NEED_STATE_AVAILABLE := "available"
 const NEED_STATE_ACTIVE := "active"
@@ -98,6 +108,7 @@ var _draw_visual_needs_cache: Dictionary = {}
 var _draw_cell_glow_cache: Dictionary = {}
 var _draw_reaction_alpha_cache: Dictionary = {}
 var _draw_slot_fullness_cache: Dictionary = {}
+var _draw_need_health_cache: Dictionary = {}
 var _visual_profile_enabled := false
 var _visual_profile_print_every := 120
 var _visual_profile_frames := 0
@@ -261,6 +272,7 @@ func _clear_frame_draw_caches() -> void:
 	_draw_cell_glow_cache.clear()
 	_draw_reaction_alpha_cache.clear()
 	_draw_slot_fullness_cache.clear()
+	_draw_need_health_cache.clear()
 
 
 func _print_visual_profile() -> void:
@@ -737,14 +749,27 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 	if clear_alpha <= 0.02:
 		return
 	var live_complete := _circuit_alive_now()
+	var body_glow_color := color
 	var glow_alpha := 0.56 if _cached_cell_is_glowing(cell) else 0.16
-	if live_complete:
+	var need_health_info := _cached_need_health(cell)
+	var has_need_health := bool(need_health_info.get("known", false))
+	var need_health := float(need_health_info.get("health", 1.0))
+	if has_need_health:
+		var health := need_health * need_health * (3.0 - 2.0 * need_health)
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
+		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cached_cell_is_glowing(cell) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
+	if live_complete and (not has_need_health or need_health >= 0.95):
+		body_glow_color = CELL_HEALTHY_GLOW_COLOR
 		glow_alpha = 0.72
 	var reaction_alpha := _cached_recent_reaction_alpha(cell)
 	if reaction_alpha > 0.0:
-		glow_alpha = maxf(glow_alpha, 0.52 + reaction_alpha * 0.28)
-		draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18 * clear_alpha))
-	draw_circle(center, radius * (1.16 + (0.04 if live_complete else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28 * clear_alpha))
+		var reaction_health := need_health if has_need_health else 1.0
+		if reaction_health > 0.0:
+			body_glow_color = body_glow_color.lerp(CELL_HEALTHY_GLOW_COLOR, reaction_alpha * reaction_health)
+			glow_alpha = maxf(glow_alpha, lerpf(CELL_STRESS_GLOW_STRENGTH, 0.52 + reaction_alpha * 0.28, reaction_health))
+			draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18 * reaction_health * clear_alpha))
+	draw_circle(center, radius * (1.16 + (0.04 if live_complete and (not has_need_health or need_health >= 0.95) else 0.0)), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.28 * clear_alpha))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72 * clear_alpha))
 	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68 * clear_alpha), 3.0, true)
 	if kind == CELL_KIND_RED_MYCO:
@@ -807,7 +832,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 		if _using_sim_state and fullness <= 0.0:
 			_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
 		var mark_alpha := clear_alpha * (myco_progress if is_myco else 1.0)
-		_draw_centered_text(font, pip_center, pip_radius, need, int(pip_radius * 1.02), Color(1.0, 1.0, 1.0, mark_alpha))
+		_draw_centered_text(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color(1.0, 1.0, 1.0, mark_alpha), NEED_PIP_MARK_WEIGHT_SCALE)
 	if not is_myco:
 		_draw_centered_text(font, center, radius, produced, int(radius * 1.48), Color(1.0, 1.0, 1.0, clear_alpha))
 
@@ -878,22 +903,27 @@ func _draw_zero_pip_pulse_arc(center: Vector2, radius: float, width: float) -> v
 	var alpha := _zero_pip_pulse_alpha()
 	if alpha <= 0.0:
 		return
-	draw_arc(center, radius, -PI * 0.5, PI * 1.5, _arc_segments(radius), Color(1.0, 0.04, 0.02, 0.58 * alpha), width + 1.2, true)
-	draw_arc(center, radius * 1.08, -PI * 0.5, PI * 1.5, _arc_segments(radius), Color(1.0, 0.04, 0.02, 0.22 * alpha), maxf(1.4, width * 0.55), true)
+	var pulse_color := ZERO_PIP_PULSE_COLOR
+	var glow_radius := radius * ZERO_PIP_PULSE_GLOW_SCALE
+	pulse_color.a = minf(1.0, 0.58 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
+	draw_arc(center, glow_radius, -PI * 0.5, PI * 1.5, _arc_segments(glow_radius), pulse_color, (width + 1.2) * ZERO_PIP_PULSE_GLOW_SCALE, true)
+	pulse_color.a = minf(1.0, 0.22 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
+	draw_arc(center, radius * 1.08 * ZERO_PIP_PULSE_GLOW_SCALE, -PI * 0.5, PI * 1.5, _arc_segments(glow_radius), pulse_color, maxf(1.4, width * 0.55) * ZERO_PIP_PULSE_GLOW_SCALE, true)
 
 
-func _draw_centered_text(font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color) -> void:
+func _draw_centered_text(font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
 	if text.is_empty():
 		return
 	var width := radius * 2.0
 	var origin := Vector2(center.x - radius, center.y + float(font_size) * 0.35)
 	var outline := Color(0.01, 0.025, 0.03, 0.86 * color.a)
-	draw_string(font, origin + Vector2(-1.5, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	draw_string(font, origin + Vector2(1.5, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	draw_string(font, origin + Vector2(0.0, -1.5), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	draw_string(font, origin + Vector2(0.0, 1.5), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	var outline_offset := 1.5 * mark_weight_scale
+	draw_string(font, origin + Vector2(-outline_offset, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	draw_string(font, origin + Vector2(outline_offset, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	draw_string(font, origin + Vector2(0.0, -outline_offset), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	draw_string(font, origin + Vector2(0.0, outline_offset), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
 	draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
-	draw_string(font, origin + Vector2(0.7, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
+	draw_string(font, origin + Vector2(0.7 * mark_weight_scale, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
 
 
 func _cached_resource_visual_point(cell: String, resource: String) -> Vector2:
@@ -1142,6 +1172,37 @@ func _slot_fullness(cell: String, resource: String) -> float:
 		if str(slot.get("resource", "")) == resource:
 			return clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0)
 	return 0.0
+
+
+func _cached_need_health(cell: String) -> Dictionary:
+	if _draw_need_health_cache.has(cell):
+		var cached_value: Variant = _draw_need_health_cache.get(cell, {})
+		if cached_value is Dictionary:
+			return cached_value as Dictionary
+	var health := _need_health(cell)
+	_draw_need_health_cache[cell] = health
+	return health
+
+
+func _need_health(cell: String) -> Dictionary:
+	var state_value: Variant = _cell_state_by_id.get(cell, {})
+	if not state_value is Dictionary:
+		return {"known": false, "health": 1.0}
+	var slots_value: Variant = (state_value as Dictionary).get("slots", [])
+	if not slots_value is Array:
+		return {"known": false, "health": 1.0}
+	var health := 1.0
+	var found_need := false
+	var slots: Array = slots_value as Array
+	for slot_value in slots:
+		if not slot_value is Dictionary:
+			continue
+		var slot: Dictionary = slot_value as Dictionary
+		if str(slot.get("role", "")) != "Need":
+			continue
+		found_need = true
+		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+	return {"known": found_need, "health": health}
 
 
 func _cached_recent_reaction_alpha(cell: String) -> float:

@@ -12,6 +12,10 @@ const TITLE_CELL_SPAWN_DELAY := 0.17
 const TITLE_CELL_IDLE_START := 2.45
 const TITLE_CELL_VISUAL_SCALE := 1.728
 const TITLE_CELL_ROW_SPACING_SCALE := 1.617
+const TITLE_BACKGROUND_TILE_MIN_SIZE := 105.0
+const TITLE_BACKGROUND_TILE_MAX_SIZE := 177.0
+const TITLE_BACKGROUND_TILE_SHORT_EDGE_DIVISOR := 5.6667
+const TITLE_BACKGROUND_TILE_VERTICAL_SHIFT := 0.5
 const TITLE_CELL_FINAL_IDS := [
 	"title-c",
 	"title-e",
@@ -92,6 +96,36 @@ func _get_ge_logo_texture() -> Texture2D:
 		return null
 	_ge_logo_texture = texture as Texture2D
 	return _ge_logo_texture
+
+
+func _draw() -> void:
+	var view_size: Vector2 = get_viewport_rect().size
+	if view_size.x <= 0.0 or view_size.y <= 0.0:
+		return
+	draw_rect(Rect2(Vector2.ZERO, view_size), Color(0.015, 0.030, 0.035, 1.0), true)
+	var short_edge: float = minf(view_size.x, view_size.y)
+	var tile_size: float = clampf(
+		short_edge / TITLE_BACKGROUND_TILE_SHORT_EDGE_DIVISOR,
+		TITLE_BACKGROUND_TILE_MIN_SIZE,
+		TITLE_BACKGROUND_TILE_MAX_SIZE
+	)
+	var tile_gap: float = maxf(2.0, tile_size * 0.025)
+	var border_width: float = maxf(1.0, tile_size * 0.012)
+	var cols: int = int(ceil(view_size.x / tile_size)) + 2
+	var rows: int = int(ceil(view_size.y / tile_size)) + 2
+	var origin: Vector2 = Vector2(
+		-tile_size * 0.5,
+		-tile_size * 0.5 + tile_size * TITLE_BACKGROUND_TILE_VERTICAL_SHIFT
+	)
+	for y in range(rows):
+		for x in range(cols):
+			var tile_rect := Rect2(
+				origin + Vector2(float(x), float(y)) * tile_size,
+				Vector2(tile_size, tile_size)
+			).grow(-tile_gap)
+			var shade: float = 0.085 if (x + y) % 2 == 0 else 0.105
+			draw_rect(tile_rect, Color(shade, shade + 0.035, shade + 0.045, 0.96), true)
+			draw_rect(tile_rect, Color(0.24, 0.42, 0.42, 0.18), false, border_width)
 
 func _make_cta_style(bg_color: Color, border_color: Color, border_width: int = 2) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -1122,7 +1156,8 @@ func _ensure_responsive_background_nodes() -> void:
 		_title_soil_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_title_soil_background.z_as_relative = false
 		_title_soil_background.z_index = -120
-		_title_soil_background.color = Color.BLACK
+		_title_soil_background.color = Color(0.0, 0.0, 0.0, 0.0)
+		_title_soil_background.visible = false
 		add_child(_title_soil_background)
 	if is_instance_valid(_title_art_background):
 		_title_art_background.queue_free()
@@ -1136,8 +1171,9 @@ func _layout_responsive_background(view_size: Vector2) -> void:
 		_title_soil_background.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		_title_soil_background.position = Vector2.ZERO
 		_title_soil_background.size = Vector2(ceil(view_size.x), ceil(view_size.y))
-		_title_soil_background.visible = true
-		_title_soil_background.color = Color.BLACK
+		_title_soil_background.visible = false
+		_title_soil_background.color = Color(0.0, 0.0, 0.0, 0.0)
+	queue_redraw()
 
 
 func _apply_responsive_layout() -> void:

@@ -45,6 +45,13 @@ const CAMERA_ZOOM_STEP := 1.18
 const CAMERA_PINCH_MIN_DISTANCE := 18.0
 const PIP_ANGLE_SMOOTH := 0.14
 const PIP_OFFSET_SMOOTH := 0.16
+const CELL_STRESS_GLOW_STRENGTH := 0.20
+const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
+const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
+const NEED_PIP_MARK_SIZE_SCALE := 1.10
+const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
 const HINT_MISSING_CENTER := Vector2(-100000000.0, -100000000.0)
 const DRAG_SOURCE_NONE := ""
 const DRAG_SOURCE_BOARD := "board"
@@ -869,21 +876,21 @@ func _start_clear_effect(clear_ids: Array[String]) -> void:
 func _clear_message(cleared_count: int) -> String:
 	match cleared_count:
 		4:
-			return "Amazing. 4 Cells Cleared!"
+			return "Amazing!"
 		5:
-			return "Wow. 5 Cells Cleared!"
+			return "Wow!"
 		6:
-			return "How?! 6 Cells Cleared!"
+			return "How?!"
 		7:
-			return "Are you kidding?! 7 Cells Cleared!"
+			return "What?!"
 		8:
-			return "Super Clear! 8 Cells Cleared!"
+			return "Super!"
 		9:
-			return "Now you are too good! 9 Cells Cleared!"
+			return "Great!"
 		10:
-			return "Genius! 10 Cells Cleared!"
+			return "Genius!"
 		_:
-			return str("Time for a break! ", cleared_count, " Cells Cleared!")
+			return str("Break time!", cleared_count, " Cells!")
 
 
 func _reset_pending_clear() -> void:
@@ -1748,8 +1755,17 @@ func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: boo
 	var label := "" if is_myco else produced
 	var color := Color(0.94, 0.97, 0.94, 1.0) if is_myco else _resource_color(produced)
 	var radius := _tile_size * (0.41 if dragging else 0.38) * visual_scale
-	var glow_alpha := 0.52 if _cell_is_glowing(str(cell.get("id", ""))) else 0.18
-	layer.draw_circle(center, radius * 1.20, Color(color.r, color.g, color.b, glow_alpha * 0.24))
+	var cell_id := str(cell.get("id", ""))
+	var body_glow_color := color
+	var glow_alpha := 0.52 if _cell_is_glowing(cell_id) else 0.18
+	var need_health_info := _cell_need_health(cell_id)
+	if bool(need_health_info.get("known", false)):
+		var need_health := float(need_health_info.get("health", 1.0))
+		var health := need_health * need_health * (3.0 - 2.0 * need_health)
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
+		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cell_is_glowing(cell_id) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
+	layer.draw_circle(center, radius * 1.20, Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.24))
 	layer.draw_circle(center + Vector2(0.0, radius * 0.08), radius * 1.04, Color(0.0, 0.0, 0.0, 0.30))
 	layer.draw_circle(center, radius, Color(color.r, color.g, color.b, 0.74))
 	layer.draw_arc(center, radius * 0.96, 0.0, TAU, 42, Color(0.95, 1.0, 0.96, 0.66), maxf(2.0, radius * 0.080), true)
@@ -1763,7 +1779,6 @@ func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: boo
 		var needs: Array = needs_value as Array
 		var pip_count := 4 if is_myco else needs.size()
 		var used_angles: Array[float] = []
-		var cell_id := str(cell.get("id", ""))
 		for index in range(pip_count):
 			var need_for_position := ""
 			if index < needs.size():
@@ -1790,7 +1805,7 @@ func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: boo
 			layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.82), maxf(1.5, pip_radius * 0.18), true)
 			layer.draw_arc(pip_center, pip_radius * 0.86, 0.0, TAU, 18, Color.WHITE, maxf(1.1, pip_radius * 0.11), true)
 			_draw_fallback_fullness_arc(layer, pip_center, pip_radius * 1.12, fullness, pip_color, maxf(2.0, pip_radius * 0.20))
-			_draw_centered_text(layer, font, pip_center, pip_radius, need, int(_tile_size * 0.15 * visual_scale), Color.WHITE)
+			_draw_centered_text(layer, font, pip_center, pip_radius, need, int(_tile_size * 0.15 * visual_scale * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
 
 
 func _draw_fallback_red_myco_ring(layer: Control, center: Vector2, radius: float) -> void:
@@ -2058,18 +2073,40 @@ func _slot_fullness(cell_id: String, resource: String) -> float:
 	return 0.0
 
 
-func _draw_centered_text(layer: Control, font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color) -> void:
+func _cell_need_health(cell_id: String) -> Dictionary:
+	var state_value: Variant = _cell_state_by_id.get(cell_id, {})
+	if not state_value is Dictionary:
+		return {"known": false, "health": 1.0}
+	var slots_value: Variant = (state_value as Dictionary).get("slots", [])
+	if not slots_value is Array:
+		return {"known": false, "health": 1.0}
+	var health := 1.0
+	var found_need := false
+	var slots: Array = slots_value as Array
+	for slot_value in slots:
+		if not slot_value is Dictionary:
+			continue
+		var slot: Dictionary = slot_value as Dictionary
+		if str(slot.get("role", "")) != "Need":
+			continue
+		found_need = true
+		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+	return {"known": found_need, "health": health}
+
+
+func _draw_centered_text(layer: Control, font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
 	if text.is_empty():
 		return
 	var width := radius * 2.0
 	var origin := Vector2(center.x - radius, center.y + float(font_size) * 0.35)
 	var outline := Color(0.01, 0.025, 0.03, 0.88)
-	layer.draw_string(font, origin + Vector2(-1.4, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	layer.draw_string(font, origin + Vector2(1.4, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	layer.draw_string(font, origin + Vector2(0.0, -1.4), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
-	layer.draw_string(font, origin + Vector2(0.0, 1.4), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	var outline_offset := 1.4 * mark_weight_scale
+	layer.draw_string(font, origin + Vector2(-outline_offset, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	layer.draw_string(font, origin + Vector2(outline_offset, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	layer.draw_string(font, origin + Vector2(0.0, -outline_offset), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
+	layer.draw_string(font, origin + Vector2(0.0, outline_offset), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, outline)
 	layer.draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
-	layer.draw_string(font, origin + Vector2(0.7, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
+	layer.draw_string(font, origin + Vector2(0.7 * mark_weight_scale, 0.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, color)
 
 
 func _sync_board_renderer() -> void:

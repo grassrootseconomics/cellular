@@ -36,6 +36,13 @@ const RED_MYCO_RING_RADIUS := 0.54
 const RED_MYCO_RING_EDGE_COLOR := Color(0.86, 0.02, 0.04, 0.16)
 const RED_MYCO_RING_MID_COLOR := Color(0.92, 0.04, 0.06, 0.44)
 const RED_MYCO_RING_CORE_COLOR := Color(0.70, 0.00, 0.02, 0.88)
+const CELL_STRESS_GLOW_STRENGTH := 0.20
+const CELL_HEALTHY_IDLE_GLOW_STRENGTH := 0.36
+const CELL_HEALTHY_ACTIVE_GLOW_STRENGTH := 0.56
+const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.78, 0.24, 1.0)
+const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
+const NEED_PIP_MARK_SIZE_SCALE := 1.10
+const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
 const CAMERA_READABLE_TILE_SIZE := 72.0
 const CAMERA_TINY_READABLE_TILE_SIZE := 64.0
 const CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM := 4.0
@@ -2872,16 +2879,29 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 	if is_myco:
 		color = Color(0.94, 0.97, 0.94, 1.0)
 	var live_complete: bool = _circuit_alive_now()
+	var body_glow_color := color
 	var glow_alpha: float = 0.46 if _cell_has_all_needs(cell) else 0.18
 	if _using_csharp_sim:
 		glow_alpha = 0.56 if _cell_is_glowing(cell) else 0.16
-	if live_complete:
+	var need_health_info := _cell_need_health(cell)
+	var has_need_health := bool(need_health_info.get("known", false))
+	var need_health := float(need_health_info.get("health", 1.0))
+	if has_need_health:
+		var health := need_health * need_health * (3.0 - 2.0 * need_health)
+		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, health)
+		var healthy_glow := CELL_HEALTHY_ACTIVE_GLOW_STRENGTH if _cell_is_glowing(cell) else CELL_HEALTHY_IDLE_GLOW_STRENGTH
+		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, healthy_glow, health)
+	if live_complete and (not has_need_health or need_health >= 0.95):
+		body_glow_color = CELL_HEALTHY_GLOW_COLOR
 		glow_alpha = 0.72
 	var reaction_alpha := _recent_reaction_alpha(cell)
 	if reaction_alpha > 0.0:
-		glow_alpha = maxf(glow_alpha, 0.52 + reaction_alpha * 0.28)
-		draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18))
-	draw_circle(center, radius * (1.16 + (0.04 if live_complete else 0.0)), Color(color.r, color.g, color.b, glow_alpha * 0.28))
+		var reaction_health := need_health if has_need_health else 1.0
+		if reaction_health > 0.0:
+			body_glow_color = body_glow_color.lerp(CELL_HEALTHY_GLOW_COLOR, reaction_alpha * reaction_health)
+			glow_alpha = maxf(glow_alpha, lerpf(CELL_STRESS_GLOW_STRENGTH, 0.52 + reaction_alpha * 0.28, reaction_health))
+			draw_circle(center, radius * (1.22 + reaction_alpha * 0.10), Color(1.0, 0.95, 0.58, reaction_alpha * 0.18 * reaction_health))
+	draw_circle(center, radius * (1.16 + (0.04 if live_complete and (not has_need_health or need_health >= 0.95) else 0.0)), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha * 0.28))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72))
 	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68), 3.0, true)
 	if kind == CELL_KIND_RED_MYCO:
@@ -2936,7 +2956,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 		_draw_fullness_arc(pip_center, pip_bar_radius, _display_fullness(cell, need, fullness), pip_color, pip_bar_width)
 		if _using_csharp_sim and fullness <= 0.0:
 			_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
-		_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02), Color.WHITE)
+		_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
 	if not is_myco:
 		_draw_resource_mark(font, center, radius, produced_resource, int(radius * 1.48), Color.WHITE)
 
@@ -3130,11 +3150,11 @@ func _draw_next_level_pulse() -> void:
 	draw_rect(rect, Color(0.72, 1.0, 0.86, 0.50 + pulse * 0.32), false, 3.0)
 
 
-func _draw_resource_mark(font: Font, center: Vector2, radius: float, resource: String, font_size: int, color: Color) -> void:
+func _draw_resource_mark(font: Font, center: Vector2, radius: float, resource: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
 	var mark := _resource_mark_text(resource)
 	if mark.is_empty():
 		return
-	_draw_centered_bold_resource(font, center, radius, mark, font_size, color)
+	_draw_centered_bold_resource(font, center, radius, mark, font_size, color, mark_weight_scale)
 
 
 func _resource_mark_text(resource: String) -> String:
@@ -3147,7 +3167,7 @@ func _resource_mark_text(resource: String) -> String:
 	return resource
 
 
-func _draw_centered_bold_resource(font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color) -> void:
+func _draw_centered_bold_resource(font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
 	if text.is_empty():
 		return
 	var adjusted_size := font_size
@@ -3156,18 +3176,20 @@ func _draw_centered_bold_resource(font: Font, center: Vector2, radius: float, te
 	var width := radius * 2.0
 	var origin := Vector2(center.x - radius, center.y + float(adjusted_size) * 0.35)
 	var outline_color := Color(0.01, 0.025, 0.03, 0.86)
+	var outline_offset := 1.5 * mark_weight_scale
 	var outline_offsets: Array[Vector2] = [
-		Vector2(-1.5, 0.0),
-		Vector2(1.5, 0.0),
-		Vector2(0.0, -1.5),
-		Vector2(0.0, 1.5)
+		Vector2(-outline_offset, 0.0),
+		Vector2(outline_offset, 0.0),
+		Vector2(0.0, -outline_offset),
+		Vector2(0.0, outline_offset)
 	]
 	for offset in outline_offsets:
 		draw_string(font, origin + offset, text, HORIZONTAL_ALIGNMENT_CENTER, width, adjusted_size, outline_color)
+	var weight_offset := 0.75 * mark_weight_scale
 	var weight_offsets: Array[Vector2] = [
 		Vector2.ZERO,
-		Vector2(0.75, 0.0),
-		Vector2(-0.75, 0.0)
+		Vector2(weight_offset, 0.0),
+		Vector2(-weight_offset, 0.0)
 	]
 	for offset in weight_offsets:
 		draw_string(font, origin + offset, text, HORIZONTAL_ALIGNMENT_CENTER, width, adjusted_size, color)
@@ -3893,6 +3915,27 @@ func _slot_fullness(cell: String, resource: String) -> float:
 		if str(slot.get("resource", "")) == resource:
 			return clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0)
 	return 0.0
+
+
+func _cell_need_health(cell: String) -> Dictionary:
+	if not _using_csharp_sim:
+		return {"known": false, "health": 1.0}
+	var state := _get_cell_state(cell)
+	var slots_value: Variant = state.get("slots", [])
+	if not slots_value is Array:
+		return {"known": false, "health": 1.0}
+	var health := 1.0
+	var found_need := false
+	var slots: Array = slots_value as Array
+	for slot_value in slots:
+		if not slot_value is Dictionary:
+			continue
+		var slot := slot_value as Dictionary
+		if str(slot.get("role", "")) != "Need":
+			continue
+		found_need = true
+		health = minf(health, clampf(float(slot.get("fullness", 0.0)), 0.0, 1.0))
+	return {"known": found_need, "health": health}
 
 
 func _cell_has_all_needs(cell: String) -> bool:

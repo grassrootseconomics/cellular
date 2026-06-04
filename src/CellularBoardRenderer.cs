@@ -12,6 +12,8 @@ public partial class CellularBoardRenderer : Control
     private const int MaxVisibleFlowLines = 192;
     private const ulong ZeroPipPulsePeriodMsec = 3_000;
     private const ulong ZeroPipPulseFadeMsec = 1_000;
+    private const float ZeroPipPulseGlowScale = 1.20f;
+    private const float ZeroPipPulseBrightnessScale = 1.20f;
     private const int MycoVisualPipCount = 4;
     private const ulong MycoFadeOutMsec = 1_000;
     private const ulong MycoAdaptTransitionMsec = 2_000;
@@ -19,7 +21,14 @@ public partial class CellularBoardRenderer : Control
     private const float InventorySlotScale = 1.28f;
     private const float InventoryCellScale = 1.10f;
     private const float InventoryCellYOffset = 0.06f;
-    private static readonly Color ZeroPipPulseColor = new(1.0f, 0.04f, 0.02f, 1.0f);
+    private const float CellStressGlowStrength = 0.20f;
+    private const float CellHealthyIdleGlowStrength = 0.36f;
+    private const float CellHealthyActiveGlowStrength = 0.56f;
+    private const float NeedPipMarkSizeScale = 1.10f;
+    private const float NeedPipMarkWeightScale = 1.10f;
+    private static readonly Color CellStressGlowColor = new(1.0f, 0.78f, 0.24f, 1.0f);
+    private static readonly Color CellHealthyGlowColor = new(0.30f, 1.0f, 0.84f, 1.0f);
+    private static readonly Color ZeroPipPulseColor = new(1.0f, 0.0f, 0.0f, 1.0f);
 
     private static readonly string[] ResourceLetters =
     [
@@ -977,22 +986,37 @@ public partial class CellularBoardRenderer : Control
         var color = isMyco ? new Color(0.94f, 0.97f, 0.94f, 1.0f) : ResourceColor(produced);
         var liveComplete = useSimState && CircuitAliveNow();
         var hasLiveState = useSimState && _usingCsharpSim && _cellStates.ContainsKey(cell);
+        var bodyGlowColor = color;
         var glowAlpha = hasLiveState
             ? (CellIsGlowing(cell) ? 0.56f : 0.16f)
             : (useSimState && CellHasAllNeeds(cell) ? 0.46f : 0.18f);
-        if (liveComplete)
+        var hasNeedHealth = TryNeedHealth(cell, out var needHealth);
+        if (hasNeedHealth)
         {
+            var health = needHealth * needHealth * (3.0f - 2.0f * needHealth);
+            bodyGlowColor = CellStressGlowColor.Lerp(CellHealthyGlowColor, health);
+            var healthyGlowStrength = CellIsGlowing(cell) ? CellHealthyActiveGlowStrength : CellHealthyIdleGlowStrength;
+            glowAlpha = Mathf.Lerp(CellStressGlowStrength, healthyGlowStrength, health);
+        }
+        if (liveComplete && (!hasNeedHealth || needHealth >= 0.95f))
+        {
+            bodyGlowColor = CellHealthyGlowColor;
             glowAlpha = 0.72f;
         }
 
         var reactionAlpha = hasLiveState ? RecentReactionAlpha(cell) : 0.0f;
         if (reactionAlpha > 0.0f)
         {
-            glowAlpha = Mathf.Max(glowAlpha, 0.52f + reactionAlpha * 0.28f);
-            DrawCircle(center, radius * (1.22f + reactionAlpha * 0.10f), new Color(1.0f, 0.95f, 0.58f, reactionAlpha * 0.18f * clearAlpha));
+            var reactionHealth = hasNeedHealth ? needHealth : 1.0f;
+            if (reactionHealth > 0.0f)
+            {
+                bodyGlowColor = bodyGlowColor.Lerp(CellHealthyGlowColor, reactionAlpha * reactionHealth);
+                glowAlpha = Mathf.Max(glowAlpha, Mathf.Lerp(CellStressGlowStrength, 0.52f + reactionAlpha * 0.28f, reactionHealth));
+                DrawCircle(center, radius * (1.22f + reactionAlpha * 0.10f), new Color(1.0f, 0.95f, 0.58f, reactionAlpha * 0.18f * reactionHealth * clearAlpha));
+            }
         }
 
-        DrawCircle(center, radius * (1.16f + (liveComplete ? 0.04f : 0.0f)), new Color(color.R, color.G, color.B, glowAlpha * 0.28f * clearAlpha));
+        DrawCircle(center, radius * (1.16f + (liveComplete && (!hasNeedHealth || needHealth >= 0.95f) ? 0.04f : 0.0f)), new Color(bodyGlowColor.R, bodyGlowColor.G, bodyGlowColor.B, glowAlpha * 0.28f * clearAlpha));
         DrawCircle(center, radius, new Color(color.R, color.G, color.B, 0.72f * clearAlpha));
         DrawArc(center, radius * 0.96f, 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.92f, 1.0f, 0.95f, 0.68f * clearAlpha), 3.0f, antialiased: true);
         if (clearing)
@@ -1098,7 +1122,7 @@ public partial class CellularBoardRenderer : Control
                 DrawZeroPipPulseArc(pipCenter, pipBarRadius, pipBarWidth);
             }
             var markAlpha = clearAlpha * (isMyco ? mycoAdaptProgress : 1.0f);
-            DrawFastResourceMark(font, pipCenter, pipRadius, need, Mathf.RoundToInt(pipRadius * 1.02f), Colors.White with { A = markAlpha });
+            DrawFastResourceMark(font, pipCenter, pipRadius, need, Mathf.RoundToInt(pipRadius * 1.02f * NeedPipMarkSizeScale), Colors.White with { A = markAlpha });
         }
 
         if (!isMyco)
@@ -1274,8 +1298,9 @@ public partial class CellularBoardRenderer : Control
 
         var width = radius * 2.0f;
         var origin = new Vector2(center.X - radius, center.Y + adjustedSize * 0.35f);
-        DrawString(font, origin + new Vector2(1.4f, 1.4f), mark, HorizontalAlignment.Center, width, adjustedSize, new Color(0.01f, 0.025f, 0.03f, 0.78f * color.A));
+        DrawString(font, origin + new Vector2(1.4f, 1.4f) * NeedPipMarkWeightScale, mark, HorizontalAlignment.Center, width, adjustedSize, new Color(0.01f, 0.025f, 0.03f, 0.78f * color.A));
         DrawString(font, origin, mark, HorizontalAlignment.Center, width, adjustedSize, color);
+        DrawString(font, origin + new Vector2(0.7f * NeedPipMarkWeightScale, 0.0f), mark, HorizontalAlignment.Center, width, adjustedSize, color);
     }
 
     private string ResourceMarkText(string resource)
@@ -1360,9 +1385,9 @@ public partial class CellularBoardRenderer : Control
             return;
         }
 
-        var segments = FullnessArcSegments(radius);
-        DrawArc(center, radius, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = 0.58f * alpha }, width + 1.2f, antialiased: true);
-        DrawArc(center, radius * 1.08f, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = 0.22f * alpha }, Mathf.Max(1.4f, width * 0.55f), antialiased: true);
+        var segments = FullnessArcSegments(radius * ZeroPipPulseGlowScale);
+        DrawArc(center, radius * ZeroPipPulseGlowScale, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = Mathf.Min(1.0f, 0.58f * ZeroPipPulseBrightnessScale * alpha) }, (width + 1.2f) * ZeroPipPulseGlowScale, antialiased: true);
+        DrawArc(center, radius * 1.08f * ZeroPipPulseGlowScale, -Mathf.Pi * 0.5f, Mathf.Pi * 1.5f, segments, ZeroPipPulseColor with { A = Mathf.Min(1.0f, 0.22f * ZeroPipPulseBrightnessScale * alpha) }, Mathf.Max(1.4f, width * 0.55f) * ZeroPipPulseGlowScale, antialiased: true);
     }
 
     private static float ZeroPipPulseAlpha()
@@ -1876,6 +1901,29 @@ public partial class CellularBoardRenderer : Control
         _cellStates.TryGetValue(cell, out var state) && state.Slots.TryGetValue(resource, out var slot)
             ? Mathf.Clamp(slot.Fullness, 0.0f, 1.0f)
             : 0.0f;
+
+    private bool TryNeedHealth(string cell, out float health)
+    {
+        health = 1.0f;
+        if (!_cellStates.TryGetValue(cell, out var state))
+        {
+            return false;
+        }
+
+        var foundNeed = false;
+        foreach (var slot in state.Slots.Values)
+        {
+            if (slot.Role != "Need")
+            {
+                continue;
+            }
+
+            foundNeed = true;
+            health = Mathf.Min(health, Mathf.Clamp(slot.Fullness, 0.0f, 1.0f));
+        }
+
+        return foundNeed;
+    }
 
     private float RecentReactionAlpha(string cell)
     {

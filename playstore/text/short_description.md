@@ -1,7 +1,1 @@
-# Short Description
-
-Draft placeholder:
-
-Arrange cells into living circuits of resource flow and fulfillment.
-
-Status: not release-ready.
+Arrange living cell circuits in a resource-flow puzzle and arcade game.

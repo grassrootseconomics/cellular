@@ -1,17 +1,37 @@
-# Cellular Store Listing
+# Google Play Store Listing
 
-Status: draft placeholder.
+## App Name
 
-Cellular is not ready for a public app-store listing. The current milestone is a standalone deterministic C# simulation core. Godot integration, art direction, screenshots, release package IDs, and privacy review are still pending.
+Cellular
 
-Do not submit legacy listing copy for Cellular.
+## Short Description
 
-## Future Listing Notes
+Arrange living cell circuits in a resource-flow puzzle and arcade game.
 
-The eventual listing should describe Cellular as a puzzle game about arranging cells into living circuits. It should avoid claims about proving real-world economic outcomes.
+## Full Description
 
-Possible plain-language direction:
+Cellular is a puzzle and arcade game about creating living circuits of resource flow.
 
-```text
-Arrange cells, manage bounded resource pools, and build living circuits in a deterministic puzzle game about flow, limits, and mutual fulfillment.
-```
+Each cell produces one resource and needs others. Move cells on the board, connect useful neighbors, and watch resources swap through the network. When the circuit becomes alive, cells glow, react, and clear.
+
+Play handcrafted Puzzle levels or jump into Arcade mode for a compact, replayable challenge. Adaptive myco cells change their needs based on nearby cells, opening up new ways to complete a network.
+
+Features:
+
+- Puzzle mode with 44 handcrafted levels
+- Arcade mode with refillable inventory cells and quick clears
+- Deterministic resource flow and visible circuit diagnostics
+- Adaptive red and white myco cells
+- Touch-friendly drag-and-drop controls
+- Local progress and high scores
+- No ads, no analytics, and no required internet connection
+
+Cellular was created with Grassroots Economics as a playful way to explore flow, limits, mutual needs, and cooperation.
+
+## Assets
+
+- App icon: `images/app-icon-512.png`
+- Feature graphic: `images/feature-graphic-1024x500.png`
+- Screenshot 1: `images/cellular-title-screen.png`
+- Screenshot 2: `images/cellular-puzzle-mode.png`
+- Screenshot 3: `images/cellular-arcade-mode.png`

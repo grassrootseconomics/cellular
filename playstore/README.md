@@ -1,13 +1,35 @@
-# Play Store Materials
+# Play Store Package
 
-This directory contains draft Cellular Play Store materials plus some older placeholder assets. It is not submission-ready until the release checklist is complete.
+Prepared draft assets and text for the Cellular Google Play listing.
 
-Use [../PUBLISHING.md](../PUBLISHING.md) as the authoritative publication checklist before submitting anything to Google Play.
+## Text
 
-Before any Cellular release:
+- `text/app_name.md`
+- `text/short_description.md`
+- `text/full_description.md`
+- `store-listing.md`
+- `privacy_policy.md`
 
-- replace stale placeholder copy and screenshots,
-- confirm Android package id and export preset metadata,
-- prepare a final privacy policy,
-- capture fresh screenshots from the current Cellular game,
-- verify the final data, permissions, and Play Console App content answers.
+Copy lengths:
+
+- App name: 8/30 characters
+- Short description: 71/80 characters
+- Full description: about 960/4,000 characters
+
+## Images
+
+- `images/app-icon-512.png` - 512x512 PNG with alpha for the Play listing icon.
+- `images/feature-graphic-1024x500.png` - 1024x500 PNG feature graphic.
+- `images/cellular-title-screen.png` - title screen screenshot.
+- `images/cellular-puzzle-mode.png` - Puzzle mode screenshot.
+- `images/cellular-arcade-mode.png` - Arcade mode screenshot.
+
+The feature graphic is composed from the title screen on the left and Arcade mode on the right. The Android launcher icons used by the export presets live in `graphics/android/`.
+
+## Release Notes
+
+- Android package id: `org.grassecon.cellular`
+- App name: `Cellular`
+- Current source version comes from `project.godot`.
+- The app is intentionally silent and requests no sensitive Android permissions.
+- The privacy policy assumes local progress storage only, with no ads, analytics, accounts, or network collection.

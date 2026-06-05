@@ -11,10 +11,10 @@ config_version=5
 [application]
 
 config/name="Cellular"
-config/version="0.0.5"
+config/version="0.0.6"
 run/main_scene="res://scenes/title_screen.tscn"
 config/quit_on_go_back=false
-config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
+config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 boot_splash/image="res://loading/shamba-logo-ge.png"
 config/icon="res://icon.svg"
 

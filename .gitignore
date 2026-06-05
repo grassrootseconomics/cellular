@@ -3,6 +3,7 @@ tmp/*
 !tmp/.gdignore
 build/
 android/build/
+android/build-old/
 android/.gradle/
 .setup/
 bin/

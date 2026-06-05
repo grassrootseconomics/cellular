@@ -61,6 +61,9 @@ const SCORE_PULSE_SECONDS := 0.72
 const HIGH_SCORE_PULSE_SECONDS := 1.18
 const HIGH_SCORE_SPARKLE_COUNT := 14
 const INVENTORY_FRESH_SECONDS := 1.55
+const IDLE_HINT_DELAY_SECONDS := 5.0
+const IDLE_HINT_PULSE_SECONDS := 2.0
+const IDLE_HINT_MAX_SCALE := 1.22
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
 const INVENTORY_CELL_Y_OFFSET := 0.06
@@ -149,6 +152,9 @@ var _hint_inventory_cursor := 0
 var _hint_board_cursor := 0
 var _hint_next_inventory_board := true
 var _hint_text := ""
+var _idle_hint_elapsed := 0.0
+var _idle_hint_pulse_elapsed := IDLE_HINT_PULSE_SECONDS
+var _idle_hint_disabled_after_hint := false
 var _score := 0
 var _game_over := false
 var _full_board_pending_check := false
@@ -213,8 +219,9 @@ func _process(delta: float) -> void:
 		return
 	var score_pulse_active := _advance_score_pulse(delta)
 	var high_score_pulse_active := _advance_high_score_pulse(delta)
+	var idle_hint_active := _advance_idle_hint_nudge(delta)
 	var inventory_fresh_active := _has_inventory_fresh_animation()
-	var hud_pulse_active := score_pulse_active or high_score_pulse_active
+	var hud_pulse_active := score_pulse_active or high_score_pulse_active or idle_hint_active
 	if _is_clear_effect_active():
 		_reset_full_board_game_over_grace()
 		_clear_effect_elapsed += maxf(delta, 0.0)
@@ -423,6 +430,7 @@ func _start_run() -> void:
 	_hint_board_cursor = 0
 	_hint_next_inventory_board = true
 	_hint_text = ""
+	_enable_idle_hint_nudge()
 	_status_text = ""
 	_clear_effect_ids.clear()
 	_clear_effect_elapsed = 0.0
@@ -934,6 +942,8 @@ func _clear_qualifying_groups() -> bool:
 	var points := cleared_count + maxi(0, cleared_count - CLEAR_GROUP_MIN_SIZE)
 	var previous_high_score := int(Global.high_score)
 	_score += points
+	if _score > 4:
+		_reset_idle_hint_nudge()
 	Global.add_score(points)
 	if _score > previous_high_score and int(Global.high_score) > previous_high_score:
 		_run_had_new_high_score = true
@@ -1116,6 +1126,7 @@ func _show_game_over() -> void:
 	if _game_over:
 		return
 	_game_over = true
+	_reset_idle_hint_nudge()
 	_reset_full_board_game_over_grace()
 	Global.record_last_score(_score)
 	_update_hud_text()
@@ -1514,6 +1525,104 @@ func _reset_high_score_pulse_visual() -> void:
 	_high_score_label.pivot_offset = _high_score_label.size * 0.5
 	_high_score_label.add_theme_color_override("font_color", Color(0.78, 0.94, 1.0, 1.0))
 	_high_score_label.add_theme_constant_override("outline_size", 3)
+
+
+func _idle_hint_should_pause() -> bool:
+	if _score > 4:
+		return true
+	if _visual_profile_enabled:
+		return true
+	if _drag_source != DRAG_SOURCE_NONE:
+		return true
+	return _game_over or _is_clear_effect_active()
+
+
+func _advance_idle_hint_nudge(delta: float) -> bool:
+	if _idle_hint_disabled_after_hint:
+		if _is_idle_hint_nudge_active():
+			_reset_idle_hint_nudge()
+			return true
+		return false
+	if _idle_hint_should_pause():
+		if _is_idle_hint_nudge_active():
+			_reset_idle_hint_nudge()
+			return true
+		return false
+	if _is_idle_hint_nudge_active():
+		_idle_hint_pulse_elapsed = minf(IDLE_HINT_PULSE_SECONDS, _idle_hint_pulse_elapsed + maxf(delta, 0.0))
+		_apply_idle_hint_nudge_visual()
+		if _idle_hint_pulse_elapsed >= IDLE_HINT_PULSE_SECONDS:
+			_reset_idle_hint_button_visual()
+			_idle_hint_elapsed = 0.0
+		return true
+	_idle_hint_elapsed += maxf(delta, 0.0)
+	if _idle_hint_elapsed >= IDLE_HINT_DELAY_SECONDS:
+		_start_idle_hint_nudge()
+		return true
+	return false
+
+
+func _start_idle_hint_nudge() -> void:
+	_idle_hint_pulse_elapsed = 0.0
+	_apply_idle_hint_nudge_visual()
+
+
+func _reset_idle_hint_nudge() -> void:
+	_idle_hint_elapsed = 0.0
+	_idle_hint_pulse_elapsed = IDLE_HINT_PULSE_SECONDS
+	_reset_idle_hint_button_visual()
+
+
+func _enable_idle_hint_nudge() -> void:
+	_idle_hint_disabled_after_hint = false
+	_reset_idle_hint_nudge()
+
+
+func _is_idle_hint_nudge_active() -> bool:
+	return _idle_hint_pulse_elapsed < IDLE_HINT_PULSE_SECONDS
+
+
+func _idle_hint_nudge_amount() -> float:
+	if not _is_idle_hint_nudge_active():
+		return 0.0
+	var progress := clampf(_idle_hint_pulse_elapsed / IDLE_HINT_PULSE_SECONDS, 0.0, 1.0)
+	return sin(progress * PI)
+
+
+func _apply_idle_hint_nudge_visual() -> void:
+	if not is_instance_valid(_hint_button):
+		return
+	var pulse := _idle_hint_nudge_amount()
+	var scale := 1.0 + (IDLE_HINT_MAX_SCALE - 1.0) * pulse
+	_hint_button.pivot_offset = _hint_button.size * 0.5
+	_hint_button.scale = Vector2(scale, scale)
+	_hint_button.add_theme_color_override("font_color", Color(1.0, 0.95, 0.38, 1.0).lerp(Color(0.92, 1.0, 0.96, 1.0), 1.0 - pulse * 0.55))
+	_hint_button.add_theme_constant_override("outline_size", 3 + int(roundf(pulse * 3.0)))
+
+
+func _reset_idle_hint_button_visual() -> void:
+	if not is_instance_valid(_hint_button):
+		return
+	_hint_button.scale = Vector2.ONE
+	_hint_button.pivot_offset = _hint_button.size * 0.5
+	_hint_button.add_theme_color_override("font_color", Color(0.92, 1.0, 0.96, 1.0))
+	_hint_button.add_theme_constant_override("outline_size", 3)
+
+
+func _draw_idle_hint_nudge() -> void:
+	if not is_instance_valid(_hint_button) or not _is_idle_hint_nudge_active():
+		return
+	var pulse := _idle_hint_nudge_amount()
+	if pulse <= 0.0:
+		return
+	var rect := Rect2(_hint_button.position, _hint_button.size)
+	var center := rect.get_center()
+	var radius := maxf(rect.size.x, rect.size.y) * (0.54 + pulse * 0.24)
+	var teal := Color(0.36, 1.0, 0.78, 0.18 + pulse * 0.18)
+	var gold := Color(1.0, 0.88, 0.22, 0.22 + pulse * 0.24)
+	draw_circle(center, radius * 1.22, Color(teal.r, teal.g, teal.b, teal.a * pulse))
+	draw_circle(center, radius, Color(gold.r, gold.g, gold.b, gold.a * pulse))
+	draw_rect(rect.grow(4.0 + pulse * 8.0), Color(1.0, 0.90, 0.22, 0.10 + pulse * 0.18), false, 2.0 + pulse * 2.0)
 
 
 func _make_panel_style(fill: Color, border: Color, border_width: int, radius: int) -> StyleBoxFlat:
@@ -2397,6 +2506,7 @@ func _renderer_needs() -> Dictionary:
 func _draw() -> void:
 	var view_size := get_viewport_rect().size
 	draw_rect(Rect2(Vector2.ZERO, view_size), Color(0.025, 0.055, 0.065, 1.0), true)
+	_draw_idle_hint_nudge()
 	_sync_board_renderer()
 	if is_instance_valid(_overlay_layer):
 		_overlay_layer.queue_redraw()
@@ -2540,6 +2650,7 @@ func _finish_pinch() -> void:
 func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
 	var board_cell := _board_cell_at(screen_pos)
 	if not board_cell.is_empty():
+		_reset_idle_hint_nudge()
 		_clear_hint(false)
 		_drag_source = DRAG_SOURCE_BOARD
 		_drag_cell_id = board_cell
@@ -2553,6 +2664,7 @@ func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:
 		return true
 	var inventory_index := _inventory_cell_at(screen_pos)
 	if inventory_index >= 0:
+		_reset_idle_hint_nudge()
 		_clear_hint(false)
 		_drag_source = DRAG_SOURCE_INVENTORY
 		_drag_cell_id = str(_inventory_cells[inventory_index].get("id", ""))
@@ -2578,6 +2690,7 @@ func _update_drag(screen_pos: Vector2) -> void:
 func _finish_drag(screen_pos: Vector2) -> void:
 	if _drag_source == DRAG_SOURCE_NONE:
 		return
+	_reset_idle_hint_nudge()
 	_drag_position = screen_pos + _drag_offset
 	var target_tile := _screen_to_tile(_drag_position)
 	var changed := false
@@ -2711,6 +2824,8 @@ func _on_main_menu_pressed() -> void:
 
 
 func _on_hint_pressed() -> void:
+	_idle_hint_disabled_after_hint = true
+	_reset_idle_hint_nudge()
 	var candidates: Array = _arcade_hint_candidates()
 	if candidates.is_empty():
 		_hint_pair.clear()

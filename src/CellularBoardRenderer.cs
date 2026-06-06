@@ -7,8 +7,16 @@ public partial class CellularBoardRenderer : Control
 {
     private const float SwapVisualTtlTicks = 10.0f;
     private const float ReactionVisualTtlTicks = 10.0f;
-    private const float PipAngleSmooth = 0.22f;
-    private const float PipOffsetSmooth = 0.24f;
+    private const float PipAngleSmooth = 0.10f;
+    private const float PipOffsetSmooth = 0.12f;
+    private const float PipAngleReturnSmooth = 0.045f;
+    private const float PipOffsetReturnSmooth = 0.055f;
+    private const float PipAngleDeadZone = 0.018f;
+    private const float PipOffsetDeadZone = 0.45f;
+    private const float NeedPipMinimumAngleGap = 0.30f;
+    private const float NeedPipFanAngleStep = 0.32f;
+    private const float NeedPipLaneFootprintScale = 1.36f;
+    private const float NeedPipLaneMargin = 4.0f;
     private const int MaxVisibleFlowLines = 192;
     private const ulong ZeroPipPulsePeriodMsec = 3_000;
     private const ulong ZeroPipPulseFadeMsec = 1_000;
@@ -37,6 +45,9 @@ public partial class CellularBoardRenderer : Control
     private const float CellGlowInnerAlphaFraction = 0.70f;
     private const float NeedPipMarkSizeScale = 1.10f;
     private const float NeedPipMarkWeightScale = 1.10f;
+    private static readonly Color PlayableTileEvenColor = new(0.18f, 0.285f, 0.295f, 1.0f);
+    private static readonly Color PlayableTileOddColor = new(0.22f, 0.335f, 0.340f, 1.0f);
+    private static readonly Color PlayableTileBorderColor = new(0.62f, 0.96f, 0.86f, 0.36f);
     private static readonly Color CellStressGlowColor = new(1.0f, 0.96f, 0.04f, 1.0f);
     private static readonly Color CellHealthyGlowColor = new(0.30f, 1.0f, 0.84f, 1.0f);
     private static readonly Color ZeroPipPulseColor = new(1.0f, 0.0f, 0.0f, 1.0f);
@@ -115,6 +126,11 @@ public partial class CellularBoardRenderer : Control
     private readonly Dictionary<string, float> _pipAngles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _pipOffsets = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _pipPartners = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _pipLayoutPartners = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Vector2> _pipLayoutCenters = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Vector2> _pipLayoutCellCenters = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _pipLayoutCellRadii = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _pipReturningToDefault = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _displayFullness = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _mycoPipSignatures = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ulong> _mycoPipTransitionStarts = new(StringComparer.Ordinal);
@@ -126,6 +142,14 @@ public partial class CellularBoardRenderer : Control
     private readonly Dictionary<string, Dictionary<string, string>> _preferredNeedPartners = new(StringComparer.Ordinal);
     private readonly List<RecentFlowLineVisual> _visibleRecentFlows = [];
     private readonly List<float> _usedNeedAngles = [];
+    private readonly List<NeedPipDraw> _normalNeedPips = [];
+    private readonly List<NeedPipDraw> _zeroNeedPips = [];
+    private readonly List<NeedPipOverlayDraw> _zeroNeedPipOverlayPips = [];
+    private readonly Dictionary<string, NeedPipLayout> _needPipLayouts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> _needPipLayoutKeysByResource = new(StringComparer.Ordinal);
+    private readonly List<NeedPipLayoutSpec> _needPipLayoutSpecs = [];
+    private readonly Dictionary<string, List<int>> _needPipLayoutGroups = new(StringComparer.Ordinal);
+    private string _cellLayoutSignature = "";
 
     private GdDictionary _snapshot = new();
     private Rect2 _boardRect;
@@ -239,6 +263,11 @@ public partial class CellularBoardRenderer : Control
 
     private void ApplyViewState(Rect2 boardRect, Rect2 boardViewportRect, float tileSize)
     {
+        var hasPreviousGeometry = _tileSize > 0.0f;
+        var scaleChanged = hasPreviousGeometry && Mathf.Abs(_tileSize - tileSize) > 0.01f;
+        var sizeChanged = hasPreviousGeometry && (_boardRect.Size - boardRect.Size).LengthSquared() > 0.01f;
+        var screenDelta = hasPreviousGeometry ? boardRect.Position - _boardRect.Position : Vector2.Zero;
+        var geometryChanged = scaleChanged || sizeChanged;
         _boardRect = boardRect;
         _boardViewportRect = boardViewportRect;
         if (_boardViewportRect.Size.X <= 1.0f || _boardViewportRect.Size.Y <= 1.0f)
@@ -246,6 +275,14 @@ public partial class CellularBoardRenderer : Control
             _boardViewportRect = _boardRect;
         }
         _tileSize = tileSize;
+        if (geometryChanged)
+        {
+            ClearNeedPipLayoutState();
+        }
+        else
+        {
+            TranslateNeedPipLayoutHistory(screenDelta);
+        }
     }
 
     public void set_drag_state(string dragCell, Vector2 dragPosition, Vector2I originalDragTile, bool fastDragMode) =>
@@ -269,6 +306,7 @@ public partial class CellularBoardRenderer : Control
         }
 
         UpdateFrameBlend();
+        PrepareNeedPipLayouts();
         if (_boardVisible)
         {
             DrawBoard();
@@ -303,12 +341,15 @@ public partial class CellularBoardRenderer : Control
         {
             DrawInventoryDragCell();
         }
+
+        DrawZeroNeedPipOverlays();
     }
 
     private void DrawProfiled()
     {
         var frameStart = Time.GetTicksUsec();
         UpdateFrameBlend();
+        PrepareNeedPipLayouts();
         var sectionStart = Time.GetTicksUsec();
         if (_boardVisible)
         {
@@ -370,6 +411,7 @@ public partial class CellularBoardRenderer : Control
         {
             DrawInventoryDragCell();
         }
+        DrawZeroNeedPipOverlays();
         _visualProfileCellsUsec += Time.GetTicksUsec() - sectionStart;
 
         var frameUsec = Time.GetTicksUsec() - frameStart;
@@ -444,9 +486,9 @@ public partial class CellularBoardRenderer : Control
                     continue;
                 }
 
-                var shade = (x + y) % 2 == 0 ? 0.085f : 0.105f;
-                DrawRect(rect, new Color(shade, shade + 0.035f, shade + 0.045f, 1.0f), filled: true);
-                DrawRect(rect, new Color(0.24f, 0.42f, 0.42f, 0.18f), filled: false, width: 1.0f);
+                var tileColor = (x + y) % 2 == 0 ? PlayableTileEvenColor : PlayableTileOddColor;
+                DrawRect(rect, tileColor, filled: true);
+                DrawRect(rect, PlayableTileBorderColor, filled: false, width: 1.0f);
             }
         }
 
@@ -1138,85 +1180,208 @@ public partial class CellularBoardRenderer : Control
         var needed = mycoPipState.Resources;
         var pipCount = isMyco ? MycoVisualPipCount : needed.Count;
         var mycoAdaptProgress = mycoPipState.Progress;
-        var usedAngles = _usedNeedAngles;
-        usedAngles.Clear();
-        if (usedAngles.Capacity < pipCount)
+        var fallbackUsedAngles = _usedNeedAngles;
+        fallbackUsedAngles.Clear();
+        if (fallbackUsedAngles.Capacity < pipCount)
         {
-            usedAngles.Capacity = pipCount;
+            fallbackUsedAngles.Capacity = pipCount;
         }
+        _normalNeedPips.Clear();
+        _zeroNeedPips.Clear();
 
         for (var i = 0; i < pipCount; i++)
         {
             var pipRadius = NeedPipRadius(radius);
             if (i >= needed.Count)
             {
-                var blankAngle = -Mathf.Pi * 0.5f + i / Mathf.Max(1.0f, pipCount) * Mathf.Tau;
-                var blankCenter = center + new Vector2(Mathf.Cos(blankAngle), Mathf.Sin(blankAngle)) * (radius * 1.18f);
-                var blankColor = new Color(0.92f, 0.97f, 0.96f, clearAlpha);
-                DrawCircle(blankCenter, pipRadius, blankColor);
-                DrawArc(blankCenter, pipRadius, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(0.01f, 0.025f, 0.03f, 0.68f * clearAlpha), 2.2f, antialiased: true);
-                DrawArc(blankCenter, pipRadius * 0.84f, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(1.0f, 1.0f, 1.0f, 0.52f * clearAlpha), 1.4f, antialiased: true);
+                var blankLayoutKey = PipSlotVisualKey(cell, i);
+                var blankLayout = default(NeedPipLayout);
+                var hasBlankLayout = useSimState && _needPipLayouts.TryGetValue(blankLayoutKey, out blankLayout);
+                var blankCenter = hasBlankLayout ? blankLayout.Center : DefaultMycoSlotCenter(center, i, pipCount, radius);
+                var blankRadius = hasBlankLayout ? blankLayout.Radius : pipRadius;
+                DrawBlankMycoPip(blankCenter, blankRadius, clearAlpha);
                 continue;
             }
 
             var need = needed[i];
-            var fadingObsoleteMycoResource = isMyco && !ContainsResource(currentNeeded, need);
-            var visual = fadingObsoleteMycoResource
-                ? FadingMycoNeedVisual(i, pipCount, radius)
-                : NeedVisualData(cell, need, i, pipCount, center, radius, pipRadius, usedAngles, applySmoothing: true, useSimState: useSimState);
-            usedAngles.Add(visual.TargetAngle);
-            var pipCenter = center + new Vector2(Mathf.Cos(visual.Angle), Mathf.Sin(visual.Angle)) * visual.Offset;
-            var met = visual.State != NeedStateMissing || visual.Fullness > 0.0f;
-            var pipColor = ResourceColor(need);
-
-            if (visual.State == NeedStateMissing)
+            var key = PipVisualKey(cell, need, i);
+            var pip = useSimState && _needPipLayouts.TryGetValue(key, out var layout)
+                ? NeedPipDrawFromLayout(layout)
+                : BuildFallbackNeedPipDraw(
+                    cell,
+                    need,
+                    i,
+                    pipCount,
+                    center,
+                    radius,
+                    pipRadius,
+                    fallbackUsedAngles,
+                    useSimState,
+                    isMyco,
+                    mycoAdaptProgress,
+                    clearAlpha,
+                    clearing,
+                    hasLiveState,
+                    currentNeeded);
+            if (ShouldElevateNeedPip(pip))
             {
-                pipColor = pipColor.Darkened(0.48f) with { A = clearAlpha };
-                DrawNeedTether(center, pipCenter, radius, pipRadius, new Color(0.75f, 0.88f, 0.90f, 0.28f * clearAlpha));
-            }
-            else if (visual.State == NeedStateAvailable)
-            {
-                pipColor = pipColor.Darkened(0.12f) with { A = clearAlpha };
-                DrawNeedTether(center, pipCenter, radius, pipRadius, new Color(pipColor.R, pipColor.G, pipColor.B, 0.42f * clearAlpha));
-            }
-            else if (visual.State == NeedStateActive)
-            {
-                pipColor = pipColor with { A = clearAlpha };
-                DrawCircle(pipCenter, pipRadius * (1.14f + visual.ActiveAlpha * 0.16f), new Color(pipColor.R, pipColor.G, pipColor.B, (0.20f + visual.ActiveAlpha * 0.26f) * clearAlpha));
+                _zeroNeedPips.Add(pip);
+                _zeroNeedPipOverlayPips.Add(new NeedPipOverlayDraw(pip, radius));
             }
             else
             {
-                pipColor = pipColor with { A = clearAlpha };
+                _normalNeedPips.Add(pip);
             }
+        }
 
-            if (isMyco)
-            {
-                var waitingColor = new Color(0.92f, 0.97f, 0.96f, clearAlpha);
-                pipColor = waitingColor.Lerp(pipColor, mycoAdaptProgress);
-                pipColor.A = clearAlpha;
-            }
+        foreach (var pip in _normalNeedPips)
+        {
+            DrawNeedPip(font, pip, radius, drawTether: true);
+        }
 
-            DrawCircle(pipCenter, pipRadius, pipColor);
-            DrawArc(pipCenter, pipRadius, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(0.01f, 0.025f, 0.03f, 0.82f * clearAlpha), 2.2f, antialiased: true);
-            DrawArc(pipCenter, pipRadius * 0.86f, 0.0f, Mathf.Tau, ArcSegments(pipRadius), new Color(1.0f, 1.0f, 1.0f, (met ? 0.44f : 0.28f) * clearAlpha), 1.4f, antialiased: true);
-            var pipBarRadius = pipRadius * 1.12f;
-            var pipBarWidth = Mathf.Max(2.0f, pipRadius * 0.20f);
-            if (!clearing)
-            {
-                var fullness = isMyco ? visual.Fullness * mycoAdaptProgress : visual.Fullness;
-                DrawFullnessArc(pipCenter, pipBarRadius, DisplayedFullness(cell, need, fullness), pipColor, pipBarWidth);
-            }
-            if (!clearing && hasLiveState && visual.Fullness <= 0.0f)
-            {
-                DrawZeroPipPulseArc(pipCenter, pipBarRadius, pipBarWidth);
-            }
-            var markAlpha = clearAlpha * (isMyco ? mycoAdaptProgress : 1.0f);
-            DrawFastResourceMark(font, pipCenter, pipRadius, need, Mathf.RoundToInt(pipRadius * 1.02f * NeedPipMarkSizeScale), Colors.White with { A = markAlpha });
+        foreach (var pip in _zeroNeedPips)
+        {
+            DrawNeedPip(font, pip, radius, drawTether: true);
         }
 
         if (!isMyco)
         {
             DrawResourceMark(font, center, radius, produced, Mathf.RoundToInt(radius * 1.48f), Colors.White with { A = clearAlpha });
+        }
+    }
+
+    private void DrawBlankMycoPip(Vector2 center, float radius, float alpha)
+    {
+        DrawCircle(center, radius, new Color(0.92f, 0.97f, 0.96f, alpha));
+        DrawArc(center, radius, 0.0f, Mathf.Tau, ArcSegments(radius), new Color(0.01f, 0.025f, 0.03f, 0.68f * alpha), 2.2f, antialiased: true);
+        DrawArc(center, radius * 0.84f, 0.0f, Mathf.Tau, ArcSegments(radius), new Color(1.0f, 1.0f, 1.0f, 0.52f * alpha), 1.4f, antialiased: true);
+    }
+
+    private static NeedPipDraw NeedPipDrawFromLayout(NeedPipLayout layout) =>
+        new(
+            layout.Cell,
+            layout.Need,
+            layout.CellCenter,
+            layout.Center,
+            layout.Radius,
+            layout.State,
+            layout.Fullness,
+            layout.ActiveAlpha,
+            layout.IsMyco,
+            layout.MycoProgress,
+            layout.ClearAlpha,
+            layout.Clearing,
+            layout.HasLiveState);
+
+    private NeedPipDraw BuildFallbackNeedPipDraw(
+        string cell,
+        string need,
+        int index,
+        int count,
+        Vector2 center,
+        float cellRadius,
+        float pipRadius,
+        List<float> usedAngles,
+        bool useSimState,
+        bool isMyco,
+        float mycoAdaptProgress,
+        float clearAlpha,
+        bool clearing,
+        bool hasLiveState,
+        List<string> currentNeeded)
+    {
+        var fadingObsoleteMycoResource = isMyco && !ContainsResource(currentNeeded, need);
+        var visual = fadingObsoleteMycoResource
+            ? FadingMycoNeedVisual(index, count, cellRadius)
+            : NeedVisualData(cell, need, index, count, center, cellRadius, pipRadius, usedAngles, applySmoothing: true, useSimState: useSimState);
+        usedAngles.Add(visual.TargetAngle);
+        var pipCenter = center + new Vector2(Mathf.Cos(visual.Angle), Mathf.Sin(visual.Angle)) * visual.Offset;
+        return new NeedPipDraw(
+            cell,
+            need,
+            center,
+            pipCenter,
+            pipRadius,
+            visual.State,
+            visual.Fullness,
+            visual.ActiveAlpha,
+            isMyco,
+            mycoAdaptProgress,
+            clearAlpha,
+            clearing,
+            hasLiveState);
+    }
+
+    private void DrawNeedPip(Font font, NeedPipDraw pip, float cellRadius, bool drawTether)
+    {
+        var clearAlpha = pip.ClearAlpha;
+        var pipColor = ResourceColor(pip.Need);
+        if (pip.State == NeedStateMissing)
+        {
+            pipColor = pipColor.Darkened(0.48f) with { A = clearAlpha };
+            if (drawTether)
+            {
+                DrawNeedTether(pip.CellCenter, pip.Center, cellRadius, pip.Radius, new Color(0.75f, 0.88f, 0.90f, 0.28f * clearAlpha));
+            }
+        }
+        else if (pip.State == NeedStateAvailable)
+        {
+            pipColor = pipColor.Darkened(0.12f) with { A = clearAlpha };
+            if (drawTether)
+            {
+                DrawNeedTether(pip.CellCenter, pip.Center, cellRadius, pip.Radius, new Color(pipColor.R, pipColor.G, pipColor.B, 0.42f * clearAlpha));
+            }
+        }
+        else if (pip.State == NeedStateActive)
+        {
+            pipColor = pipColor with { A = clearAlpha };
+            DrawCircle(pip.Center, pip.Radius * (1.14f + pip.ActiveAlpha * 0.16f), new Color(pipColor.R, pipColor.G, pipColor.B, (0.20f + pip.ActiveAlpha * 0.26f) * clearAlpha));
+        }
+        else
+        {
+            pipColor = pipColor with { A = clearAlpha };
+        }
+
+        if (pip.IsMyco)
+        {
+            var waitingColor = new Color(0.92f, 0.97f, 0.96f, clearAlpha);
+            pipColor = waitingColor.Lerp(pipColor, pip.MycoProgress);
+            pipColor.A = clearAlpha;
+        }
+
+        var met = pip.State != NeedStateMissing || pip.Fullness > 0.0f;
+        DrawCircle(pip.Center, pip.Radius, pipColor);
+        DrawArc(pip.Center, pip.Radius, 0.0f, Mathf.Tau, ArcSegments(pip.Radius), new Color(0.01f, 0.025f, 0.03f, 0.82f * clearAlpha), 2.2f, antialiased: true);
+        DrawArc(pip.Center, pip.Radius * 0.86f, 0.0f, Mathf.Tau, ArcSegments(pip.Radius), new Color(1.0f, 1.0f, 1.0f, (met ? 0.44f : 0.28f) * clearAlpha), 1.4f, antialiased: true);
+        var pipBarRadius = pip.Radius * 1.12f;
+        var pipBarWidth = Mathf.Max(2.0f, pip.Radius * 0.20f);
+        if (!pip.Clearing)
+        {
+            var fullness = pip.IsMyco ? pip.Fullness * pip.MycoProgress : pip.Fullness;
+            DrawFullnessArc(pip.Center, pipBarRadius, DisplayedFullness(pip.Cell, pip.Need, fullness), pipColor, pipBarWidth);
+        }
+        if (ShouldElevateNeedPip(pip))
+        {
+            DrawZeroPipPulseArc(pip.Center, pipBarRadius, pipBarWidth);
+        }
+        var markAlpha = clearAlpha * (pip.IsMyco ? pip.MycoProgress : 1.0f);
+        DrawFastResourceMark(font, pip.Center, pip.Radius, pip.Need, Mathf.RoundToInt(pip.Radius * 1.02f * NeedPipMarkSizeScale), Colors.White with { A = markAlpha });
+    }
+
+    private static bool ShouldElevateNeedPip(NeedPipDraw pip) =>
+        !pip.Clearing && pip.HasLiveState && pip.Fullness <= 0.0f;
+
+    private void DrawZeroNeedPipOverlays()
+    {
+        if (!_boardVisible || !_usingCsharpSim || _zeroNeedPipOverlayPips.Count == 0)
+        {
+            return;
+        }
+
+        var font = GetThemeDefaultFont();
+        foreach (var overlay in _zeroNeedPipOverlayPips)
+        {
+            DrawNeedPip(font, overlay.Pip, overlay.CellRadius, drawTether: false);
         }
     }
 
@@ -1233,6 +1398,15 @@ public partial class CellularBoardRenderer : Control
     {
         var angle = -Mathf.Pi * 0.5f + index / Mathf.Max(1.0f, count) * Mathf.Tau;
         return new NeedVisual(NeedStateSatisfied, "", 1.0f, 0.0f, angle, cellRadius * 1.18f, angle);
+    }
+
+    private static NeedVisual BlankMycoNeedVisual(int index, int count, float cellRadius) =>
+        FadingMycoNeedVisual(index, count, cellRadius);
+
+    private static Vector2 DefaultMycoSlotCenter(Vector2 center, int index, int count, float cellRadius)
+    {
+        var angle = -Mathf.Pi * 0.5f + index / Mathf.Max(1.0f, count) * Mathf.Tau;
+        return center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (cellRadius * 1.18f);
     }
 
     private List<string> VisualNeedsForCell(string cell, bool isMyco, bool useSimState)
@@ -1519,6 +1693,447 @@ public partial class CellularBoardRenderer : Control
         _frameBlend = 1.0f - Mathf.Exp(-deltaSeconds * 18.0f);
     }
 
+    private void PrepareNeedPipLayouts()
+    {
+        ClearNeedPipFrameLayouts();
+
+        foreach (var cell in _cells)
+        {
+            var dragging = cell == _dragCell;
+            var center = dragging ? _dragPosition : VisualCellCenter(cell);
+            AddNeedPipLayoutSpecsForCell(cell, center, dragging, useSimState: true, visualScale: CellVisualScale(cell));
+        }
+
+        LayoutNeedPipSpecs();
+    }
+
+    private void ClearNeedPipFrameLayouts()
+    {
+        _zeroNeedPipOverlayPips.Clear();
+        _needPipLayouts.Clear();
+        _needPipLayoutKeysByResource.Clear();
+        _needPipLayoutSpecs.Clear();
+        _needPipLayoutGroups.Clear();
+    }
+
+    private void ClearNeedPipLayoutState()
+    {
+        ClearNeedPipFrameLayouts();
+        _pipAngles.Clear();
+        _pipOffsets.Clear();
+        _pipPartners.Clear();
+        _pipLayoutPartners.Clear();
+        _pipLayoutCenters.Clear();
+        _pipLayoutCellCenters.Clear();
+        _pipLayoutCellRadii.Clear();
+        _pipReturningToDefault.Clear();
+    }
+
+    private void TranslateNeedPipLayoutHistory(Vector2 delta)
+    {
+        if (delta.LengthSquared() <= 0.0001f)
+        {
+            return;
+        }
+
+        TranslateVectorHistory(_pipLayoutCenters, delta);
+        TranslateVectorHistory(_pipLayoutCellCenters, delta);
+    }
+
+    private static void TranslateVectorHistory(Dictionary<string, Vector2> history, Vector2 delta)
+    {
+        if (history.Count == 0)
+        {
+            return;
+        }
+
+        var keys = new List<string>(history.Keys);
+        foreach (var key in keys)
+        {
+            history[key] += delta;
+        }
+    }
+
+    private void AddNeedPipLayoutSpecsForCell(
+        string cell,
+        Vector2 center,
+        bool dragging,
+        bool useSimState,
+        float visualScale)
+    {
+        var radius = _tileSize * (dragging ? 0.43f : 0.39f) * visualScale;
+        var clearAlpha = _clearingCells.Contains(cell) ? ClearingAlpha() : 1.0f;
+        if (clearAlpha <= 0.0f)
+        {
+            return;
+        }
+
+        var kind = CellKindFor(cell);
+        var isMyco = IsMycoKind(kind);
+        var currentNeeded = VisualNeedsForCell(cell, isMyco, useSimState);
+        var mycoPipState = isMyco
+            ? BuildMycoPipVisualState(cell, currentNeeded)
+            : new MycoPipVisualState(currentNeeded, 1.0f);
+        var needed = mycoPipState.Resources;
+        var pipCount = isMyco ? MycoVisualPipCount : needed.Count;
+        var pipRadius = NeedPipRadius(radius);
+        var hasLiveState = _cellStates.ContainsKey(cell);
+        var clearing = _clearingCells.Contains(cell);
+
+        for (var i = 0; i < pipCount; i++)
+        {
+            if (i >= needed.Count)
+            {
+                if (isMyco)
+                {
+                    AddNeedPipLayoutSpec(new NeedPipLayoutSpec(
+                        PipSlotVisualKey(cell, i),
+                        cell,
+                        "",
+                        i,
+                        pipCount,
+                        center,
+                        radius,
+                        pipRadius,
+                        BlankMycoNeedVisual(i, pipCount, radius),
+                        isMyco,
+                        mycoPipState.Progress,
+                        clearAlpha,
+                        clearing,
+                        false,
+                        "",
+                        dragging));
+                }
+
+                continue;
+            }
+
+            var need = needed[i];
+            var fadingObsoleteMycoResource = isMyco && !ContainsResource(currentNeeded, need);
+            var visual = fadingObsoleteMycoResource
+                ? FadingMycoNeedVisual(i, pipCount, radius)
+                : NeedStateData(cell, need, useSimState);
+            var stablePartner = fadingObsoleteMycoResource
+                ? ""
+                : StabilizeNeedPartner(cell, need, i, visual.Partner);
+            visual = visual with { Partner = stablePartner };
+            AddNeedPipLayoutSpec(new NeedPipLayoutSpec(
+                PipVisualKey(cell, need, i),
+                cell,
+                need,
+                i,
+                pipCount,
+                center,
+                radius,
+                pipRadius,
+                visual,
+                isMyco,
+                mycoPipState.Progress,
+                clearAlpha,
+                clearing,
+                hasLiveState,
+                stablePartner,
+                dragging));
+        }
+    }
+
+    private void AddNeedPipLayoutSpec(NeedPipLayoutSpec spec)
+    {
+        var specIndex = _needPipLayoutSpecs.Count;
+        _needPipLayoutSpecs.Add(spec);
+        if (string.IsNullOrEmpty(spec.Partner))
+        {
+            return;
+        }
+
+        var groupKey = NeedPipEdgeGroupKey(spec.Cell, spec.Partner);
+        if (!_needPipLayoutGroups.TryGetValue(groupKey, out var group))
+        {
+            group = [];
+            _needPipLayoutGroups[groupKey] = group;
+        }
+
+        group.Add(specIndex);
+    }
+
+    private void LayoutNeedPipSpecs()
+    {
+        if (_needPipLayoutSpecs.Count == 0)
+        {
+            return;
+        }
+
+        var laidOut = new bool[_needPipLayoutSpecs.Count];
+        foreach (var group in _needPipLayoutGroups.Values)
+        {
+            if (group.Count == 0)
+            {
+                continue;
+            }
+
+            group.Sort((a, b) => string.CompareOrdinal(_needPipLayoutSpecs[a].Key, _needPipLayoutSpecs[b].Key));
+            var maxPipRadius = 0.0f;
+            foreach (var specIndex in group)
+            {
+                maxPipRadius = Mathf.Max(maxPipRadius, _needPipLayoutSpecs[specIndex].PipRadius);
+            }
+
+            var laneSpacing = maxPipRadius * NeedPipLaneFootprintScale * 2.0f + NeedPipLaneMargin;
+            var laneCenter = (group.Count - 1) * 0.5f;
+            for (var lane = 0; lane < group.Count; lane++)
+            {
+                var specIndex = group[lane];
+                var spec = _needPipLayoutSpecs[specIndex];
+                var laneOffset = (lane - laneCenter) * laneSpacing;
+                StoreProviderNeedPipLayout(spec, laneOffset);
+                laidOut[specIndex] = true;
+            }
+        }
+
+        for (var i = 0; i < _needPipLayoutSpecs.Count; i++)
+        {
+            if (!laidOut[i])
+            {
+                StoreDefaultNeedPipLayout(_needPipLayoutSpecs[i]);
+            }
+        }
+    }
+
+    private void StoreProviderNeedPipLayout(NeedPipLayoutSpec spec, float laneOffset)
+    {
+        var partnerCenter = VisualCellCenter(spec.Partner);
+        var delta = partnerCenter - spec.CellCenter;
+        if (delta.LengthSquared() <= 1.0f)
+        {
+            StoreDefaultNeedPipLayout(spec);
+            return;
+        }
+
+        var direction = delta.Normalized();
+        var baseOffset = NeedPipOffset(spec.CellCenter, spec.Partner, spec.CellRadius, spec.PipRadius);
+        var laneDirection = NeedPipEdgeLaneDirection(spec.Cell, spec.Partner);
+        var laneVector = direction * baseOffset + laneDirection * laneOffset;
+        if (laneVector.LengthSquared() <= 0.0001f)
+        {
+            StoreDefaultNeedPipLayout(spec);
+            return;
+        }
+
+        StoreNeedPipLayout(spec, spec.CellCenter + laneVector.Normalized() * baseOffset);
+    }
+
+    private void StoreDefaultNeedPipLayout(NeedPipLayoutSpec spec)
+    {
+        var targetAngle = spec.Visual.TargetAngle;
+        if (Mathf.Abs(targetAngle) <= 0.0001f && string.IsNullOrEmpty(spec.Partner))
+        {
+            targetAngle = -Mathf.Pi * 0.5f + spec.Index / Mathf.Max(1.0f, spec.Count) * Mathf.Tau;
+        }
+
+        var targetOffset = spec.Visual.Offset > 0.0f
+            ? spec.Visual.Offset
+            : NeedPipOffsetForState(spec.CellCenter, "", spec.CellRadius, spec.PipRadius, spec.Visual.State);
+        StoreNeedPipLayout(spec, spec.CellCenter + new Vector2(Mathf.Cos(targetAngle), Mathf.Sin(targetAngle)) * targetOffset);
+    }
+
+    private void StoreNeedPipLayout(NeedPipLayoutSpec spec, Vector2 targetCenter)
+    {
+        var delta = targetCenter - spec.CellCenter;
+        var targetAngle = delta.LengthSquared() > 0.0001f
+            ? delta.Angle()
+            : -Mathf.Pi * 0.5f + spec.Index / Mathf.Max(1.0f, spec.Count) * Mathf.Tau;
+        var targetOffset = delta.LengthSquared() > 0.0001f
+            ? delta.Length()
+            : NeedPipOffsetForState(spec.CellCenter, spec.Partner, spec.CellRadius, spec.PipRadius, spec.Visual.State);
+        var slotKey = spec.IsMyco ? PipSlotVisualKey(spec.Cell, spec.Index) : "";
+        if (!spec.Dragging)
+        {
+            SeedPipSmoothingFromPreviousCenter(spec.Key, spec.CellCenter, spec.CellRadius, slotKey);
+        }
+        var returningToDefault = PipReturningToDefault(spec.Key, spec.Partner, slotKey);
+        var angle = SmoothPipAngle(spec.Key, targetAngle, returningToDefault ? PipAngleReturnSmooth : PipAngleSmooth);
+        var offset = SmoothPipOffset(spec.Key, targetOffset, returningToDefault ? PipOffsetReturnSmooth : PipOffsetSmooth);
+        StopPipReturnToDefaultIfSettled(spec.Key, returningToDefault, angle, targetAngle, offset, targetOffset);
+        var center = spec.CellCenter + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * offset;
+        var layout = new NeedPipLayout(
+            spec.Key,
+            spec.Cell,
+            spec.Need,
+            spec.Index,
+            spec.Partner,
+            spec.CellCenter,
+            center,
+            spec.PipRadius,
+            spec.Visual.State,
+            spec.Visual.Fullness,
+            spec.Visual.ActiveAlpha,
+            spec.IsMyco,
+            spec.MycoProgress,
+            spec.ClearAlpha,
+            spec.Clearing,
+            spec.HasLiveState,
+            spec.CellRadius);
+
+        _needPipLayouts[spec.Key] = layout;
+        _pipLayoutPartners[spec.Key] = spec.Partner;
+        _pipLayoutCenters[spec.Key] = center;
+        _pipLayoutCellCenters[spec.Key] = spec.CellCenter;
+        _pipLayoutCellRadii[spec.Key] = spec.CellRadius;
+        if (spec.IsMyco)
+        {
+            _pipLayoutPartners[slotKey] = spec.Partner;
+            _pipLayoutCenters[slotKey] = center;
+            _pipLayoutCellCenters[slotKey] = spec.CellCenter;
+            _pipLayoutCellRadii[slotKey] = spec.CellRadius;
+        }
+        if (string.IsNullOrEmpty(spec.Need))
+        {
+            return;
+        }
+
+        var lookupKey = NeedLookupKey(spec.Cell, spec.Need);
+        if (!_needPipLayoutKeysByResource.TryGetValue(lookupKey, out var keys))
+        {
+            keys = [];
+            _needPipLayoutKeysByResource[lookupKey] = keys;
+        }
+
+        keys.Add(spec.Key);
+    }
+
+    private Vector2 NeedPipEdgeLaneDirection(string cell, string partner)
+    {
+        var first = cell;
+        var second = partner;
+        if (string.CompareOrdinal(first, second) > 0)
+        {
+            (first, second) = (second, first);
+        }
+
+        var delta = VisualCellCenter(second) - VisualCellCenter(first);
+        return delta.LengthSquared() > 1.0f ? delta.Normalized().Orthogonal() : Vector2.Right;
+    }
+
+    private static string NeedPipEdgeGroupKey(string cell, string partner) =>
+        string.CompareOrdinal(cell, partner) <= 0
+            ? $"edge:{cell}:{partner}"
+            : $"edge:{partner}:{cell}";
+
+    private bool PipReturningToDefault(string key, string partner, string fallbackKey = "")
+    {
+        if (!string.IsNullOrEmpty(partner))
+        {
+            _pipReturningToDefault.Remove(key);
+            return false;
+        }
+
+        if (_pipReturningToDefault.Contains(key))
+        {
+            return true;
+        }
+
+        if (LayoutHistoryHasPartner(key) || (!string.IsNullOrEmpty(fallbackKey) && LayoutHistoryHasPartner(fallbackKey)))
+        {
+            _pipReturningToDefault.Add(key);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool LayoutHistoryHasPartner(string key) =>
+        _pipLayoutPartners.TryGetValue(key, out var previousPartner) && !string.IsNullOrEmpty(previousPartner);
+
+    private void SeedPipSmoothingFromPreviousCenter(
+        string key,
+        Vector2 cellCenter,
+        float cellRadius,
+        string fallbackKey = "")
+    {
+        if (TrySeedPipSmoothingFromPreviousCenter(
+            key,
+            key,
+            cellCenter,
+            cellRadius,
+            requireCellCenterMoved: true))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(fallbackKey)
+            && fallbackKey != key
+            && !_pipAngles.ContainsKey(key)
+            && !_pipOffsets.ContainsKey(key))
+        {
+            TrySeedPipSmoothingFromPreviousCenter(
+                key,
+                fallbackKey,
+                cellCenter,
+                cellRadius,
+                requireCellCenterMoved: false);
+        }
+    }
+
+    private bool TrySeedPipSmoothingFromPreviousCenter(
+        string targetKey,
+        string historyKey,
+        Vector2 cellCenter,
+        float cellRadius,
+        bool requireCellCenterMoved)
+    {
+        if (!_pipLayoutCenters.TryGetValue(historyKey, out var previousCenter)
+            || !_pipLayoutCellCenters.TryGetValue(historyKey, out var previousCellCenter))
+        {
+            return false;
+        }
+
+        var hasPreviousRadius = _pipLayoutCellRadii.TryGetValue(historyKey, out var previousRadius);
+        var radiusChanged = hasPreviousRadius && Mathf.Abs(previousRadius - cellRadius) > 0.01f;
+        if (requireCellCenterMoved
+            && (previousCellCenter - cellCenter).LengthSquared() <= 1.0f
+            && !radiusChanged)
+        {
+            return false;
+        }
+
+        var delta = previousCenter - previousCellCenter;
+        if (hasPreviousRadius
+            && previousRadius > 0.0001f
+            && cellRadius > 0.0001f)
+        {
+            delta *= cellRadius / previousRadius;
+        }
+
+        if (delta.LengthSquared() <= 0.0001f)
+        {
+            return false;
+        }
+
+        _pipAngles[targetKey] = delta.Angle();
+        _pipOffsets[targetKey] = delta.Length();
+        return true;
+    }
+
+    private void StopPipReturnToDefaultIfSettled(
+        string key,
+        bool returningToDefault,
+        float angle,
+        float targetAngle,
+        float offset,
+        float targetOffset)
+    {
+        if (!returningToDefault)
+        {
+            return;
+        }
+
+        var angleDelta = Mathf.Abs(Mathf.Wrap(targetAngle - angle, -Mathf.Pi, Mathf.Pi));
+        if (angleDelta < PipAngleDeadZone * 2.0f && Mathf.Abs(targetOffset - offset) < PipOffsetDeadZone * 2.0f)
+        {
+            _pipReturningToDefault.Remove(key);
+        }
+    }
+
     private float DisplayedFullness(string cell, string resource, float target)
     {
         var key = $"{cell}:{resource}";
@@ -1556,11 +2171,11 @@ public partial class CellularBoardRenderer : Control
         bool useSimState = true)
     {
         var state = NeedStateData(cell, need, useSimState);
-        state = state with { Partner = StabilizeNeedPartner(cell, need, state.Partner, state.State) };
+        state = state with { Partner = StabilizeNeedPartner(cell, need, index, state.Partner) };
         var baseAngle = BaseNeedAngle(cell, need, index, count, center, state.Partner);
         var targetAngle = SeparateNeedAngle(baseAngle, usedAngles);
         var targetOffset = NeedPipOffsetForState(center, state.Partner, cellRadius, pipRadius, state.State);
-        var key = $"{cell}:{need}";
+        var key = PipVisualKey(cell, need, index);
         var angle = applySmoothing ? SmoothPipAngle(key, targetAngle) : targetAngle;
         var offset = applySmoothing ? SmoothPipOffset(key, targetOffset) : targetOffset;
         return state with { Angle = angle, Offset = offset, TargetAngle = targetAngle };
@@ -1568,13 +2183,8 @@ public partial class CellularBoardRenderer : Control
 
     private NeedVisual NeedStateData(string cell, string need, bool useSimState)
     {
-        var preferredPartner = PreferredNeedPartner(cell, need);
-        if (!string.IsNullOrEmpty(preferredPartner))
-        {
-            return new NeedVisual(NeedStateAvailable, preferredPartner, 1.0f, 0.0f);
-        }
-
         var useLiveSimState = useSimState && _usingCsharpSim;
+        var preferredPartner = PreferredNeedPartner(cell, need);
         var fullness = useLiveSimState ? SlotFullness(cell, need) : 0.0f;
         var activePartner = useLiveSimState ? RecentFlowSourceForNeed(cell, need) : "";
         var activeAlpha = useLiveSimState ? RecentFlowAlphaForNeed(cell, need) : 0.0f;
@@ -1583,9 +2193,13 @@ public partial class CellularBoardRenderer : Control
             activePartner = RecentSwapPartnerForNeed(cell, need);
         }
 
-        if (useLiveSimState && !string.IsNullOrEmpty(activePartner))
+        if (!string.IsNullOrEmpty(preferredPartner) && CanPartnerSatisfyNeed(cell, need, preferredPartner))
         {
-            return new NeedVisual(NeedStateActive, activePartner, Mathf.Max(fullness, 0.18f), Mathf.Max(activeAlpha, 0.45f));
+            return new NeedVisual(
+                useLiveSimState && !string.IsNullOrEmpty(activePartner) ? NeedStateActive : NeedStateAvailable,
+                preferredPartner,
+                useLiveSimState && !string.IsNullOrEmpty(activePartner) ? Mathf.Max(fullness, 0.18f) : 1.0f,
+                useLiveSimState && !string.IsNullOrEmpty(activePartner) ? Mathf.Max(activeAlpha, 0.45f) : 0.0f);
         }
 
         var possiblePartner = useLiveSimState ? PossibleSwapPartnerForNeed(cell, need) : "";
@@ -1597,6 +2211,11 @@ public partial class CellularBoardRenderer : Control
         if (string.IsNullOrEmpty(possiblePartner) && useLiveSimState)
         {
             possiblePartner = AdjacentExchangePartnerForNeed(cell, need);
+        }
+
+        if (useLiveSimState && !string.IsNullOrEmpty(activePartner))
+        {
+            return new NeedVisual(NeedStateActive, possiblePartner, Mathf.Max(fullness, 0.18f), Mathf.Max(activeAlpha, 0.45f));
         }
 
         if (!string.IsNullOrEmpty(possiblePartner))
@@ -1612,30 +2231,24 @@ public partial class CellularBoardRenderer : Control
         return new NeedVisual(NeedStateMissing, "", 0.0f, 0.0f);
     }
 
-    private string StabilizeNeedPartner(string cell, string need, string proposedPartner, string state)
+    private string StabilizeNeedPartner(string cell, string need, int index, string proposedPartner)
     {
-        var key = $"{cell}:{need}";
-        if (!string.IsNullOrEmpty(proposedPartner) && IsPreferredNeedPartner(cell, need, proposedPartner))
+        var key = PipVisualKey(cell, need, index);
+        var preferredPartner = PreferredNeedPartner(cell, need);
+        if (!string.IsNullOrEmpty(preferredPartner) && CanPartnerSatisfyNeed(cell, need, preferredPartner))
         {
-            _pipPartners[key] = proposedPartner;
-            return proposedPartner;
+            _pipPartners[key] = preferredPartner;
+            return preferredPartner;
         }
 
         if (_pipPartners.TryGetValue(key, out var currentPartner)
             && !string.IsNullOrEmpty(currentPartner)
-            && currentPartner != proposedPartner
             && IsUsableNeedPartner(cell, need, currentPartner))
         {
-            if (!string.IsNullOrEmpty(proposedPartner)
-                || state == NeedStateSatisfied
-                || state == NeedStateActive
-                || state == NeedStateAvailable)
-            {
-                return currentPartner;
-            }
+            return currentPartner;
         }
 
-        if (!string.IsNullOrEmpty(proposedPartner) && IsAdjacent(cell, proposedPartner))
+        if (!string.IsNullOrEmpty(proposedPartner) && IsUsableNeedPartner(cell, need, proposedPartner))
         {
             _pipPartners[key] = proposedPartner;
             return proposedPartner;
@@ -1646,12 +2259,32 @@ public partial class CellularBoardRenderer : Control
     }
 
     private bool IsUsableNeedPartner(string cell, string need, string partner) =>
-        IsPreferredNeedPartner(cell, need, partner)
-        || IsAdjacent(cell, partner)
-        && (CellProducedResource(partner) == need
-            || CellCanOfferResourceTo(partner, need, cell)
-            || RecentFlowSourceForNeed(cell, need) == partner
-            || RecentSwapPartnerForNeed(cell, need) == partner);
+        (IsPreferredNeedPartner(cell, need, partner) || IsAdjacent(cell, partner))
+        && CanPartnerSatisfyNeed(cell, need, partner);
+
+    private bool CanPartnerSatisfyNeed(string cell, string need, string partner) =>
+        !string.IsNullOrEmpty(partner)
+        && CellStructurallyOffersResourceTo(partner, need, cell);
+
+    private bool CellStructurallyOffersResourceTo(string cell, string resource, string other)
+    {
+        if (!CellAcceptsResource(other, resource))
+        {
+            return false;
+        }
+
+        if (CellProducedResource(cell) == resource)
+        {
+            return true;
+        }
+
+        if (_cellStates.TryGetValue(cell, out var state) && state.Slots.ContainsKey(resource))
+        {
+            return true;
+        }
+
+        return CellNeedsResource(cell, resource);
+    }
 
     private bool IsAdjacent(string a, string b) =>
         !string.IsNullOrEmpty(a)
@@ -1694,8 +2327,16 @@ public partial class CellularBoardRenderer : Control
             return baseAngle;
         }
 
-        const float minimumGap = 0.58f;
-        Span<float> offsets = [0.0f, minimumGap, -minimumGap, minimumGap * 2.0f, -minimumGap * 2.0f];
+        const float minimumGap = NeedPipMinimumAngleGap;
+        const float fanStep = NeedPipFanAngleStep;
+        Span<float> offsets =
+        [
+            0.0f,
+            fanStep,
+            -fanStep,
+            fanStep * 2.0f,
+            -fanStep * 2.0f
+        ];
         foreach (var offset in offsets)
         {
             var candidate = baseAngle + offset;
@@ -1746,7 +2387,7 @@ public partial class CellularBoardRenderer : Control
         return Mathf.Min(rimOffset, maximumOffset);
     }
 
-    private float SmoothPipAngle(string key, float targetAngle)
+    private float SmoothPipAngle(string key, float targetAngle, float smooth = PipAngleSmooth)
     {
         if (!_pipAngles.TryGetValue(key, out var current))
         {
@@ -1754,12 +2395,18 @@ public partial class CellularBoardRenderer : Control
             return targetAngle;
         }
 
-        var smoothed = current + Mathf.Wrap(targetAngle - current, -Mathf.Pi, Mathf.Pi) * PipAngleSmooth;
+        var delta = Mathf.Wrap(targetAngle - current, -Mathf.Pi, Mathf.Pi);
+        if (Mathf.Abs(delta) < PipAngleDeadZone)
+        {
+            return current;
+        }
+
+        var smoothed = current + delta * smooth;
         _pipAngles[key] = smoothed;
         return smoothed;
     }
 
-    private float SmoothPipOffset(string key, float targetOffset)
+    private float SmoothPipOffset(string key, float targetOffset, float smooth = PipOffsetSmooth)
     {
         if (!_pipOffsets.TryGetValue(key, out var current))
         {
@@ -1767,7 +2414,12 @@ public partial class CellularBoardRenderer : Control
             return targetOffset;
         }
 
-        var smoothed = Mathf.Lerp(current, targetOffset, PipOffsetSmooth);
+        if (Mathf.Abs(targetOffset - current) < PipOffsetDeadZone)
+        {
+            return current;
+        }
+
+        var smoothed = Mathf.Lerp(current, targetOffset, smooth);
         _pipOffsets[key] = smoothed;
         return smoothed;
     }
@@ -1775,44 +2427,60 @@ public partial class CellularBoardRenderer : Control
     private Vector2 ResourceVisualPoint(string cell, string resource)
     {
         var center = VisualCellCenter(cell);
-        var isMyco = IsMycoCell(cell);
-        var needed = VisualNeedsForCell(cell, isMyco, useSimState: true);
-        if (!ContainsResource(needed, resource))
+        var lookupKey = NeedLookupKey(cell, resource);
+        if (!_needPipLayoutKeysByResource.TryGetValue(lookupKey, out var keys))
         {
             return center;
         }
 
-        return NeedPipCenterForResource(cell, resource, center, needed);
-    }
-
-    private Vector2 NeedPipCenterForResource(string cell, string resource, Vector2 center, List<string> needed)
-    {
-        var radius = _tileSize * (cell == _dragCell ? 0.43f : 0.39f);
-        var pipRadius = NeedPipRadius(radius);
-        var usedAngles = new List<float>(needed.Count);
-        for (var i = 0; i < needed.Count; i++)
+        var found = false;
+        var bestIndex = int.MaxValue;
+        var bestCenter = center;
+        foreach (var key in keys)
         {
-            var need = needed[i];
-            var visual = NeedVisualData(cell, need, i, needed.Count, center, radius, pipRadius, usedAngles, applySmoothing: false);
-            usedAngles.Add(visual.TargetAngle);
-            if (need != resource)
+            if (!_needPipLayouts.TryGetValue(key, out var layout) || layout.Index >= bestIndex)
             {
                 continue;
             }
 
-            var key = $"{cell}:{need}";
-            if (_pipAngles.TryGetValue(key, out var storedAngle) && _pipOffsets.TryGetValue(key, out var storedOffset))
-            {
-                return center + new Vector2(Mathf.Cos(storedAngle), Mathf.Sin(storedAngle)) * storedOffset;
-            }
-
-            return center + new Vector2(Mathf.Cos(visual.Angle), Mathf.Sin(visual.Angle)) * visual.Offset;
+            bestIndex = layout.Index;
+            bestCenter = layout.Center;
+            found = true;
         }
 
-        return center;
+        return found ? bestCenter : center;
+    }
+
+    private Vector2 NeedPipCenterForResource(string cell, string resource, Vector2 center, List<string> needed)
+    {
+        var lookupKey = NeedLookupKey(cell, resource);
+        if (!_needPipLayoutKeysByResource.TryGetValue(lookupKey, out var keys))
+        {
+            return center;
+        }
+
+        var found = false;
+        var bestIndex = int.MaxValue;
+        var bestCenter = center;
+        foreach (var key in keys)
+        {
+            if (!_needPipLayouts.TryGetValue(key, out var layout) || layout.Index >= bestIndex)
+            {
+                continue;
+            }
+
+            bestIndex = layout.Index;
+            bestCenter = layout.Center;
+            found = true;
+        }
+
+        return found ? bestCenter : center;
     }
 
     private float NeedPipRadius(float cellRadius) => Mathf.Max(5.5f, Mathf.Min(cellRadius * 0.38f, _tileSize * 0.15f));
+
+    private static string PipVisualKey(string cell, string need, int index) => $"{cell}:{need}:{index}";
+    private static string PipSlotVisualKey(string cell, int index) => $"{cell}:__slot__:{index}";
 
     private string RecentFlowSourceForNeed(string cell, string need)
     {
@@ -2238,6 +2906,88 @@ public partial class CellularBoardRenderer : Control
         {
             _cells.Add(cell.AsString());
         }
+
+        var signatureCells = new List<string>(_cells);
+        signatureCells.Sort(StringComparer.Ordinal);
+        var signature = string.Join('\u001f', signatureCells);
+        if (signature != _cellLayoutSignature)
+        {
+            var hadCellLayout = !string.IsNullOrEmpty(_cellLayoutSignature);
+            _cellLayoutSignature = signature;
+            if (hadCellLayout)
+            {
+                PruneNeedPipLayoutStateForCells(_cells);
+            }
+            else
+            {
+                ClearNeedPipLayoutState();
+            }
+        }
+    }
+
+    private void PruneNeedPipLayoutStateForCells(List<string> cells)
+    {
+        ClearNeedPipFrameLayouts();
+        var liveCells = cells.ToHashSet(StringComparer.Ordinal);
+        PrunePipHistoryDictionary(_pipAngles, liveCells);
+        PrunePipHistoryDictionary(_pipOffsets, liveCells);
+        PrunePipHistoryDictionary(_pipPartners, liveCells);
+        PrunePipHistoryDictionary(_pipLayoutPartners, liveCells);
+        PrunePipHistoryDictionary(_pipLayoutCenters, liveCells);
+        PrunePipHistoryDictionary(_pipLayoutCellCenters, liveCells);
+        PrunePipHistoryDictionary(_pipLayoutCellRadii, liveCells);
+        _pipReturningToDefault.RemoveWhere(key => !PipHistoryKeyBelongsToCells(key, liveCells));
+        PruneCellHistoryDictionary(_mycoPipSignatures, liveCells);
+        PruneCellHistoryDictionary(_mycoPipTransitionStarts, liveCells);
+        PruneCellHistoryDictionary(_mycoPreviousPipResources, liveCells);
+        PruneCellHistoryDictionary(_mycoTargetPipResources, liveCells);
+    }
+
+    private static void PrunePipHistoryDictionary<TValue>(Dictionary<string, TValue> dictionary, HashSet<string> liveCells)
+    {
+        var removedKeys = new List<string>();
+        foreach (var key in dictionary.Keys)
+        {
+            if (!PipHistoryKeyBelongsToCells(key, liveCells))
+            {
+                removedKeys.Add(key);
+            }
+        }
+
+        foreach (var key in removedKeys)
+        {
+            dictionary.Remove(key);
+        }
+    }
+
+    private static void PruneCellHistoryDictionary<TValue>(Dictionary<string, TValue> dictionary, HashSet<string> liveCells)
+    {
+        var removedKeys = new List<string>();
+        foreach (var key in dictionary.Keys)
+        {
+            if (!liveCells.Contains(key))
+            {
+                removedKeys.Add(key);
+            }
+        }
+
+        foreach (var key in removedKeys)
+        {
+            dictionary.Remove(key);
+        }
+    }
+
+    private static bool PipHistoryKeyBelongsToCells(string key, HashSet<string> liveCells)
+    {
+        foreach (var cell in liveCells)
+        {
+            if (key.StartsWith($"{cell}:", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ReadInventoryCells(GdDictionary state)
@@ -2601,4 +3351,60 @@ public partial class CellularBoardRenderer : Control
         float Angle = 0.0f,
         float Offset = 0.0f,
         float TargetAngle = 0.0f);
+
+    private readonly record struct NeedPipLayoutSpec(
+        string Key,
+        string Cell,
+        string Need,
+        int Index,
+        int Count,
+        Vector2 CellCenter,
+        float CellRadius,
+        float PipRadius,
+        NeedVisual Visual,
+        bool IsMyco,
+        float MycoProgress,
+        float ClearAlpha,
+        bool Clearing,
+        bool HasLiveState,
+        string Partner,
+        bool Dragging);
+
+    private readonly record struct NeedPipLayout(
+        string Key,
+        string Cell,
+        string Need,
+        int Index,
+        string Partner,
+        Vector2 CellCenter,
+        Vector2 Center,
+        float Radius,
+        string State,
+        float Fullness,
+        float ActiveAlpha,
+        bool IsMyco,
+        float MycoProgress,
+        float ClearAlpha,
+        bool Clearing,
+        bool HasLiveState,
+        float CellRadius);
+
+    private readonly record struct NeedPipDraw(
+        string Cell,
+        string Need,
+        Vector2 CellCenter,
+        Vector2 Center,
+        float Radius,
+        string State,
+        float Fullness,
+        float ActiveAlpha,
+        bool IsMyco,
+        float MycoProgress,
+        float ClearAlpha,
+        bool Clearing,
+        bool HasLiveState);
+
+    private readonly record struct NeedPipOverlayDraw(
+        NeedPipDraw Pip,
+        float CellRadius);
 }

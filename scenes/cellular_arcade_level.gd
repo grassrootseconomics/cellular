@@ -67,11 +67,21 @@ const IDLE_HINT_MAX_SCALE := 1.22
 const INVENTORY_SLOT_SCALE := 1.28
 const INVENTORY_CELL_SCALE := 1.10
 const INVENTORY_CELL_Y_OFFSET := 0.06
-const CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM := 4.0
-const CAMERA_ZOOM_STEP := 1.18
-const CAMERA_PINCH_MIN_DISTANCE := 18.0
-const PIP_ANGLE_SMOOTH := 0.14
-const PIP_OFFSET_SMOOTH := 0.16
+const PIP_ANGLE_SMOOTH := 0.10
+const PIP_OFFSET_SMOOTH := 0.12
+const PIP_ANGLE_RETURN_SMOOTH := 0.045
+const PIP_OFFSET_RETURN_SMOOTH := 0.055
+const PIP_ANGLE_DEAD_ZONE := 0.018
+const PIP_OFFSET_DEAD_ZONE := 0.45
+const NEED_PIP_MINIMUM_ANGLE_GAP := 0.30
+const NEED_PIP_FAN_ANGLE_STEP := 0.32
+const NEED_PIP_LANE_FOOTPRINT_SCALE := 1.36
+const NEED_PIP_LANE_MARGIN := 4.0
+const ZERO_PIP_PULSE_PERIOD_MSEC := 3000
+const ZERO_PIP_PULSE_FADE_MSEC := 1000
+const ZERO_PIP_PULSE_GLOW_SCALE := 1.20
+const ZERO_PIP_PULSE_BRIGHTNESS_SCALE := 1.20
+const ZERO_PIP_PULSE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const CELL_STRESS_GLOW_STRENGTH := 0.42
 const CELL_HEALTHY_GLOW_STRENGTH := 0.72
 const CELL_STRESS_GLOW_RADIUS_SCALE := 1.14
@@ -90,6 +100,9 @@ const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.96, 0.04, 1.0)
 const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_PIP_MARK_SIZE_SCALE := 1.10
 const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
+const PLAYABLE_TILE_EVEN_COLOR := Color(0.18, 0.285, 0.295, 1.0)
+const PLAYABLE_TILE_ODD_COLOR := Color(0.22, 0.335, 0.340, 1.0)
+const PLAYABLE_TILE_BORDER_COLOR := Color(0.62, 0.96, 0.86, 0.36)
 const HINT_MISSING_CENTER := Vector2(-100000000.0, -100000000.0)
 const DRAG_SOURCE_NONE := ""
 const DRAG_SOURCE_BOARD := "board"
@@ -136,15 +149,6 @@ var _drag_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_original_tile := Vector2i.ZERO
 var _drag_touch_id := -1
-var _pan_active := false
-var _pan_last_pos := Vector2.ZERO
-var _pan_touch_id := -1
-var _touch_points := {}
-var _pinch_active := false
-var _pinch_touch_a := -1
-var _pinch_touch_b := -1
-var _pinch_last_distance := 0.0
-var _pinch_last_center := Vector2.ZERO
 
 var _hint_button: Button = null
 var _hint_pair: Array[String] = []
@@ -171,6 +175,17 @@ var _high_score_sparkle_nonce := 0
 var _inventory_fresh_start_msec_by_id: Dictionary = {}
 var _pip_angle_by_key: Dictionary = {}
 var _pip_offset_by_key: Dictionary = {}
+var _pip_partner_by_key: Dictionary = {}
+var _pip_layout_partner_by_key: Dictionary = {}
+var _pip_layout_center_by_key: Dictionary = {}
+var _pip_layout_cell_center_by_key: Dictionary = {}
+var _pip_layout_cell_radius_by_key: Dictionary = {}
+var _pip_returning_to_default_by_key: Dictionary = {}
+var _zero_need_pip_overlay_pips: Array[Dictionary] = []
+var _need_pip_layout_by_key: Dictionary = {}
+var _need_pip_layout_keys_by_resource: Dictionary = {}
+var _need_pip_layout_specs: Array[Dictionary] = []
+var _need_pip_layout_groups: Dictionary = {}
 var _visual_profile_enabled := false
 var _visual_profile_print_every := 120
 var _visual_profile_duration_seconds := 0.0
@@ -258,6 +273,7 @@ func _process(delta: float) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
+		_clear_need_pip_layout_state()
 		_layout_scene()
 		_board_renderer_full_sync_needed = true
 		queue_redraw()
@@ -416,8 +432,7 @@ func _start_run() -> void:
 	_rocks.clear()
 	_sim_snapshot.clear()
 	_cell_state_by_id.clear()
-	_pip_angle_by_key.clear()
-	_pip_offset_by_key.clear()
+	_clear_need_pip_layout_state()
 	_cell_sequence = 0
 	_score = 0
 	Global.score = 0
@@ -1211,28 +1226,25 @@ func _layout_scene() -> void:
 	var hint_w := 70.0 if compact_hud else 78.0
 	var hint_h := 42.0
 	var row_gap := maxf(8.0, _fit_tile_size * 0.08)
-	var inventory_width_tile_cap := maxf(30.0, (row_available_w - hint_w - row_gap) / (INVENTORY_SLOT_SCALE + float(INVENTORY_SLOT_COUNT - 1) * (INVENTORY_SLOT_SCALE + 0.12)))
 	var provisional_inventory_gap := _fit_tile_size * inventory_gap_factor
 	var provisional_inventory_h := _fit_tile_size * inventory_h_factor
 	var board_view_top: float = safe_rect.position.y + top_h
 	var provisional_board_view_h := maxf(1.0, safe_rect.position.y + safe_rect.size.y - play_bottom_padding - board_view_top - provisional_inventory_gap - provisional_inventory_h)
 	_board_view_rect = Rect2(Vector2(safe_rect.position.x, board_view_top), Vector2(safe_rect.size.x, provisional_board_view_h))
-	var camera_max_tile := maxf(_fit_tile_size, minf(minf(_arcade_camera_view_max_tile_size(), inventory_width_tile_cap), max_tile))
-	_camera_max_tile_size = camera_max_tile
-	if not _camera_initialized:
-		_camera_center_tiles = Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
-		_camera_tile_size = camera_max_tile
-		_camera_initialized = true
-	elif _last_board_view_size != _board_view_rect.size:
-		_camera_tile_size = minf(_camera_tile_size, camera_max_tile)
+	_camera_center_tiles = Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
+	_camera_tile_size = _fit_tile_size
+	_camera_max_tile_size = _fit_tile_size
+	_camera_initialized = true
 	_last_board_view_size = _board_view_rect.size
 
-	_tile_size = clampf(_camera_tile_size, _fit_tile_size, camera_max_tile)
+	_tile_size = _fit_tile_size
 	var inventory_gap := _tile_size * inventory_gap_factor
 	var inventory_h := _tile_size * inventory_h_factor
 	var board_view_h := maxf(1.0, safe_rect.position.y + safe_rect.size.y - play_bottom_padding - board_view_top - inventory_gap - inventory_h)
 	_board_view_rect = Rect2(Vector2(safe_rect.position.x, board_view_top), Vector2(safe_rect.size.x, board_view_h))
-	_camera_max_tile_size = maxf(_fit_tile_size, minf(minf(_arcade_camera_view_max_tile_size(), inventory_width_tile_cap), max_tile))
+	_camera_tile_size = _fit_tile_size
+	_camera_max_tile_size = _fit_tile_size
+	_camera_center_tiles = Vector2(float(BOARD_COLS) * 0.5, float(BOARD_ROWS) * 0.5)
 	_clamp_arcade_camera(false)
 	_update_arcade_board_rect_from_camera()
 
@@ -1287,18 +1299,14 @@ func _layout_scene() -> void:
 	_update_hud_text()
 
 
-func _arcade_camera_view_max_tile_size() -> float:
-	if _board_view_rect.size.x <= 1.0 or _board_view_rect.size.y <= 1.0:
-		return maxf(_fit_tile_size, 64.0)
-	var four_tile_size := minf(_board_view_rect.size.x, _board_view_rect.size.y) / CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM
-	return maxf(_fit_tile_size, four_tile_size)
-
-
 func _update_arcade_board_rect_from_camera() -> void:
+	var previous_board_rect := _board_rect
+	var previous_tile_size := _tile_size
 	_tile_size = clampf(_camera_tile_size, _fit_tile_size, _camera_max_tile_size)
 	var board_size := Vector2(_tile_size * float(BOARD_COLS), _tile_size * float(BOARD_ROWS))
 	var origin := _board_view_rect.get_center() - _camera_center_tiles * _tile_size
 	_board_rect = Rect2(origin, board_size)
+	_sync_need_pip_history_after_board_rect_change(previous_board_rect, previous_tile_size)
 
 
 func _clamp_arcade_camera(resize_deadband: bool = true) -> void:
@@ -1317,41 +1325,6 @@ func _clamp_arcade_camera(resize_deadband: bool = true) -> void:
 		_camera_center_tiles.y = float(BOARD_ROWS) * 0.5
 	else:
 		_camera_center_tiles.y = clampf(_camera_center_tiles.y, visible_tiles.y * 0.5, float(BOARD_ROWS) - visible_tiles.y * 0.5)
-
-
-func _screen_to_board_point(screen_pos: Vector2) -> Vector2:
-	if _tile_size <= 0.0:
-		return _camera_center_tiles
-	return (screen_pos - _board_rect.position) / _tile_size
-
-
-func _set_arcade_camera_tile_size(next_tile_size: float, focal_screen_pos: Vector2) -> void:
-	if not _camera_initialized:
-		return
-	var clamped_size := clampf(next_tile_size, _fit_tile_size, _camera_max_tile_size)
-	if is_equal_approx(clamped_size, _camera_tile_size):
-		return
-	var focal_board_point := _screen_to_board_point(focal_screen_pos)
-	_camera_tile_size = clamped_size
-	_camera_center_tiles = focal_board_point - (focal_screen_pos - _board_view_rect.get_center()) / _camera_tile_size
-	_clamp_arcade_camera(false)
-	_update_arcade_board_rect_from_camera()
-	_board_renderer_view_dirty = true
-	queue_redraw()
-
-
-func _zoom_arcade_camera(factor: float, focal_screen_pos: Vector2) -> void:
-	_set_arcade_camera_tile_size(_camera_tile_size * factor, focal_screen_pos)
-
-
-func _pan_arcade_camera_by_screen_delta(delta: Vector2) -> void:
-	if not _camera_initialized or _tile_size <= 0.0:
-		return
-	_camera_center_tiles -= delta / _tile_size
-	_clamp_arcade_camera()
-	_update_arcade_board_rect_from_camera()
-	_board_renderer_view_dirty = true
-	queue_redraw()
 
 
 func _layout_game_over_panel(view_size: Vector2) -> void:
@@ -1676,14 +1649,341 @@ func _status_font_size(text: String) -> int:
 
 func _draw_arcade_overlay(layer: Control) -> void:
 	if not _using_board_renderer:
+		_clear_need_pip_frame_layouts()
+		_prepare_fallback_need_pip_layouts()
 		_draw_fallback_board(layer, false)
 		_draw_inventory(layer, false)
 		_draw_hint_overlay(layer)
 		_draw_fallback_board_cells(layer)
 		_draw_inventory(layer, true)
 		_draw_inventory_drag(layer)
+		_draw_zero_need_pip_overlays(layer)
 	_draw_clear_effect_overlay(layer)
 	_draw_high_score_sparkles(layer)
+
+
+func _prepare_fallback_need_pip_layouts() -> void:
+	for id in _board_cell_ids:
+		var cell: Dictionary = _board_cells.get(id, {})
+		var dragging := _drag_source == DRAG_SOURCE_BOARD and id == _drag_cell_id
+		var center := _drag_position if dragging else _tile_center(_get_cell_tile(id))
+		_add_fallback_need_pip_layout_specs_for_cell(cell, center, dragging)
+	_layout_fallback_need_pip_specs()
+
+
+func _clear_need_pip_frame_layouts() -> void:
+	_zero_need_pip_overlay_pips.clear()
+	_need_pip_layout_by_key.clear()
+	_need_pip_layout_keys_by_resource.clear()
+	_need_pip_layout_specs.clear()
+	_need_pip_layout_groups.clear()
+
+
+func _clear_need_pip_layout_state() -> void:
+	_clear_need_pip_frame_layouts()
+	_pip_angle_by_key.clear()
+	_pip_offset_by_key.clear()
+	_pip_partner_by_key.clear()
+	_pip_layout_partner_by_key.clear()
+	_pip_layout_center_by_key.clear()
+	_pip_layout_cell_center_by_key.clear()
+	_pip_layout_cell_radius_by_key.clear()
+	_pip_returning_to_default_by_key.clear()
+
+
+func _sync_need_pip_history_after_board_rect_change(previous_board_rect: Rect2, previous_tile_size: float) -> void:
+	var had_previous_geometry := previous_tile_size > 0.0 and previous_board_rect.size.x > 1.0 and previous_board_rect.size.y > 1.0
+	if not had_previous_geometry:
+		return
+	var scale_changed := absf(previous_tile_size - _tile_size) > 0.01
+	var size_changed := (previous_board_rect.size - _board_rect.size).length_squared() > 0.01
+	if scale_changed or size_changed:
+		_clear_need_pip_layout_state()
+	else:
+		_translate_need_pip_layout_history(_board_rect.position - previous_board_rect.position)
+
+
+func _translate_need_pip_layout_history(delta: Vector2) -> void:
+	if delta.length_squared() <= 0.0001:
+		return
+	_translate_vector_history(_pip_layout_center_by_key, delta)
+	_translate_vector_history(_pip_layout_cell_center_by_key, delta)
+
+
+func _translate_vector_history(history: Dictionary, delta: Vector2) -> void:
+	for key in history.keys():
+		var value: Variant = history.get(key, null)
+		if value is Vector2:
+			history[key] = (value as Vector2) + delta
+
+
+func _add_fallback_need_pip_layout_specs_for_cell(cell: Dictionary, center: Vector2, dragging: bool) -> void:
+	var cell_id := str(cell.get("id", ""))
+	if cell_id.is_empty():
+		return
+	var is_myco := str(cell.get("kind", "Standard")) == "RedMyco"
+	var needs_value: Variant = cell.get("needs", [])
+	if not needs_value is Array:
+		return
+	var needs: Array = needs_value as Array
+	var pip_count := 4 if is_myco else needs.size()
+	var radius := _tile_size * (0.41 if dragging else 0.38)
+	var pip_radius := maxf(7.0, minf(radius * 0.34, _tile_size * 0.15))
+	for index in range(pip_count):
+		if index >= needs.size():
+			if is_myco:
+				_add_fallback_need_pip_layout_spec({
+					"key": _fallback_pip_slot_key(cell_id, index),
+					"cell": cell_id,
+					"need": "",
+					"index": index,
+					"count": pip_count,
+					"cellCenter": center,
+					"cellRadius": radius,
+					"pipRadius": pip_radius,
+					"partner": "",
+					"fullness": 1.0,
+					"visualScale": 1.0,
+					"isMyco": is_myco,
+					"dragging": dragging,
+					"hasLiveState": false,
+					"laidOut": false
+				})
+			continue
+		var need := str(needs[index])
+		var partner := _fallback_stabilize_need_partner(cell_id, need, index, _fallback_need_partner(cell_id, need))
+		var fullness := _slot_fullness(cell_id, need)
+		_add_fallback_need_pip_layout_spec({
+			"key": _fallback_pip_key(cell_id, need, index),
+			"cell": cell_id,
+			"need": need,
+			"index": index,
+			"count": pip_count,
+			"cellCenter": center,
+			"cellRadius": radius,
+			"pipRadius": pip_radius,
+			"partner": partner,
+			"fullness": fullness,
+			"visualScale": 1.0,
+			"isMyco": is_myco,
+			"dragging": dragging,
+			"hasLiveState": _using_csharp_sim and _cell_state_by_id.has(cell_id),
+			"laidOut": false
+		})
+
+
+func _add_fallback_need_pip_layout_spec(spec: Dictionary) -> void:
+	_need_pip_layout_specs.append(spec)
+	var partner := str(spec.get("partner", ""))
+	if partner.is_empty():
+		return
+	var group_key := _need_pip_edge_group_key(str(spec.get("cell", "")), partner)
+	if not _need_pip_layout_groups.has(group_key):
+		_need_pip_layout_groups[group_key] = []
+	var group_value: Variant = _need_pip_layout_groups.get(group_key, [])
+	if group_value is Array:
+		(group_value as Array).append(spec)
+
+
+func _layout_fallback_need_pip_specs() -> void:
+	for group_value in _need_pip_layout_groups.values():
+		if not group_value is Array:
+			continue
+		var group: Array = group_value as Array
+		if group.is_empty():
+			continue
+		group.sort_custom(Callable(self, "_compare_need_pip_layout_specs"))
+		var max_pip_radius := 0.0
+		for spec_value in group:
+			if spec_value is Dictionary:
+				max_pip_radius = maxf(max_pip_radius, float((spec_value as Dictionary).get("pipRadius", 0.0)))
+		var lane_spacing := max_pip_radius * NEED_PIP_LANE_FOOTPRINT_SCALE * 2.0 + NEED_PIP_LANE_MARGIN
+		var lane_center := float(group.size() - 1) * 0.5
+		for lane in range(group.size()):
+			var spec_value: Variant = group[lane]
+			if not spec_value is Dictionary:
+				continue
+			var spec: Dictionary = spec_value as Dictionary
+			_store_fallback_provider_need_pip_layout(spec, (float(lane) - lane_center) * lane_spacing)
+			spec["laidOut"] = true
+	for spec in _need_pip_layout_specs:
+		if not bool(spec.get("laidOut", false)):
+			_store_fallback_default_need_pip_layout(spec)
+
+
+func _store_fallback_provider_need_pip_layout(spec: Dictionary, lane_offset: float) -> void:
+	var partner := str(spec.get("partner", ""))
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var partner_center := _cell_visual_center(partner)
+	if partner_center == HINT_MISSING_CENTER:
+		_store_fallback_default_need_pip_layout(spec)
+		return
+	var delta := partner_center - cell_center
+	if delta.length_squared() <= 1.0:
+		_store_fallback_default_need_pip_layout(spec)
+		return
+	var direction := delta.normalized()
+	var base_offset := _fallback_need_target_offset(str(spec.get("cell", "")), str(spec.get("need", "")), float(spec.get("cellRadius", 0.0)), bool(spec.get("dragging", false)), partner)
+	var lane_direction := _need_pip_edge_lane_direction(str(spec.get("cell", "")), partner)
+	var lane_vector := direction * base_offset + lane_direction * lane_offset
+	if lane_vector.length_squared() <= 0.0001:
+		_store_fallback_default_need_pip_layout(spec)
+		return
+	_store_fallback_need_pip_layout(spec, cell_center + lane_vector.normalized() * base_offset)
+
+
+func _store_fallback_default_need_pip_layout(spec: Dictionary) -> void:
+	var index := int(spec.get("index", 0))
+	var count := int(spec.get("count", 1))
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	var offset := _fallback_need_target_offset(str(spec.get("cell", "")), str(spec.get("need", "")), float(spec.get("cellRadius", 0.0)), bool(spec.get("dragging", false)), "")
+	_store_fallback_need_pip_layout(spec, cell_center + Vector2(cos(angle), sin(angle)) * offset)
+
+
+func _store_fallback_need_pip_layout(spec: Dictionary, target_center: Vector2) -> void:
+	var key := str(spec.get("key", ""))
+	var cell := str(spec.get("cell", ""))
+	var need := str(spec.get("need", ""))
+	var index := int(spec.get("index", 0))
+	var count := int(spec.get("count", 1))
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var is_myco := bool(spec.get("isMyco", false))
+	var slot_key := _fallback_pip_slot_key(cell, index) if is_myco else ""
+	var delta := target_center - cell_center
+	var target_angle := delta.angle() if delta.length_squared() > 0.0001 else -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	var target_offset := delta.length() if delta.length_squared() > 0.0001 else _fallback_need_target_offset(cell, need, float(spec.get("cellRadius", 0.0)), bool(spec.get("dragging", false)), str(spec.get("partner", "")))
+	var cell_radius := float(spec.get("cellRadius", 0.0))
+	var partner := str(spec.get("partner", ""))
+	if not bool(spec.get("dragging", false)):
+		_seed_pip_smoothing_from_previous_center(key, cell_center, cell_radius, slot_key)
+	var returning_to_default := _pip_returning_to_default(key, partner, slot_key)
+	var angle := _fallback_smooth_pip_angle(key, target_angle, PIP_ANGLE_RETURN_SMOOTH if returning_to_default else PIP_ANGLE_SMOOTH)
+	var offset := _fallback_smooth_pip_offset(key, target_offset, PIP_OFFSET_RETURN_SMOOTH if returning_to_default else PIP_OFFSET_SMOOTH)
+	_stop_pip_return_to_default_if_settled(key, returning_to_default, angle, target_angle, offset, target_offset)
+	var center := cell_center + Vector2(cos(angle), sin(angle)) * offset
+	var layout := {
+		"key": key,
+		"cell": cell,
+		"need": need,
+		"index": index,
+		"partner": partner,
+		"cellCenter": cell_center,
+		"center": center,
+		"angle": angle,
+		"radius": float(spec.get("pipRadius", 0.0)),
+		"fullness": float(spec.get("fullness", 0.0)),
+		"visualScale": float(spec.get("visualScale", 1.0)),
+		"hasLiveState": bool(spec.get("hasLiveState", false)),
+		"cellRadius": float(spec.get("cellRadius", 0.0))
+	}
+	_need_pip_layout_by_key[key] = layout
+	_pip_layout_partner_by_key[key] = partner
+	_pip_layout_center_by_key[key] = center
+	_pip_layout_cell_center_by_key[key] = cell_center
+	_pip_layout_cell_radius_by_key[key] = cell_radius
+	if is_myco:
+		_pip_layout_partner_by_key[slot_key] = partner
+		_pip_layout_center_by_key[slot_key] = center
+		_pip_layout_cell_center_by_key[slot_key] = cell_center
+		_pip_layout_cell_radius_by_key[slot_key] = cell_radius
+	if need.is_empty():
+		return
+	var lookup_key := _need_lookup_key(cell, need)
+	if not _need_pip_layout_keys_by_resource.has(lookup_key):
+		_need_pip_layout_keys_by_resource[lookup_key] = []
+	var keys_value: Variant = _need_pip_layout_keys_by_resource.get(lookup_key, [])
+	if keys_value is Array:
+		(keys_value as Array).append(key)
+
+
+func _fallback_need_target_offset(cell_id: String, need: String, radius: float, dragging: bool, partner: String) -> float:
+	if not partner.is_empty():
+		return radius * (1.10 if dragging else 1.08)
+	if _slot_fullness(cell_id, need) > 0.0:
+		return radius * 1.02
+	return radius * 1.18
+
+
+func _need_pip_edge_lane_direction(cell: String, partner: String) -> Vector2:
+	var first := cell
+	var second := partner
+	if first > second:
+		var tmp := first
+		first = second
+		second = tmp
+	var delta := _cell_visual_center(second) - _cell_visual_center(first)
+	if delta.length_squared() <= 1.0:
+		return Vector2.RIGHT
+	var direction := delta.normalized()
+	return Vector2(-direction.y, direction.x)
+
+
+func _need_pip_edge_group_key(cell: String, partner: String) -> String:
+	if cell <= partner:
+		return str("edge:", cell, ":", partner)
+	return str("edge:", partner, ":", cell)
+
+
+func _need_lookup_key(cell: String, resource: String) -> String:
+	return str(cell, "||", resource)
+
+
+func _compare_need_pip_layout_specs(a: Variant, b: Variant) -> bool:
+	if a is Dictionary and b is Dictionary:
+		return str((a as Dictionary).get("key", "")) < str((b as Dictionary).get("key", ""))
+	return str(a) < str(b)
+
+
+func _pip_returning_to_default(key: String, partner: String, fallback_key: String = "") -> bool:
+	if not partner.is_empty():
+		_pip_returning_to_default_by_key.erase(key)
+		return false
+	if _pip_returning_to_default_by_key.has(key):
+		return true
+	if _pip_layout_history_has_partner(key) or (not fallback_key.is_empty() and _pip_layout_history_has_partner(fallback_key)):
+		_pip_returning_to_default_by_key[key] = true
+		return true
+	return false
+
+
+func _pip_layout_history_has_partner(key: String) -> bool:
+	return not str(_pip_layout_partner_by_key.get(key, "")).is_empty()
+
+
+func _seed_pip_smoothing_from_previous_center(key: String, cell_center: Vector2, cell_radius: float, fallback_key: String = "") -> void:
+	if _try_seed_pip_smoothing_from_previous_center(key, key, cell_center, cell_radius, true):
+		return
+	if not fallback_key.is_empty() and fallback_key != key and not _pip_angle_by_key.has(key) and not _pip_offset_by_key.has(key):
+		_try_seed_pip_smoothing_from_previous_center(key, fallback_key, cell_center, cell_radius, false)
+
+
+func _try_seed_pip_smoothing_from_previous_center(target_key: String, history_key: String, cell_center: Vector2, cell_radius: float, require_cell_center_moved: bool) -> bool:
+	var previous_center_value: Variant = _pip_layout_center_by_key.get(history_key, null)
+	var previous_cell_center_value: Variant = _pip_layout_cell_center_by_key.get(history_key, null)
+	if not previous_center_value is Vector2 or not previous_cell_center_value is Vector2:
+		return false
+	var previous_cell_center: Vector2 = previous_cell_center_value as Vector2
+	var previous_center: Vector2 = previous_center_value as Vector2
+	var previous_radius := float(_pip_layout_cell_radius_by_key.get(history_key, 0.0))
+	var radius_changed := previous_radius > 0.0001 and absf(previous_radius - cell_radius) > 0.01
+	if require_cell_center_moved and (previous_cell_center - cell_center).length_squared() <= 1.0 and not radius_changed:
+		return false
+	var delta := previous_center - previous_cell_center
+	if previous_radius > 0.0001 and cell_radius > 0.0001:
+		delta *= cell_radius / previous_radius
+	if delta.length_squared() <= 0.0001:
+		return false
+	_pip_angle_by_key[target_key] = delta.angle()
+	_pip_offset_by_key[target_key] = delta.length()
+	return true
+
+
+func _stop_pip_return_to_default_if_settled(key: String, returning_to_default: bool, angle: float, target_angle: float, offset: float, target_offset: float) -> void:
+	if not returning_to_default:
+		return
+	if absf(wrapf(target_angle - angle, -PI, PI)) < PIP_ANGLE_DEAD_ZONE * 2.0 and absf(target_offset - offset) < PIP_OFFSET_DEAD_ZONE * 2.0:
+		_pip_returning_to_default_by_key.erase(key)
 
 
 func _draw_fallback_board(layer: Control, draw_cells: bool = true) -> void:
@@ -1693,9 +1993,9 @@ func _draw_fallback_board(layer: Control, draw_cells: bool = true) -> void:
 			var rect := Rect2(_board_rect.position + Vector2(x, y) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
 			if not _board_view_rect.grow(4.0).intersects(rect, true):
 				continue
-			var shade: float = 0.075 if (x + y) % 2 == 0 else 0.095
-			layer.draw_rect(rect, Color(shade, shade + 0.040, shade + 0.048, 0.96), true)
-			layer.draw_rect(rect, Color(0.24, 0.42, 0.42, 0.20), false, maxf(1.0, _tile_size * 0.014))
+			var tile_color := PLAYABLE_TILE_EVEN_COLOR if (x + y) % 2 == 0 else PLAYABLE_TILE_ODD_COLOR
+			layer.draw_rect(rect, tile_color, true)
+			layer.draw_rect(rect, PLAYABLE_TILE_BORDER_COLOR, false, maxf(1.0, _tile_size * 0.014))
 	_draw_fallback_circuit_groups(layer)
 	_draw_fallback_recent_flows(layer)
 	if draw_cells:
@@ -1886,18 +2186,28 @@ func _fallback_group_color(index: int) -> Color:
 
 func _fallback_resource_point(cell_id: String, resource: String) -> Vector2:
 	var center := _tile_center(_get_cell_tile(cell_id))
-	var cell: Dictionary = _board_cells.get(cell_id, {})
-	var needs_value: Variant = cell.get("needs", [])
-	if needs_value is Array:
-		var needs: Array = needs_value as Array
-		var count := 4 if str(cell.get("kind", "Standard")) == "RedMyco" else needs.size()
-		for index in range(needs.size()):
-			if str(needs[index]) != resource:
-				continue
-			var radius := _tile_size * 0.38
-			var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
-			return center + Vector2(cos(angle), sin(angle)) * radius * 1.18
-	return center
+	var lookup_key := _need_lookup_key(cell_id, resource)
+	var keys_value: Variant = _need_pip_layout_keys_by_resource.get(lookup_key, [])
+	if not keys_value is Array:
+		return center
+	var keys: Array = keys_value as Array
+	var found := false
+	var best_index := 2147483647
+	var best_center := center
+	for key_value in keys:
+		var layout_value: Variant = _need_pip_layout_by_key.get(str(key_value), {})
+		if not layout_value is Dictionary:
+			continue
+		var layout: Dictionary = layout_value as Dictionary
+		var index := int(layout.get("index", 0))
+		if index >= best_index:
+			continue
+		best_index = index
+		var center_value: Variant = layout.get("center", center)
+		if center_value is Vector2:
+			best_center = center_value as Vector2
+			found = true
+	return best_center if found else center
 
 
 func _draw_clear_effect_overlay(layer: Control) -> void:
@@ -2046,33 +2356,117 @@ func _draw_cell(layer: Control, cell: Dictionary, center: Vector2, dragging: boo
 		var needs: Array = needs_value as Array
 		var pip_count := 4 if is_myco else needs.size()
 		var used_angles: Array[float] = []
+		var normal_need_pips: Array[Dictionary] = []
+		var zero_need_pips: Array[Dictionary] = []
 		for index in range(pip_count):
-			var need_for_position := ""
-			if index < needs.size():
-				need_for_position = str(needs[index])
-			var angle := _fallback_need_angle(cell_id, need_for_position, index, pip_count, center, used_angles)
-			used_angles.append(angle)
-			var pip_offset := _fallback_need_offset(cell_id, need_for_position, index, radius, dragging)
 			var pip_radius := maxf(7.0, minf(radius * 0.34, _tile_size * 0.15) * visual_scale)
-			var pip_center := center + Vector2(cos(angle), sin(angle)) * pip_offset
 			if index >= needs.size():
-				layer.draw_circle(pip_center, pip_radius, Color(0.92, 0.97, 0.96, 1.0))
-				layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.76), maxf(1.4, pip_radius * 0.16), true)
-				layer.draw_arc(pip_center, pip_radius * 0.84, 0.0, TAU, 18, Color(1.0, 1.0, 1.0, 0.44), maxf(1.0, pip_radius * 0.10), true)
+				var blank_layout_key := _fallback_pip_slot_key(cell_id, index)
+				var blank_layout_value: Variant = _need_pip_layout_by_key.get(blank_layout_key, {})
+				var pip_center := _fallback_default_myco_slot_center(center, index, pip_count, radius)
+				var blank_radius := pip_radius
+				if blank_layout_value is Dictionary:
+					var blank_layout: Dictionary = blank_layout_value as Dictionary
+					var blank_center_value: Variant = blank_layout.get("center", pip_center)
+					if blank_center_value is Vector2:
+						pip_center = blank_center_value as Vector2
+					blank_radius = float(blank_layout.get("radius", blank_radius))
+				_draw_fallback_blank_myco_pip(layer, pip_center, blank_radius)
 				continue
 			var need := str(needs[index])
-			var tether := _resource_color(need)
-			tether.a = 0.30
-			layer.draw_line(center + Vector2(cos(angle), sin(angle)) * radius * 0.78, pip_center - Vector2(cos(angle), sin(angle)) * pip_radius * 0.72, tether, maxf(1.8, _tile_size * 0.018), true)
-			var pip_color := _resource_color(need)
-			var fullness := _slot_fullness(cell_id, need)
-			if fullness <= 0.0:
-				pip_color = pip_color.darkened(0.36)
-			layer.draw_circle(pip_center, pip_radius, pip_color)
-			layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.82), maxf(1.5, pip_radius * 0.18), true)
-			layer.draw_arc(pip_center, pip_radius * 0.86, 0.0, TAU, 18, Color.WHITE, maxf(1.1, pip_radius * 0.11), true)
-			_draw_fallback_fullness_arc(layer, pip_center, pip_radius * 1.12, fullness, pip_color, maxf(2.0, pip_radius * 0.20))
-			_draw_centered_text(layer, font, pip_center, pip_radius, need, int(_tile_size * 0.15 * visual_scale * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
+			var key := _fallback_pip_key(cell_id, need, index)
+			var pip_data := _fallback_need_pip_draw_from_layout(_need_pip_layout_by_key.get(key, {})) if _need_pip_layout_by_key.has(key) else _build_fallback_need_pip_draw(cell_id, need, index, pip_count, center, radius, pip_radius, dragging, visual_scale, used_angles)
+			if _fallback_should_elevate_need_pip(pip_data):
+				zero_need_pips.append(pip_data)
+				_zero_need_pip_overlay_pips.append({"pip": pip_data, "cellRadius": radius})
+			else:
+				normal_need_pips.append(pip_data)
+		for pip_data in normal_need_pips:
+			_draw_fallback_need_pip(layer, font, pip_data, radius, true)
+		for pip_data in zero_need_pips:
+			_draw_fallback_need_pip(layer, font, pip_data, radius, true)
+
+
+func _fallback_need_pip_draw_from_layout(layout_value: Variant) -> Dictionary:
+	if not layout_value is Dictionary:
+		return {}
+	var layout: Dictionary = layout_value as Dictionary
+	return {
+		"cell": str(layout.get("cell", "")),
+		"need": str(layout.get("need", "")),
+		"cellCenter": layout.get("cellCenter", Vector2.ZERO),
+		"center": layout.get("center", Vector2.ZERO),
+		"angle": float(layout.get("angle", 0.0)),
+		"radius": float(layout.get("radius", 0.0)),
+		"fullness": float(layout.get("fullness", 0.0)),
+		"visualScale": float(layout.get("visualScale", 1.0)),
+		"hasLiveState": bool(layout.get("hasLiveState", false))
+	}
+
+
+func _build_fallback_need_pip_draw(cell_id: String, need: String, index: int, count: int, center: Vector2, radius: float, pip_radius: float, dragging: bool, visual_scale: float, used_angles: Array[float]) -> Dictionary:
+	var angle := _fallback_need_angle(cell_id, need, index, count, center, used_angles)
+	used_angles.append(angle)
+	var pip_offset := _fallback_need_offset(cell_id, need, index, radius, dragging)
+	return {
+		"cell": cell_id,
+		"need": need,
+		"cellCenter": center,
+		"center": center + Vector2(cos(angle), sin(angle)) * pip_offset,
+		"angle": angle,
+		"radius": pip_radius,
+		"fullness": _slot_fullness(cell_id, need),
+		"visualScale": visual_scale,
+		"hasLiveState": _using_csharp_sim and _cell_state_by_id.has(cell_id)
+	}
+
+
+func _draw_fallback_blank_myco_pip(layer: Control, center: Vector2, radius: float) -> void:
+	layer.draw_circle(center, radius, Color(0.92, 0.97, 0.96, 1.0))
+	layer.draw_arc(center, radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.76), maxf(1.4, radius * 0.16), true)
+	layer.draw_arc(center, radius * 0.84, 0.0, TAU, 18, Color(1.0, 1.0, 1.0, 0.44), maxf(1.0, radius * 0.10), true)
+
+
+func _draw_fallback_need_pip(layer: Control, font: Font, pip_data: Dictionary, cell_radius: float, draw_tether: bool = true) -> void:
+	var need := str(pip_data.get("need", ""))
+	var cell_center: Vector2 = pip_data.get("cellCenter", Vector2.ZERO) as Vector2
+	var pip_center: Vector2 = pip_data.get("center", Vector2.ZERO) as Vector2
+	var angle := float(pip_data.get("angle", 0.0))
+	var pip_radius := float(pip_data.get("radius", 0.0))
+	var fullness := float(pip_data.get("fullness", 0.0))
+	var visual_scale := float(pip_data.get("visualScale", 1.0))
+	var direction := Vector2(cos(angle), sin(angle))
+	if draw_tether:
+		var tether := _resource_color(need)
+		tether.a = 0.30
+		layer.draw_line(cell_center + direction * cell_radius * 0.78, pip_center - direction * pip_radius * 0.72, tether, maxf(1.8, _tile_size * 0.018), true)
+	var pip_color := _resource_color(need)
+	if fullness <= 0.0:
+		pip_color = pip_color.darkened(0.36)
+	layer.draw_circle(pip_center, pip_radius, pip_color)
+	layer.draw_arc(pip_center, pip_radius, 0.0, TAU, 18, Color(0.01, 0.025, 0.03, 0.82), maxf(1.5, pip_radius * 0.18), true)
+	layer.draw_arc(pip_center, pip_radius * 0.86, 0.0, TAU, 18, Color.WHITE, maxf(1.1, pip_radius * 0.11), true)
+	var pip_bar_radius := pip_radius * 1.12
+	var pip_bar_width := maxf(2.0, pip_radius * 0.20)
+	_draw_fallback_fullness_arc(layer, pip_center, pip_bar_radius, fullness, pip_color, pip_bar_width)
+	if _fallback_should_elevate_need_pip(pip_data):
+		_draw_fallback_zero_pip_pulse_arc(layer, pip_center, pip_bar_radius, pip_bar_width)
+	_draw_centered_text(layer, font, pip_center, pip_radius, need, int(_tile_size * 0.15 * visual_scale * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
+
+
+func _fallback_should_elevate_need_pip(pip_data: Dictionary) -> bool:
+	return bool(pip_data.get("hasLiveState", false)) and float(pip_data.get("fullness", 0.0)) <= 0.0
+
+
+func _draw_zero_need_pip_overlays(layer: Control) -> void:
+	if not _using_csharp_sim or _zero_need_pip_overlay_pips.is_empty():
+		return
+	var font: Font = ThemeDB.fallback_font
+	for overlay_data in _zero_need_pip_overlay_pips:
+		var pip_value: Variant = overlay_data.get("pip", {})
+		if not pip_value is Dictionary:
+			continue
+		_draw_fallback_need_pip(layer, font, pip_value as Dictionary, float(overlay_data.get("cellRadius", 0.0)), false)
 
 
 func _draw_fallback_red_myco_ring(layer: Control, center: Vector2, radius: float) -> void:
@@ -2093,8 +2487,29 @@ func _draw_fallback_fullness_arc(layer: Control, center: Vector2, radius: float,
 	layer.draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * clamped, 28, active, width, true)
 
 
-func _fallback_need_angle(cell_id: String, need: String, index: int, count: int, center: Vector2, used_angles: Array[float]) -> float:
-	var partner := _fallback_need_partner(cell_id, need)
+func _draw_fallback_zero_pip_pulse_arc(layer: Control, center: Vector2, radius: float, width: float) -> void:
+	var alpha := _fallback_zero_pip_pulse_alpha()
+	if alpha <= 0.0:
+		return
+	var pulse_color := ZERO_PIP_PULSE_COLOR
+	var glow_radius := radius * ZERO_PIP_PULSE_GLOW_SCALE
+	pulse_color.a = minf(1.0, 0.58 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
+	layer.draw_arc(center, glow_radius, -PI * 0.5, PI * 1.5, 28, pulse_color, (width + 1.2) * ZERO_PIP_PULSE_GLOW_SCALE, true)
+	pulse_color.a = minf(1.0, 0.22 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
+	layer.draw_arc(center, radius * 1.08 * ZERO_PIP_PULSE_GLOW_SCALE, -PI * 0.5, PI * 1.5, 28, pulse_color, maxf(1.4, width * 0.55) * ZERO_PIP_PULSE_GLOW_SCALE, true)
+
+
+func _fallback_zero_pip_pulse_alpha() -> float:
+	var phase := Time.get_ticks_msec() % ZERO_PIP_PULSE_PERIOD_MSEC
+	if phase < ZERO_PIP_PULSE_FADE_MSEC:
+		return float(phase) / float(ZERO_PIP_PULSE_FADE_MSEC)
+	if phase < ZERO_PIP_PULSE_FADE_MSEC * 2:
+		return 1.0 - float(phase - ZERO_PIP_PULSE_FADE_MSEC) / float(ZERO_PIP_PULSE_FADE_MSEC)
+	return 0.0
+
+
+func _fallback_need_angle(cell_id: String, need: String, index: int, count: int, center: Vector2, used_angles: Array[float], apply_smoothing: bool = true) -> float:
+	var partner := _fallback_layout_partner(cell_id, need, index)
 	var target_angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
 	if not partner.is_empty():
 		var partner_center := _cell_visual_center(partner)
@@ -2103,16 +2518,40 @@ func _fallback_need_angle(cell_id: String, need: String, index: int, count: int,
 			if delta.length_squared() > 1.0:
 				target_angle = delta.angle()
 	target_angle = _fallback_separate_need_angle(target_angle, used_angles)
-	return _fallback_smooth_pip_angle(_fallback_pip_key(cell_id, need, index), target_angle)
+	return _fallback_smooth_pip_angle(_fallback_pip_key(cell_id, need, index), target_angle) if apply_smoothing else target_angle
 
 
-func _fallback_need_offset(cell_id: String, need: String, index: int, radius: float, dragging: bool) -> float:
+func _fallback_need_offset(cell_id: String, need: String, index: int, radius: float, dragging: bool, apply_smoothing: bool = true) -> float:
 	var target_offset := radius * 1.18
-	if not _fallback_need_partner(cell_id, need).is_empty():
+	if not _fallback_layout_partner(cell_id, need, index).is_empty():
 		target_offset = radius * (1.10 if dragging else 1.08)
 	elif _slot_fullness(cell_id, need) > 0.0:
 		target_offset = radius * 1.02
-	return _fallback_smooth_pip_offset(_fallback_pip_key(cell_id, need, index), target_offset)
+	return _fallback_smooth_pip_offset(_fallback_pip_key(cell_id, need, index), target_offset) if apply_smoothing else target_offset
+
+
+func _fallback_layout_partner(cell_id: String, need: String, index: int) -> String:
+	return _fallback_stabilize_need_partner(cell_id, need, index, _fallback_need_partner(cell_id, need))
+
+
+func _fallback_stabilize_need_partner(cell_id: String, need: String, index: int, proposed_partner: String) -> String:
+	var key := _fallback_pip_key(cell_id, need, index)
+	var current_partner := str(_pip_partner_by_key.get(key, ""))
+	if not current_partner.is_empty() and _fallback_is_usable_need_partner(cell_id, need, current_partner):
+		return current_partner
+	if not proposed_partner.is_empty() and _fallback_is_usable_need_partner(cell_id, need, proposed_partner):
+		_pip_partner_by_key[key] = proposed_partner
+		return proposed_partner
+	_pip_partner_by_key.erase(key)
+	return ""
+
+
+func _fallback_is_usable_need_partner(cell_id: String, need: String, partner: String) -> bool:
+	if cell_id.is_empty() or partner.is_empty():
+		return false
+	if _board_cells.has(cell_id) and _board_cells.has(partner):
+		return _get_cell_tile(cell_id).distance_squared_to(_get_cell_tile(partner)) == 1 and _cell_can_offer_resource(partner, need)
+	return _cell_can_offer_resource(partner, need)
 
 
 func _fallback_need_partner(cell_id: String, need: String) -> String:
@@ -2121,9 +2560,6 @@ func _fallback_need_partner(cell_id: String, need: String) -> String:
 	var hinted := _hint_partner_for_cell(cell_id)
 	if not hinted.is_empty() and _cell_can_offer_resource(hinted, need):
 		return hinted
-	var flow_partner := _recent_flow_partner_for_need(cell_id, need)
-	if not flow_partner.is_empty():
-		return flow_partner
 	var possible_partner := _possible_swap_partner_for_need(cell_id, need)
 	if not possible_partner.is_empty():
 		return possible_partner
@@ -2133,8 +2569,6 @@ func _fallback_need_partner(cell_id: String, need: String) -> String:
 	var adjacent_partner := _adjacent_partner_for_need(cell_id, need)
 	if not adjacent_partner.is_empty():
 		return adjacent_partner
-	if not hinted.is_empty() and _cell_accepts_resource_doc(_cell_doc_by_id(hinted), _cell_produced_resource_doc(_cell_doc_by_id(cell_id))):
-		return hinted
 	return ""
 
 
@@ -2278,8 +2712,9 @@ func _cell_produced_resource_doc(cell: Dictionary) -> String:
 func _fallback_separate_need_angle(base_angle: float, used_angles: Array[float]) -> float:
 	if used_angles.is_empty():
 		return base_angle
-	var minimum_gap := 0.54
-	var offsets: Array[float] = [0.0, minimum_gap, -minimum_gap, minimum_gap * 2.0, -minimum_gap * 2.0]
+	var minimum_gap := NEED_PIP_MINIMUM_ANGLE_GAP
+	var fan_step := NEED_PIP_FAN_ANGLE_STEP
+	var offsets: Array[float] = [0.0, fan_step, -fan_step, fan_step * 2.0, -fan_step * 2.0]
 	for offset in offsets:
 		var candidate := base_angle + offset
 		var separated := true
@@ -2296,22 +2731,36 @@ func _fallback_pip_key(cell_id: String, need: String, index: int) -> String:
 	return str(cell_id, ":", need, ":", index)
 
 
-func _fallback_smooth_pip_angle(key: String, target_angle: float) -> float:
+func _fallback_pip_slot_key(cell_id: String, index: int) -> String:
+	return str(cell_id, ":__slot__:", index)
+
+
+func _fallback_default_myco_slot_center(center: Vector2, index: int, count: int, radius: float) -> Vector2:
+	var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	return center + Vector2(cos(angle), sin(angle)) * radius * 1.18
+
+
+func _fallback_smooth_pip_angle(key: String, target_angle: float, smooth: float = PIP_ANGLE_SMOOTH) -> float:
 	if not _pip_angle_by_key.has(key):
 		_pip_angle_by_key[key] = target_angle
 		return target_angle
 	var current := float(_pip_angle_by_key.get(key, target_angle))
-	var smoothed := current + wrapf(target_angle - current, -PI, PI) * PIP_ANGLE_SMOOTH
+	var delta := wrapf(target_angle - current, -PI, PI)
+	if absf(delta) < PIP_ANGLE_DEAD_ZONE:
+		return current
+	var smoothed := current + delta * smooth
 	_pip_angle_by_key[key] = smoothed
 	return smoothed
 
 
-func _fallback_smooth_pip_offset(key: String, target_offset: float) -> float:
+func _fallback_smooth_pip_offset(key: String, target_offset: float, smooth: float = PIP_OFFSET_SMOOTH) -> float:
 	if not _pip_offset_by_key.has(key):
 		_pip_offset_by_key[key] = target_offset
 		return target_offset
 	var current := float(_pip_offset_by_key.get(key, target_offset))
-	var smoothed := lerpf(current, target_offset, PIP_OFFSET_SMOOTH)
+	if absf(target_offset - current) < PIP_OFFSET_DEAD_ZONE:
+		return current
+	var smoothed := lerpf(current, target_offset, smooth)
 	_pip_offset_by_key[key] = smoothed
 	return smoothed
 
@@ -2518,14 +2967,6 @@ func _reset_camera_state() -> void:
 	_camera_tile_size = 64.0
 	_camera_max_tile_size = 64.0
 	_last_board_view_size = Vector2.ZERO
-	_pan_active = false
-	_pan_touch_id = -1
-	_touch_points.clear()
-	_pinch_active = false
-	_pinch_touch_a = -1
-	_pinch_touch_b = -1
-	_pinch_last_distance = 0.0
-	_pinch_last_center = Vector2.ZERO
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -2535,116 +2976,26 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
-				if not _begin_drag(mouse_event.position, -1):
-					_begin_camera_pan(mouse_event.position, -1)
+				if _drag_source == DRAG_SOURCE_NONE:
+					_begin_drag(mouse_event.position, -1)
 			else:
 				if _drag_source != DRAG_SOURCE_NONE:
 					_finish_drag(mouse_event.position)
-				elif _pan_active and _pan_touch_id == -1:
-					_finish_camera_pan()
-		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_zoom_arcade_camera(CAMERA_ZOOM_STEP, mouse_event.position)
-		elif mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_zoom_arcade_camera(1.0 / CAMERA_ZOOM_STEP, mouse_event.position)
 	elif event is InputEventMouseMotion:
 		if _drag_source != DRAG_SOURCE_NONE:
 			_update_drag((event as InputEventMouseMotion).position)
-		elif _pan_active and _pan_touch_id == -1:
-			_update_camera_pan((event as InputEventMouseMotion).position)
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
-			_touch_points[touch.index] = touch.position
-			if _touch_points.size() >= 2:
-				_start_pinch_from_touches()
-			elif not _begin_drag(touch.position, touch.index):
-				_begin_camera_pan(touch.position, touch.index)
+			if _drag_source == DRAG_SOURCE_NONE:
+				_begin_drag(touch.position, touch.index)
 		else:
 			if _drag_source != DRAG_SOURCE_NONE and touch.index == _drag_touch_id:
 				_finish_drag(touch.position)
-			elif _pan_active and touch.index == _pan_touch_id:
-				_finish_camera_pan()
-			_touch_points.erase(touch.index)
-			if _pinch_active and (touch.index == _pinch_touch_a or touch.index == _pinch_touch_b):
-				_finish_pinch()
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		_touch_points[drag.index] = drag.position
 		if _drag_source != DRAG_SOURCE_NONE and drag.index == _drag_touch_id:
 			_update_drag(drag.position)
-		elif _pinch_active and (drag.index == _pinch_touch_a or drag.index == _pinch_touch_b):
-			_update_pinch_from_touches()
-		elif _pan_active and drag.index == _pan_touch_id:
-			_update_camera_pan(drag.position)
-
-
-func _begin_camera_pan(screen_pos: Vector2, touch_id: int = -1) -> void:
-	if not _board_view_rect.has_point(screen_pos):
-		return
-	_pan_active = true
-	_pan_last_pos = screen_pos
-	_pan_touch_id = touch_id
-	accept_event()
-
-
-func _update_camera_pan(screen_pos: Vector2) -> void:
-	if not _pan_active:
-		return
-	var delta := screen_pos - _pan_last_pos
-	_pan_last_pos = screen_pos
-	_pan_arcade_camera_by_screen_delta(delta)
-	accept_event()
-
-
-func _finish_camera_pan() -> void:
-	_pan_active = false
-	_pan_touch_id = -1
-
-
-func _start_pinch_from_touches() -> void:
-	var keys: Array = _touch_points.keys()
-	if keys.size() < 2:
-		return
-	_reset_drag()
-	_pinch_touch_a = int(keys[0])
-	_pinch_touch_b = int(keys[1])
-	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO)
-	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO)
-	var distance := a.distance_to(b)
-	if distance < CAMERA_PINCH_MIN_DISTANCE:
-		return
-	_pinch_active = true
-	_pinch_last_distance = distance
-	_pinch_last_center = (a + b) * 0.5
-	_pan_active = false
-	_pan_touch_id = -1
-	accept_event()
-
-
-func _update_pinch_from_touches() -> void:
-	if not _pinch_active:
-		return
-	if not _touch_points.has(_pinch_touch_a) or not _touch_points.has(_pinch_touch_b):
-		_finish_pinch()
-		return
-	var a: Vector2 = _touch_points.get(_pinch_touch_a, Vector2.ZERO)
-	var b: Vector2 = _touch_points.get(_pinch_touch_b, Vector2.ZERO)
-	var distance := a.distance_to(b)
-	if distance < CAMERA_PINCH_MIN_DISTANCE or _pinch_last_distance < CAMERA_PINCH_MIN_DISTANCE:
-		return
-	var center := (a + b) * 0.5
-	_pan_arcade_camera_by_screen_delta(center - _pinch_last_center)
-	_zoom_arcade_camera(distance / _pinch_last_distance, center)
-	_pinch_last_distance = distance
-	_pinch_last_center = center
-	accept_event()
-
-
-func _finish_pinch() -> void:
-	_pinch_active = false
-	_pinch_touch_a = -1
-	_pinch_touch_b = -1
-	_pinch_last_distance = 0.0
 
 
 func _begin_drag(screen_pos: Vector2, touch_id: int = -1) -> bool:

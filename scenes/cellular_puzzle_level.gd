@@ -39,6 +39,14 @@ const SWAP_VISUAL_TTL_TICKS := 10.0
 const REACTION_VISUAL_TTL_TICKS := 10.0
 const PIP_ANGLE_SMOOTH := 0.10
 const PIP_OFFSET_SMOOTH := 0.12
+const PIP_ANGLE_RETURN_SMOOTH := 0.045
+const PIP_OFFSET_RETURN_SMOOTH := 0.055
+const PIP_ANGLE_DEAD_ZONE := 0.018
+const PIP_OFFSET_DEAD_ZONE := 0.45
+const NEED_PIP_MINIMUM_ANGLE_GAP := 0.30
+const NEED_PIP_FAN_ANGLE_STEP := 0.32
+const NEED_PIP_LANE_FOOTPRINT_SCALE := 1.36
+const NEED_PIP_LANE_MARGIN := 4.0
 const ZERO_PIP_PULSE_PERIOD_MSEC := 3000
 const ZERO_PIP_PULSE_FADE_MSEC := 1000
 const ZERO_PIP_PULSE_COLOR := Color(1.0, 0.04, 0.02, 1.0)
@@ -72,6 +80,9 @@ const CELL_STRESS_GLOW_COLOR := Color(1.0, 0.96, 0.04, 1.0)
 const CELL_HEALTHY_GLOW_COLOR := Color(0.30, 1.0, 0.84, 1.0)
 const NEED_PIP_MARK_SIZE_SCALE := 1.10
 const NEED_PIP_MARK_WEIGHT_SCALE := 1.10
+const PLAYABLE_TILE_EVEN_COLOR := Color(0.18, 0.285, 0.295, 1.0)
+const PLAYABLE_TILE_ODD_COLOR := Color(0.22, 0.335, 0.340, 1.0)
+const PLAYABLE_TILE_BORDER_COLOR := Color(0.62, 0.96, 0.86, 0.36)
 const CAMERA_READABLE_TILE_SIZE := 72.0
 const CAMERA_TINY_READABLE_TILE_SIZE := 64.0
 const CAMERA_MIN_VISIBLE_TILES_AT_MAX_ZOOM := 4.0
@@ -198,6 +209,17 @@ var _resource_mark_mode := MARK_MODE_LETTERS
 var _circuit_overlay_enabled := true
 var _pip_angle_by_key: Dictionary = {}
 var _pip_offset_by_key: Dictionary = {}
+var _pip_partner_by_key: Dictionary = {}
+var _pip_layout_partner_by_key: Dictionary = {}
+var _pip_layout_center_by_key: Dictionary = {}
+var _pip_layout_cell_center_by_key: Dictionary = {}
+var _pip_layout_cell_radius_by_key: Dictionary = {}
+var _pip_returning_to_default_by_key: Dictionary = {}
+var _zero_need_pip_overlay_pips: Array[Dictionary] = []
+var _need_pip_layout_by_key: Dictionary = {}
+var _need_pip_layout_keys_by_resource: Dictionary = {}
+var _need_pip_layout_specs: Array[Dictionary] = []
+var _need_pip_layout_groups: Dictionary = {}
 var _display_fullness_by_key: Dictionary = {}
 var _last_draw_msec := 0
 var _frame_blend := 1.0
@@ -463,8 +485,7 @@ func _process(delta: float) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
-		_pip_angle_by_key.clear()
-		_pip_offset_by_key.clear()
+		_clear_need_pip_layout_state()
 		_board_renderer_full_sync_needed = true
 		_layout_hud()
 		queue_redraw()
@@ -1089,8 +1110,7 @@ func _load_level(level_number: int, record_progress: bool = true) -> void:
 	_hint_text = ""
 	_recent_hint_keys.clear()
 	_enable_idle_hint_nudge()
-	_pip_angle_by_key.clear()
-	_pip_offset_by_key.clear()
+	_clear_need_pip_layout_state()
 	_white_myco_count = 0
 	_red_myco_count = 0
 	_board_cols = BOARD_SIZE
@@ -2177,6 +2197,7 @@ func _add_recent_event_participants(participating: Dictionary, event_key: String
 
 func _draw() -> void:
 	_update_frame_blend()
+	_clear_need_pip_frame_layouts()
 	var view_size := get_viewport_rect().size
 	draw_rect(Rect2(Vector2.ZERO, view_size), Color(0.025, 0.055, 0.065, 1.0))
 	_layout_board(view_size)
@@ -2185,6 +2206,7 @@ func _draw() -> void:
 		_sync_board_renderer()
 		_draw_next_level_pulse()
 		return
+	_prepare_need_pip_layouts()
 	_draw_board()
 	_draw_circuit_flow_groups()
 	_draw_links()
@@ -2197,6 +2219,322 @@ func _draw() -> void:
 		_draw_cell(cell, _tile_center(_get_cell_tile(cell)), false)
 	if _drag_cell != "":
 		_draw_cell(_drag_cell, _drag_position, true)
+	_draw_zero_need_pip_overlays()
+
+
+func _prepare_need_pip_layouts() -> void:
+	for cell in _cells:
+		var dragging := cell == _drag_cell
+		var center := _drag_position if dragging else _tile_center(_get_cell_tile(cell))
+		_add_need_pip_layout_specs_for_cell(cell, center, dragging)
+	_layout_need_pip_specs()
+
+
+func _clear_need_pip_frame_layouts() -> void:
+	_zero_need_pip_overlay_pips.clear()
+	_need_pip_layout_by_key.clear()
+	_need_pip_layout_keys_by_resource.clear()
+	_need_pip_layout_specs.clear()
+	_need_pip_layout_groups.clear()
+
+
+func _clear_need_pip_layout_state() -> void:
+	_clear_need_pip_frame_layouts()
+	_pip_angle_by_key.clear()
+	_pip_offset_by_key.clear()
+	_pip_partner_by_key.clear()
+	_pip_layout_partner_by_key.clear()
+	_pip_layout_center_by_key.clear()
+	_pip_layout_cell_center_by_key.clear()
+	_pip_layout_cell_radius_by_key.clear()
+	_pip_returning_to_default_by_key.clear()
+
+
+func _sync_need_pip_history_after_board_rect_change(previous_board_rect: Rect2, previous_tile_size: float) -> void:
+	var had_previous_geometry := previous_tile_size > 0.0 and previous_board_rect.size.x > 1.0 and previous_board_rect.size.y > 1.0
+	if not had_previous_geometry:
+		return
+	var scale_changed := absf(previous_tile_size - _tile_size) > 0.01
+	var size_changed := (previous_board_rect.size - _board_rect.size).length_squared() > 0.01
+	if scale_changed or size_changed:
+		_clear_need_pip_layout_state()
+	else:
+		_translate_need_pip_layout_history(_board_rect.position - previous_board_rect.position)
+
+
+func _translate_need_pip_layout_history(delta: Vector2) -> void:
+	if delta.length_squared() <= 0.0001:
+		return
+	_translate_vector_history(_pip_layout_center_by_key, delta)
+	_translate_vector_history(_pip_layout_cell_center_by_key, delta)
+
+
+func _translate_vector_history(history: Dictionary, delta: Vector2) -> void:
+	for key in history.keys():
+		var value: Variant = history.get(key, null)
+		if value is Vector2:
+			history[key] = (value as Vector2) + delta
+
+
+func _add_need_pip_layout_specs_for_cell(cell: String, center: Vector2, dragging: bool) -> void:
+	var radius := _tile_size * (0.43 if dragging else 0.39)
+	var is_myco := _is_myco_cell(cell)
+	var needed_value: Variant = _needs.get(cell, [])
+	var needed: Array = []
+	if needed_value is Array:
+		needed = needed_value as Array
+	var pip_count := MYCO_MAX_NEEDS if is_myco else needed.size()
+	var pip_radius := _need_pip_radius(radius)
+	for index in range(pip_count):
+		if index >= needed.size():
+			if is_myco:
+				_add_need_pip_layout_spec({
+					"key": _pip_slot_key(cell, index),
+					"cell": cell,
+					"need": "",
+					"index": index,
+					"count": pip_count,
+					"cellCenter": center,
+					"cellRadius": radius,
+					"pipRadius": pip_radius,
+					"visual": _blank_myco_need_visual(index, pip_count, radius),
+					"isMyco": is_myco,
+					"hasLiveState": false,
+					"partner": "",
+					"dragging": dragging,
+					"laidOut": false
+				})
+			continue
+		var need := str(needed[index])
+		var visual := _need_state_data(cell, need)
+		var stable_partner := _stabilize_need_partner(cell, need, index, str(visual.get("partner", "")))
+		visual["partner"] = stable_partner
+		_add_need_pip_layout_spec({
+			"key": _pip_key(cell, need, index),
+			"cell": cell,
+			"need": need,
+			"index": index,
+			"count": pip_count,
+			"cellCenter": center,
+			"cellRadius": radius,
+			"pipRadius": pip_radius,
+			"visual": visual,
+			"isMyco": is_myco,
+			"hasLiveState": _using_csharp_sim and _cell_state_by_id.has(cell),
+			"partner": stable_partner,
+			"dragging": dragging,
+			"laidOut": false
+		})
+
+
+func _add_need_pip_layout_spec(spec: Dictionary) -> void:
+	_need_pip_layout_specs.append(spec)
+	var partner := str(spec.get("partner", ""))
+	if partner.is_empty():
+		return
+	var group_key := _need_pip_edge_group_key(str(spec.get("cell", "")), partner)
+	if not _need_pip_layout_groups.has(group_key):
+		_need_pip_layout_groups[group_key] = []
+	var group_value: Variant = _need_pip_layout_groups.get(group_key, [])
+	if group_value is Array:
+		(group_value as Array).append(spec)
+
+
+func _layout_need_pip_specs() -> void:
+	for group_value in _need_pip_layout_groups.values():
+		if not group_value is Array:
+			continue
+		var group: Array = group_value as Array
+		if group.is_empty():
+			continue
+		group.sort_custom(Callable(self, "_compare_need_pip_layout_specs"))
+		var max_pip_radius := 0.0
+		for spec_value in group:
+			if spec_value is Dictionary:
+				max_pip_radius = maxf(max_pip_radius, float((spec_value as Dictionary).get("pipRadius", 0.0)))
+		var lane_spacing := max_pip_radius * NEED_PIP_LANE_FOOTPRINT_SCALE * 2.0 + NEED_PIP_LANE_MARGIN
+		var lane_center := float(group.size() - 1) * 0.5
+		for lane in range(group.size()):
+			var spec_value: Variant = group[lane]
+			if not spec_value is Dictionary:
+				continue
+			var spec: Dictionary = spec_value as Dictionary
+			_store_provider_need_pip_layout(spec, (float(lane) - lane_center) * lane_spacing)
+			spec["laidOut"] = true
+	for spec in _need_pip_layout_specs:
+		if not bool(spec.get("laidOut", false)):
+			_store_default_need_pip_layout(spec)
+
+
+func _store_provider_need_pip_layout(spec: Dictionary, lane_offset: float) -> void:
+	var partner := str(spec.get("partner", ""))
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var delta := _visual_cell_center(partner) - cell_center
+	if delta.length_squared() <= 1.0:
+		_store_default_need_pip_layout(spec)
+		return
+	var direction := delta.normalized()
+	var base_offset := _need_pip_offset(cell_center, partner, float(spec.get("cellRadius", 0.0)), float(spec.get("pipRadius", 0.0)))
+	var lane_direction := _need_pip_edge_lane_direction(str(spec.get("cell", "")), partner)
+	var lane_vector := direction * base_offset + lane_direction * lane_offset
+	if lane_vector.length_squared() <= 0.0001:
+		_store_default_need_pip_layout(spec)
+		return
+	_store_need_pip_layout(spec, cell_center + lane_vector.normalized() * base_offset)
+
+
+func _store_default_need_pip_layout(spec: Dictionary) -> void:
+	var visual_value: Variant = spec.get("visual", {})
+	var visual: Dictionary = {}
+	if visual_value is Dictionary:
+		visual = visual_value as Dictionary
+	var index := int(spec.get("index", 0))
+	var count := int(spec.get("count", 1))
+	var target_angle := float(visual.get("targetAngle", 0.0))
+	if absf(target_angle) <= 0.0001:
+		target_angle = -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var target_offset := float(visual.get("offset", 0.0))
+	if target_offset <= 0.0:
+		target_offset = _need_pip_offset_for_state(cell_center, "", float(spec.get("cellRadius", 0.0)), float(spec.get("pipRadius", 0.0)), str(visual.get("state", NEED_STATE_MISSING)))
+	_store_need_pip_layout(spec, cell_center + Vector2(cos(target_angle), sin(target_angle)) * target_offset)
+
+
+func _store_need_pip_layout(spec: Dictionary, target_center: Vector2) -> void:
+	var key := str(spec.get("key", ""))
+	var cell := str(spec.get("cell", ""))
+	var need := str(spec.get("need", ""))
+	var index := int(spec.get("index", 0))
+	var count := int(spec.get("count", 1))
+	var partner := str(spec.get("partner", ""))
+	var is_myco := bool(spec.get("isMyco", false))
+	var slot_key := _pip_slot_key(cell, index) if is_myco else ""
+	var cell_center: Vector2 = spec.get("cellCenter", Vector2.ZERO) as Vector2
+	var visual_value: Variant = spec.get("visual", {})
+	var visual: Dictionary = {}
+	if visual_value is Dictionary:
+		visual = visual_value as Dictionary
+	var delta := target_center - cell_center
+	var target_angle := delta.angle() if delta.length_squared() > 0.0001 else -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	var target_offset := delta.length() if delta.length_squared() > 0.0001 else _need_pip_offset_for_state(cell_center, partner, float(spec.get("cellRadius", 0.0)), float(spec.get("pipRadius", 0.0)), str(visual.get("state", NEED_STATE_MISSING)))
+	var cell_radius := float(spec.get("cellRadius", 0.0))
+	if not bool(spec.get("dragging", false)):
+		_seed_pip_smoothing_from_previous_center(key, cell_center, cell_radius, slot_key)
+	var returning_to_default := _pip_returning_to_default(key, partner, slot_key)
+	var angle := _smooth_pip_angle(key, target_angle, PIP_ANGLE_RETURN_SMOOTH if returning_to_default else PIP_ANGLE_SMOOTH)
+	var offset := _smooth_pip_offset(key, target_offset, PIP_OFFSET_RETURN_SMOOTH if returning_to_default else PIP_OFFSET_SMOOTH)
+	_stop_pip_return_to_default_if_settled(key, returning_to_default, angle, target_angle, offset, target_offset)
+	var center := cell_center + Vector2(cos(angle), sin(angle)) * offset
+	var layout := {
+		"key": key,
+		"cell": cell,
+		"need": need,
+		"index": index,
+		"partner": partner,
+		"cellCenter": cell_center,
+		"center": center,
+		"radius": float(spec.get("pipRadius", 0.0)),
+		"state": str(visual.get("state", NEED_STATE_MISSING)),
+		"fullness": float(visual.get("fullness", 0.0)),
+		"activeAlpha": float(visual.get("activeAlpha", 0.0)),
+		"hasLiveState": bool(spec.get("hasLiveState", false)),
+		"cellRadius": float(spec.get("cellRadius", 0.0))
+	}
+	_need_pip_layout_by_key[key] = layout
+	_pip_layout_partner_by_key[key] = partner
+	_pip_layout_center_by_key[key] = center
+	_pip_layout_cell_center_by_key[key] = cell_center
+	_pip_layout_cell_radius_by_key[key] = cell_radius
+	if is_myco:
+		_pip_layout_partner_by_key[slot_key] = partner
+		_pip_layout_center_by_key[slot_key] = center
+		_pip_layout_cell_center_by_key[slot_key] = cell_center
+		_pip_layout_cell_radius_by_key[slot_key] = cell_radius
+	if need.is_empty():
+		return
+	var lookup_key := _need_lookup_key(cell, need)
+	if not _need_pip_layout_keys_by_resource.has(lookup_key):
+		_need_pip_layout_keys_by_resource[lookup_key] = []
+	var keys_value: Variant = _need_pip_layout_keys_by_resource.get(lookup_key, [])
+	if keys_value is Array:
+		(keys_value as Array).append(key)
+
+
+func _need_pip_edge_lane_direction(cell: String, partner: String) -> Vector2:
+	var first := cell
+	var second := partner
+	if first > second:
+		var tmp := first
+		first = second
+		second = tmp
+	var delta := _visual_cell_center(second) - _visual_cell_center(first)
+	if delta.length_squared() <= 1.0:
+		return Vector2.RIGHT
+	var direction := delta.normalized()
+	return Vector2(-direction.y, direction.x)
+
+
+func _need_pip_edge_group_key(cell: String, partner: String) -> String:
+	if cell <= partner:
+		return str("edge:", cell, ":", partner)
+	return str("edge:", partner, ":", cell)
+
+
+func _compare_need_pip_layout_specs(a: Variant, b: Variant) -> bool:
+	if a is Dictionary and b is Dictionary:
+		return str((a as Dictionary).get("key", "")) < str((b as Dictionary).get("key", ""))
+	return str(a) < str(b)
+
+
+func _pip_returning_to_default(key: String, partner: String, fallback_key: String = "") -> bool:
+	if not partner.is_empty():
+		_pip_returning_to_default_by_key.erase(key)
+		return false
+	if _pip_returning_to_default_by_key.has(key):
+		return true
+	if _pip_layout_history_has_partner(key) or (not fallback_key.is_empty() and _pip_layout_history_has_partner(fallback_key)):
+		_pip_returning_to_default_by_key[key] = true
+		return true
+	return false
+
+
+func _pip_layout_history_has_partner(key: String) -> bool:
+	return not str(_pip_layout_partner_by_key.get(key, "")).is_empty()
+
+
+func _seed_pip_smoothing_from_previous_center(key: String, cell_center: Vector2, cell_radius: float, fallback_key: String = "") -> void:
+	if _try_seed_pip_smoothing_from_previous_center(key, key, cell_center, cell_radius, true):
+		return
+	if not fallback_key.is_empty() and fallback_key != key and not _pip_angle_by_key.has(key) and not _pip_offset_by_key.has(key):
+		_try_seed_pip_smoothing_from_previous_center(key, fallback_key, cell_center, cell_radius, false)
+
+
+func _try_seed_pip_smoothing_from_previous_center(target_key: String, history_key: String, cell_center: Vector2, cell_radius: float, require_cell_center_moved: bool) -> bool:
+	var previous_center_value: Variant = _pip_layout_center_by_key.get(history_key, null)
+	var previous_cell_center_value: Variant = _pip_layout_cell_center_by_key.get(history_key, null)
+	if not previous_center_value is Vector2 or not previous_cell_center_value is Vector2:
+		return false
+	var previous_cell_center: Vector2 = previous_cell_center_value as Vector2
+	var previous_center: Vector2 = previous_center_value as Vector2
+	var previous_radius := float(_pip_layout_cell_radius_by_key.get(history_key, 0.0))
+	var radius_changed := previous_radius > 0.0001 and absf(previous_radius - cell_radius) > 0.01
+	if require_cell_center_moved and (previous_cell_center - cell_center).length_squared() <= 1.0 and not radius_changed:
+		return false
+	var delta := previous_center - previous_cell_center
+	if previous_radius > 0.0001 and cell_radius > 0.0001:
+		delta *= cell_radius / previous_radius
+	if delta.length_squared() <= 0.0001:
+		return false
+	_pip_angle_by_key[target_key] = delta.angle()
+	_pip_offset_by_key[target_key] = delta.length()
+	return true
+
+
+func _stop_pip_return_to_default_if_settled(key: String, returning_to_default: bool, angle: float, target_angle: float, offset: float, target_offset: float) -> void:
+	if not returning_to_default:
+		return
+	if absf(wrapf(target_angle - angle, -PI, PI)) < PIP_ANGLE_DEAD_ZONE * 2.0 and absf(target_offset - offset) < PIP_OFFSET_DEAD_ZONE * 2.0:
+		_pip_returning_to_default_by_key.erase(key)
 
 
 func _sync_board_renderer() -> void:
@@ -2320,10 +2658,13 @@ func _camera_max_tile_size() -> float:
 
 
 func _update_board_rect_from_camera() -> void:
+	var previous_board_rect := _board_rect
+	var previous_tile_size := _tile_size
 	_tile_size = clampf(_camera_tile_size, 4.0, _camera_max_tile_size())
 	var board_size := Vector2(_tile_size * float(_board_cols), _tile_size * float(_board_rows))
 	var origin := _board_view_rect.get_center() - _camera_center_tiles * _tile_size
 	_board_rect = Rect2(origin, board_size)
+	_sync_need_pip_history_after_board_rect_change(previous_board_rect, previous_tile_size)
 
 
 func _clamp_camera(resize_deadband: bool = true) -> void:
@@ -2388,9 +2729,9 @@ func _draw_board() -> void:
 			var rect := Rect2(_board_rect.position + Vector2(x, y) * _tile_size, Vector2(_tile_size, _tile_size)).grow(-2.0)
 			if not _board_view_rect.grow(4.0).intersects(rect):
 				continue
-			var shade: float = 0.085 if (x + y) % 2 == 0 else 0.105
-			draw_rect(rect, Color(shade, shade + 0.035, shade + 0.045, 1.0), true)
-			draw_rect(rect, Color(0.24, 0.42, 0.42, 0.18), false, 1.0)
+			var tile_color := PLAYABLE_TILE_EVEN_COLOR if (x + y) % 2 == 0 else PLAYABLE_TILE_ODD_COLOR
+			draw_rect(rect, tile_color, true)
+			draw_rect(rect, PLAYABLE_TILE_BORDER_COLOR, false, 1.0)
 	if _drag_cell != "":
 		var tile := _screen_to_tile(_drag_position)
 		if _is_tile_inside(tile) and (_is_tile_empty(tile) or tile == _original_drag_tile):
@@ -3005,50 +3346,126 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool) -> void:
 	var needed: Array = _needs.get(cell, [])
 	var pip_count := MYCO_MAX_NEEDS if is_myco else needed.size()
 	var used_angles: Array[float] = []
+	var normal_need_pips: Array[Dictionary] = []
+	var zero_need_pips: Array[Dictionary] = []
 	for index in range(pip_count):
 		var pip_radius := _need_pip_radius(radius)
 		if index >= needed.size():
-			var blank_angle := -PI * 0.5 + TAU * float(index) / maxf(float(pip_count), 1.0)
-			var blank_center := center + Vector2(cos(blank_angle), sin(blank_angle)) * radius * 1.18
-			draw_circle(blank_center, pip_radius, Color(0.92, 0.97, 0.96, 1.0))
-			draw_circle(blank_center, pip_radius, Color(0.01, 0.025, 0.03, 0.70), false, 2.2)
-			draw_circle(blank_center, pip_radius * 0.84, Color(1, 1, 1, 0.52), false, 1.4)
+			var blank_layout_key := _pip_slot_key(cell, index)
+			var blank_layout_value: Variant = _need_pip_layout_by_key.get(blank_layout_key, {})
+			var blank_center := _default_myco_slot_center(center, index, pip_count, radius)
+			var blank_radius := pip_radius
+			if blank_layout_value is Dictionary:
+				var blank_layout: Dictionary = blank_layout_value as Dictionary
+				var blank_center_value: Variant = blank_layout.get("center", blank_center)
+				if blank_center_value is Vector2:
+					blank_center = blank_center_value as Vector2
+				blank_radius = float(blank_layout.get("radius", blank_radius))
+			_draw_blank_myco_pip(blank_center, blank_radius)
 			continue
 		var need := str(needed[index])
-		var visual := _need_visual_data(cell, need, index, pip_count, center, radius, pip_radius, used_angles)
-		var angle := float(visual.get("angle", 0.0))
-		used_angles.append(float(visual.get("targetAngle", angle)))
-		var pip_offset := float(visual.get("offset", radius * 1.18))
-		var pip_center := center + Vector2(cos(angle), sin(angle)) * pip_offset
-		var state := str(visual.get("state", NEED_STATE_MISSING))
-		var fullness := float(visual.get("fullness", 0.0))
-		var active_alpha := float(visual.get("activeAlpha", 0.0))
-		var met := state != NEED_STATE_MISSING or fullness > 0.0
-		var pip_color := _resource_color(need)
-		if state == NEED_STATE_MISSING:
-			pip_color = pip_color.darkened(0.48)
-			pip_color.a = 1.0
-			_draw_need_tether(center, pip_center, radius, pip_radius, Color(0.75, 0.88, 0.90, 0.28))
-		elif state == NEED_STATE_AVAILABLE:
-			pip_color = pip_color.darkened(0.12)
-			pip_color.a = 1.0
-			_draw_need_tether(center, pip_center, radius, pip_radius, Color(pip_color.r, pip_color.g, pip_color.b, 0.42))
-		elif state == NEED_STATE_ACTIVE:
-			pip_color.a = 1.0
-			draw_circle(pip_center, pip_radius * (1.14 + active_alpha * 0.16), Color(pip_color.r, pip_color.g, pip_color.b, 0.20 + active_alpha * 0.26))
+		var key := _pip_key(cell, need, index)
+		var pip_data := _need_pip_draw_from_layout(_need_pip_layout_by_key.get(key, {})) if _need_pip_layout_by_key.has(key) else _build_fallback_need_pip_draw(cell, need, index, pip_count, center, radius, pip_radius, used_angles)
+		if _should_elevate_need_pip(pip_data):
+			zero_need_pips.append(pip_data)
+			_zero_need_pip_overlay_pips.append({"pip": pip_data, "cellRadius": radius})
 		else:
-			pip_color.a = 1.0
-		draw_circle(pip_center, pip_radius, pip_color)
-		draw_circle(pip_center, pip_radius, Color(0.01, 0.025, 0.03, 0.82), false, 2.2)
-		draw_circle(pip_center, pip_radius * 0.86, Color(1, 1, 1, 0.44 if met else 0.28), false, 1.4)
-		var pip_bar_radius := pip_radius * 1.12
-		var pip_bar_width := maxf(2.0, pip_radius * 0.20)
-		_draw_fullness_arc(pip_center, pip_bar_radius, _display_fullness(cell, need, fullness), pip_color, pip_bar_width)
-		if _using_csharp_sim and fullness <= 0.0:
-			_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
-		_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
+			normal_need_pips.append(pip_data)
+	for pip_data in normal_need_pips:
+		_draw_need_pip(font, pip_data, radius, true)
+	for pip_data in zero_need_pips:
+		_draw_need_pip(font, pip_data, radius, true)
 	if not is_myco:
 		_draw_resource_mark(font, center, radius, produced_resource, int(radius * 1.48), Color.WHITE)
+
+
+func _need_pip_draw_from_layout(layout_value: Variant) -> Dictionary:
+	if not layout_value is Dictionary:
+		return {}
+	var layout: Dictionary = layout_value as Dictionary
+	return {
+		"cell": str(layout.get("cell", "")),
+		"need": str(layout.get("need", "")),
+		"cellCenter": layout.get("cellCenter", Vector2.ZERO),
+		"center": layout.get("center", Vector2.ZERO),
+		"radius": float(layout.get("radius", 0.0)),
+		"state": str(layout.get("state", NEED_STATE_MISSING)),
+		"fullness": float(layout.get("fullness", 0.0)),
+		"activeAlpha": float(layout.get("activeAlpha", 0.0)),
+		"hasLiveState": bool(layout.get("hasLiveState", false))
+	}
+
+
+func _build_fallback_need_pip_draw(cell: String, need: String, index: int, count: int, center: Vector2, cell_radius: float, pip_radius: float, used_angles: Array[float]) -> Dictionary:
+	var visual := _need_visual_data(cell, need, index, count, center, cell_radius, pip_radius, used_angles)
+	var angle := float(visual.get("angle", 0.0))
+	used_angles.append(float(visual.get("targetAngle", angle)))
+	var pip_offset := float(visual.get("offset", cell_radius * 1.18))
+	return {
+		"cell": cell,
+		"need": need,
+		"cellCenter": center,
+		"center": center + Vector2(cos(angle), sin(angle)) * pip_offset,
+		"radius": pip_radius,
+		"state": str(visual.get("state", NEED_STATE_MISSING)),
+		"fullness": float(visual.get("fullness", 0.0)),
+		"activeAlpha": float(visual.get("activeAlpha", 0.0)),
+		"hasLiveState": _using_csharp_sim and _cell_state_by_id.has(cell)
+	}
+
+
+func _draw_blank_myco_pip(center: Vector2, radius: float) -> void:
+	draw_circle(center, radius, Color(0.92, 0.97, 0.96, 1.0))
+	draw_circle(center, radius, Color(0.01, 0.025, 0.03, 0.70), false, 2.2)
+	draw_circle(center, radius * 0.84, Color(1, 1, 1, 0.52), false, 1.4)
+
+
+func _draw_need_pip(font: Font, pip_data: Dictionary, cell_radius: float, draw_tether: bool = true) -> void:
+	var cell := str(pip_data.get("cell", ""))
+	var need := str(pip_data.get("need", ""))
+	var cell_center: Vector2 = pip_data.get("cellCenter", Vector2.ZERO) as Vector2
+	var pip_center: Vector2 = pip_data.get("center", Vector2.ZERO) as Vector2
+	var pip_radius := float(pip_data.get("radius", 0.0))
+	var state := str(pip_data.get("state", NEED_STATE_MISSING))
+	var fullness := float(pip_data.get("fullness", 0.0))
+	var active_alpha := float(pip_data.get("activeAlpha", 0.0))
+	var met := state != NEED_STATE_MISSING or fullness > 0.0
+	var pip_color := _resource_color(need)
+	if state == NEED_STATE_MISSING:
+		pip_color = pip_color.darkened(0.48)
+		if draw_tether:
+			_draw_need_tether(cell_center, pip_center, cell_radius, pip_radius, Color(0.75, 0.88, 0.90, 0.28))
+	elif state == NEED_STATE_AVAILABLE:
+		pip_color = pip_color.darkened(0.12)
+		if draw_tether:
+			_draw_need_tether(cell_center, pip_center, cell_radius, pip_radius, Color(pip_color.r, pip_color.g, pip_color.b, 0.42))
+	elif state == NEED_STATE_ACTIVE:
+		draw_circle(pip_center, pip_radius * (1.14 + active_alpha * 0.16), Color(pip_color.r, pip_color.g, pip_color.b, 0.20 + active_alpha * 0.26))
+	pip_color.a = 1.0
+	draw_circle(pip_center, pip_radius, pip_color)
+	draw_circle(pip_center, pip_radius, Color(0.01, 0.025, 0.03, 0.82), false, 2.2)
+	draw_circle(pip_center, pip_radius * 0.86, Color(1, 1, 1, 0.44 if met else 0.28), false, 1.4)
+	var pip_bar_radius := pip_radius * 1.12
+	var pip_bar_width := maxf(2.0, pip_radius * 0.20)
+	_draw_fullness_arc(pip_center, pip_bar_radius, _display_fullness(cell, need, fullness), pip_color, pip_bar_width)
+	if _should_elevate_need_pip(pip_data):
+		_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
+	_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color.WHITE, NEED_PIP_MARK_WEIGHT_SCALE)
+
+
+func _should_elevate_need_pip(pip_data: Dictionary) -> bool:
+	return bool(pip_data.get("hasLiveState", false)) and float(pip_data.get("fullness", 0.0)) <= 0.0
+
+
+func _draw_zero_need_pip_overlays() -> void:
+	if not _using_csharp_sim or _zero_need_pip_overlay_pips.is_empty():
+		return
+	var font := get_theme_default_font()
+	for overlay_data in _zero_need_pip_overlay_pips:
+		var pip_value: Variant = overlay_data.get("pip", {})
+		if not pip_value is Dictionary:
+			continue
+		_draw_need_pip(font, pip_value as Dictionary, float(overlay_data.get("cellRadius", 0.0)), false)
 
 
 func _draw_red_myco_ring(center: Vector2, radius: float) -> void:
@@ -3084,13 +3501,14 @@ func _need_visual_data(
 	used_angles: Array[float],
 	apply_smoothing: bool = true) -> Dictionary:
 	var state_data := _need_state_data(cell, need)
+	state_data["partner"] = _stabilize_need_partner(cell, need, index, str(state_data.get("partner", "")))
 	var partner := str(state_data.get("partner", ""))
 	var base_angle := _base_need_angle(cell, need, index, count, center, partner)
 	var target_angle := _separate_need_angle(base_angle, used_angles)
 	var target_offset := _need_pip_offset_for_state(center, partner, cell_radius, pip_radius, str(state_data.get("state", NEED_STATE_MISSING)))
 	var angle := target_angle
 	var offset := target_offset
-	var pip_key := _pip_key(cell, need)
+	var pip_key := _pip_key(cell, need, index)
 	if apply_smoothing:
 		angle = _smooth_pip_angle(pip_key, angle)
 		offset = _smooth_pip_offset(pip_key, offset)
@@ -3101,27 +3519,66 @@ func _need_visual_data(
 	return state_data
 
 
+func _stabilize_need_partner(cell: String, need: String, index: int, proposed_partner: String) -> String:
+	var key := _pip_key(cell, need, index)
+	var current_partner := str(_pip_partner_by_key.get(key, ""))
+	if not current_partner.is_empty() and _is_usable_need_partner(cell, need, current_partner):
+		return current_partner
+	if not proposed_partner.is_empty() and _is_usable_need_partner(cell, need, proposed_partner):
+		_pip_partner_by_key[key] = proposed_partner
+		return proposed_partner
+	_pip_partner_by_key.erase(key)
+	return ""
+
+
+func _is_usable_need_partner(cell: String, need: String, partner: String) -> bool:
+	return _is_adjacent_cells(cell, partner) and _can_partner_satisfy_need(cell, need, partner)
+
+
+func _can_partner_satisfy_need(cell: String, need: String, partner: String) -> bool:
+	return not partner.is_empty() and _cell_structurally_offers_resource_to(partner, need, cell)
+
+
+func _cell_structurally_offers_resource_to(cell: String, resource: String, other: String) -> bool:
+	if resource.is_empty() or not _cell_accepts_resource(other, resource):
+		return false
+	if _cell_produced_resource(cell) == resource:
+		return true
+	var state := _get_cell_state(cell)
+	var slots_value: Variant = state.get("slots", [])
+	if slots_value is Array:
+		var slots: Array = slots_value as Array
+		for slot_value in slots:
+			if slot_value is Dictionary and str((slot_value as Dictionary).get("resource", "")) == resource:
+				return true
+	return _cell_needs_resource(cell, resource)
+
+
+func _is_adjacent_cells(a: String, b: String) -> bool:
+	return not a.is_empty() and not b.is_empty() and _positions.has(a) and _positions.has(b) and _get_cell_tile(a).distance_squared_to(_get_cell_tile(b)) == 1
+
+
 func _need_state_data(cell: String, need: String) -> Dictionary:
 	var fullness: float = _slot_fullness(cell, need) if _using_csharp_sim else 0.0
 	var active_partner := _recent_flow_source_for_need(cell, need)
 	var active_alpha := _recent_flow_alpha_for_need(cell, need)
 	if active_partner.is_empty():
 		active_partner = _recent_swap_partner_for_need(cell, need)
-	if not active_partner.is_empty():
-		if not _using_csharp_sim:
-			fullness = 1.0
-		return {
-			"state": NEED_STATE_ACTIVE,
-			"partner": active_partner,
-			"fullness": maxf(fullness, 0.18),
-			"activeAlpha": maxf(active_alpha, 0.45)
-		}
 
 	var possible_partner := _possible_swap_partner_for_need(cell, need)
 	if possible_partner.is_empty() and not _using_csharp_sim:
 		possible_partner = _adjacent_reciprocal_partner_for_need(cell, need)
 	if possible_partner.is_empty() and _using_csharp_sim:
 		possible_partner = _adjacent_exchange_partner_for_need(cell, need)
+	if not active_partner.is_empty():
+		if not _using_csharp_sim:
+			fullness = 1.0
+		return {
+			"state": NEED_STATE_ACTIVE,
+			"partner": possible_partner,
+			"fullness": maxf(fullness, 0.18),
+			"activeAlpha": maxf(active_alpha, 0.45)
+		}
 	if not possible_partner.is_empty():
 		return {
 			"state": NEED_STATE_AVAILABLE,
@@ -3157,8 +3614,9 @@ func _base_need_angle(cell: String, need: String, index: int, count: int, center
 func _separate_need_angle(base_angle: float, used_angles: Array[float]) -> float:
 	if used_angles.is_empty():
 		return base_angle
-	var minimum_gap := 0.58
-	var offsets: Array[float] = [0.0, minimum_gap, -minimum_gap, minimum_gap * 2.0, -minimum_gap * 2.0]
+	var minimum_gap := NEED_PIP_MINIMUM_ANGLE_GAP
+	var fan_step := NEED_PIP_FAN_ANGLE_STEP
+	var offsets: Array[float] = [0.0, fan_step, -fan_step, fan_step * 2.0, -fan_step * 2.0]
 	for offset in offsets:
 		var candidate := base_angle + offset
 		var separated := true
@@ -3181,52 +3639,85 @@ func _need_pip_offset_for_state(center: Vector2, partner: String, cell_radius: f
 
 func _resource_visual_point(cell: String, resource: String) -> Vector2:
 	var center := _visual_cell_center(cell)
-	if _cell_needs_resource(cell, resource):
-		return _need_pip_center_for_resource(cell, resource, center)
-	return center
+	var lookup_key := _need_lookup_key(cell, resource)
+	var keys_value: Variant = _need_pip_layout_keys_by_resource.get(lookup_key, [])
+	if not keys_value is Array:
+		return center
+	var keys: Array = keys_value as Array
+	var found := false
+	var best_index := 2147483647
+	var best_center := center
+	for key_value in keys:
+		var layout_value: Variant = _need_pip_layout_by_key.get(str(key_value), {})
+		if not layout_value is Dictionary:
+			continue
+		var layout: Dictionary = layout_value as Dictionary
+		var index := int(layout.get("index", 0))
+		if index >= best_index:
+			continue
+		best_index = index
+		var center_value: Variant = layout.get("center", center)
+		if center_value is Vector2:
+			best_center = center_value as Vector2
+			found = true
+	return best_center if found else center
 
 
 func _need_pip_center_for_resource(cell: String, resource: String, center: Vector2) -> Vector2:
-	var needed: Array = _needs.get(cell, [])
-	var radius: float = _tile_size * (0.43 if cell == _drag_cell else 0.39)
-	var pip_radius := _need_pip_radius(radius)
-	var used_angles: Array[float] = []
-	for index in range(needed.size()):
-		var need := str(needed[index])
-		var pip_key := _pip_key(cell, need)
-		var visual := _need_visual_data(cell, need, index, needed.size(), center, radius, pip_radius, used_angles, false)
-		var angle := float(visual.get("angle", 0.0))
-		used_angles.append(float(visual.get("targetAngle", angle)))
-		if need == resource:
-			if _pip_angle_by_key.has(pip_key) and _pip_offset_by_key.has(pip_key):
-				var stored_angle := float(_pip_angle_by_key.get(pip_key, angle))
-				var stored_offset := float(_pip_offset_by_key.get(pip_key, radius * 1.18))
-				return center + Vector2(cos(stored_angle), sin(stored_angle)) * stored_offset
-			var offset := float(visual.get("offset", radius * 1.18))
-			return center + Vector2(cos(angle), sin(angle)) * offset
-	return center
+	return _resource_visual_point(cell, resource)
 
 
-func _pip_key(cell: String, need: String) -> String:
-	return str(cell, ":", need)
+func _pip_key(cell: String, need: String, index: int) -> String:
+	return str(cell, ":", need, ":", index)
 
 
-func _smooth_pip_angle(key: String, target_angle: float) -> float:
+func _pip_slot_key(cell: String, index: int) -> String:
+	return str(cell, ":__slot__:", index)
+
+
+func _blank_myco_need_visual(index: int, count: int, cell_radius: float) -> Dictionary:
+	var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	return {
+		"state": NEED_STATE_SATISFIED,
+		"partner": "",
+		"fullness": 1.0,
+		"activeAlpha": 0.0,
+		"angle": angle,
+		"offset": cell_radius * 1.18,
+		"targetAngle": angle
+	}
+
+
+func _default_myco_slot_center(center: Vector2, index: int, count: int, cell_radius: float) -> Vector2:
+	var angle := -PI * 0.5 + TAU * float(index) / maxf(float(count), 1.0)
+	return center + Vector2(cos(angle), sin(angle)) * cell_radius * 1.18
+
+
+func _need_lookup_key(cell: String, resource: String) -> String:
+	return str(cell, "||", resource)
+
+
+func _smooth_pip_angle(key: String, target_angle: float, smooth: float = PIP_ANGLE_SMOOTH) -> float:
 	if not _pip_angle_by_key.has(key):
 		_pip_angle_by_key[key] = target_angle
 		return target_angle
 	var current := float(_pip_angle_by_key.get(key, target_angle))
-	var smoothed := current + wrapf(target_angle - current, -PI, PI) * PIP_ANGLE_SMOOTH
+	var delta := wrapf(target_angle - current, -PI, PI)
+	if absf(delta) < PIP_ANGLE_DEAD_ZONE:
+		return current
+	var smoothed := current + delta * smooth
 	_pip_angle_by_key[key] = smoothed
 	return smoothed
 
 
-func _smooth_pip_offset(key: String, target_offset: float) -> float:
+func _smooth_pip_offset(key: String, target_offset: float, smooth: float = PIP_OFFSET_SMOOTH) -> float:
 	if not _pip_offset_by_key.has(key):
 		_pip_offset_by_key[key] = target_offset
 		return target_offset
 	var current := float(_pip_offset_by_key.get(key, target_offset))
-	var smoothed := lerpf(current, target_offset, PIP_OFFSET_SMOOTH)
+	if absf(target_offset - current) < PIP_OFFSET_DEAD_ZONE:
+		return current
+	var smoothed := lerpf(current, target_offset, smooth)
 	_pip_offset_by_key[key] = smoothed
 	return smoothed
 

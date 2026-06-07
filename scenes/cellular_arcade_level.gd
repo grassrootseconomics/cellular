@@ -104,6 +104,8 @@ const PLAYABLE_TILE_EVEN_COLOR := Color(0.18, 0.285, 0.295, 1.0)
 const PLAYABLE_TILE_ODD_COLOR := Color(0.22, 0.335, 0.340, 1.0)
 const PLAYABLE_TILE_BORDER_COLOR := Color(0.62, 0.96, 0.86, 0.36)
 const HINT_MISSING_CENTER := Vector2(-100000000.0, -100000000.0)
+const HINT_ZERO_NEED_MATCH_SCORE := 900.0
+const HINT_KIND_ALTERNATION_SCORE_TOLERANCE := 240.0
 const DRAG_SOURCE_NONE := ""
 const DRAG_SOURCE_BOARD := "board"
 const DRAG_SOURCE_INVENTORY := "inventory"
@@ -608,40 +610,6 @@ func _choose_needs_for_resource(produced: String, target_count: int, use_invento
 			if resource != produced and not needs.has(resource):
 				needs.append(resource)
 			if needs.size() >= target_count:
-				break
-	return needs
-
-
-func _choose_red_myco_needs(ignored_inventory_index: int = -1) -> Array[String]:
-	var needs: Array[String] = []
-	var weighted: Array[String] = []
-	for resource in _board_produced_resources():
-		_append_weighted(weighted, resource, 7)
-	for resource in _board_needed_resources():
-		_append_weighted(weighted, resource, 2)
-	for resource in _inventory_produced_resources(ignored_inventory_index):
-		_append_weighted(weighted, resource, 2)
-	for resource in _inventory_needed_resources(ignored_inventory_index):
-		_append_weighted(weighted, resource, 1)
-	for resource in RESOURCE_LETTERS:
-		_append_weighted(weighted, resource, 1)
-	while needs.size() < 4:
-		var next := _weighted_resource_choice(weighted, "")
-		if next.is_empty():
-			break
-		if not needs.has(next):
-			needs.append(next)
-		else:
-			weighted.erase(next)
-		if weighted.is_empty():
-			for resource in RESOURCE_LETTERS:
-				if not needs.has(resource):
-					weighted.append(resource)
-	if needs.size() < 4:
-		for resource in RESOURCE_LETTERS:
-			if not needs.has(resource):
-				needs.append(resource)
-			if needs.size() >= 4:
 				break
 	return needs
 
@@ -3213,6 +3181,18 @@ func _on_hint_pressed() -> void:
 
 func _select_arcade_hint_candidate(inventory_candidates: Array, board_candidates: Array) -> Dictionary:
 	if not inventory_candidates.is_empty() and not board_candidates.is_empty():
+		var inventory_top: Dictionary = inventory_candidates[0] as Dictionary
+		var board_top: Dictionary = board_candidates[0] as Dictionary
+		var inventory_top_score := float(inventory_top.get("score", 0.0))
+		var board_top_score := float(board_top.get("score", 0.0))
+		if inventory_top_score > board_top_score + HINT_KIND_ALTERNATION_SCORE_TOLERANCE:
+			_hint_inventory_cursor = maxi(_hint_inventory_cursor, 1)
+			_hint_next_inventory_board = false
+			return inventory_top
+		if board_top_score > inventory_top_score + HINT_KIND_ALTERNATION_SCORE_TOLERANCE:
+			_hint_board_cursor = maxi(_hint_board_cursor, 1)
+			_hint_next_inventory_board = true
+			return board_top
 		if _hint_next_inventory_board:
 			var inventory_candidate: Dictionary = inventory_candidates[_hint_inventory_cursor % inventory_candidates.size()] as Dictionary
 			_hint_inventory_cursor += 1
@@ -3315,6 +3295,8 @@ func _inventory_hint_score_for_component(inventory_cell: Dictionary, board_cell:
 	var forward_matches := int(inventory_to_board.get("matches", 0))
 	var reverse_matches := int(board_to_inventory.get("matches", 0))
 	var forward_empty_matches := int(inventory_to_board.get("emptyMatches", 0))
+	var reverse_empty_matches := int(board_to_inventory.get("emptyMatches", 0))
+	var empty_match_count := forward_empty_matches + reverse_empty_matches
 	var inventory_is_red_myco := _cell_is_red_myco(inventory_cell)
 	if forward_matches <= 0 and reverse_matches <= 0:
 		return 0.0
@@ -3329,6 +3311,7 @@ func _inventory_hint_score_for_component(inventory_cell: Dictionary, board_cell:
 		score = forward_score * 0.22 + float(forward_empty_matches) * 12.0
 	if forward_empty_matches > 0:
 		score += float(forward_empty_matches) * (60.0 if reverse_matches > 0 else 0.0)
+	score += float(empty_match_count) * HINT_ZERO_NEED_MATCH_SCORE
 	if inventory_is_red_myco:
 		score += 35.0
 	return score
@@ -3362,11 +3345,12 @@ func _hint_pair_score_for_components(a: Dictionary, b: Dictionary, a_component_i
 		score += float(empty_match_count) * 44.0
 		score += float(direct_match_count) * 28.0
 	else:
-		if match_count < 2 and not has_red_myco:
+		if match_count < 2 and empty_match_count <= 0 and not has_red_myco:
 			return 0.0
 		score *= 0.12
 		score += float(empty_match_count) * 4.0
 		score += float(maxi(0, match_count - 1)) * 3.0
+	score += float(empty_match_count) * HINT_ZERO_NEED_MATCH_SCORE
 	if has_red_myco:
 		score += 18.0
 	return score
@@ -3525,14 +3509,21 @@ func _predict_myco_resources_for_component(component_ids: Array[String]) -> Arra
 	var resources: Array[String] = []
 	for id in component_ids:
 		var cell: Dictionary = _board_cells.get(id, {})
-		for offer in _cell_offer_resources(cell):
-			_append_unique_hint_resource(resources, offer)
+		for need in _cell_need_resources_doc(cell):
+			if _cell_need_is_empty(id, need):
+				_append_unique_hint_resource(resources, need)
 			if resources.size() >= 4:
 				return resources
 	for id in component_ids:
 		var cell: Dictionary = _board_cells.get(id, {})
 		for need in _cell_need_resources_doc(cell):
 			_append_unique_hint_resource(resources, need)
+			if resources.size() >= 4:
+				return resources
+	for id in component_ids:
+		var cell: Dictionary = _board_cells.get(id, {})
+		for offer in _cell_offer_resources(cell):
+			_append_unique_hint_resource(resources, offer)
 			if resources.size() >= 4:
 				return resources
 	return resources

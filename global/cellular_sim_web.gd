@@ -17,6 +17,14 @@ const RECENT_EVENT_WINDOW_TICKS := 12
 const POSSIBLE_SWAP_SNAPSHOT_LIMIT := 4096
 const LARGE_RECEIVE_LIMIT := 1073741824
 const ADAPTIVE_MYCO_EXACT_CANDIDATE_LIMIT := 12
+const ADAPTIVE_MYCO_SHORTAGE_DEPTH := 2
+const ADAPTIVE_MYCO_REACTIVE_DWELL_TICKS := 6
+const ADAPTIVE_MYCO_REACTIVE_SCORE_MARGIN := 800
+const ADAPTIVE_MYCO_ADJACENT_ZERO_NEED_SCORE := 6000
+const ADAPTIVE_MYCO_TWO_HOP_ZERO_NEED_SCORE := 3600
+const ADAPTIVE_MYCO_TWO_HOP_BRIDGE_SCORE := 900
+const ADAPTIVE_MYCO_ADJACENT_PARTIAL_NEED_SCORE := 900
+const ADAPTIVE_MYCO_TWO_HOP_PARTIAL_NEED_SCORE := 450
 
 var _loaded := false
 var _last_error := ""
@@ -36,6 +44,10 @@ var _adjacent_edges_cache: Array[Dictionary] = []
 var _adjacent_indices_topology_version := -1
 var _adjacent_indices_cache: Array = []
 var _myco_neighbor_signatures: Dictionary = {}
+var _myco_shortage_signatures: Dictionary = {}
+var _myco_selections: Dictionary = {}
+var _myco_pending_shortage_signatures: Dictionary = {}
+var _myco_pending_shortage_ticks: Dictionary = {}
 var _initial_myco_hints: Dictionary = {}
 var _events: Array[Dictionary] = []
 var _event_capacity := 65536
@@ -169,7 +181,7 @@ func reset_with_current_layout() -> bool:
 	if _profile_enabled:
 		profile_cell_reset_usec = Time.get_ticks_usec() - profile_section_usec
 		profile_section_usec = Time.get_ticks_usec()
-	_refresh_adaptive_myco(false)
+	_refresh_adaptive_myco(true)
 	if _profile_enabled:
 		profile_adaptive_usec = Time.get_ticks_usec() - profile_section_usec
 		print(str(
@@ -287,6 +299,10 @@ func _reset_all_state() -> void:
 	_adjacent_indices_topology_version = -1
 	_adjacent_indices_cache.clear()
 	_myco_neighbor_signatures.clear()
+	_myco_shortage_signatures.clear()
+	_myco_selections.clear()
+	_myco_pending_shortage_signatures.clear()
+	_myco_pending_shortage_ticks.clear()
 	_initial_myco_hints.clear()
 	_events.clear()
 	_current_tick = 0
@@ -610,8 +626,6 @@ func _tick() -> void:
 
 
 func _refresh_adaptive_myco(force: bool) -> void:
-	if not force and _adaptive_topology_version == _topology_version:
-		return
 	var myco_count := 0
 	var myco_indices: Array[int] = []
 	for cell in _cells:
@@ -620,13 +634,23 @@ func _refresh_adaptive_myco(force: bool) -> void:
 			myco_indices.append(int(cell["index"]))
 	if myco_count == 0:
 		_adaptive_topology_version = _topology_version
+		_myco_neighbor_signatures.clear()
+		_myco_shortage_signatures.clear()
+		_myco_selections.clear()
+		_myco_pending_shortage_signatures.clear()
+		_myco_pending_shortage_ticks.clear()
 		_last_adaptive_profile = {"myco": 0, "passes": 0, "selected": 0, "changed": 0, "deep": 0}
 		return
 	var full_refresh := force or _adaptive_topology_version < 0 or _myco_neighbor_signatures.is_empty()
 	var queue: Array[int] = []
 	var queued: Dictionary = {}
+	var precomputed_selections: Dictionary = {}
 	if full_refresh:
 		_myco_neighbor_signatures.clear()
+		_myco_shortage_signatures.clear()
+		_myco_selections.clear()
+		_myco_pending_shortage_signatures.clear()
+		_myco_pending_shortage_ticks.clear()
 		for myco_index in myco_indices:
 			var myco: Dictionary = _cells[myco_index]
 			_cell_slots(myco).clear()
@@ -641,6 +665,32 @@ func _refresh_adaptive_myco(force: bool) -> void:
 				_cell_slots(cell).clear()
 				queue.append(myco_index)
 				queued[myco_index] = 1
+				_myco_pending_shortage_signatures.erase(cell_id)
+				_myco_pending_shortage_ticks.erase(cell_id)
+				continue
+			var shortage_signature := _myco_shortage_signature(myco_index)
+			if str(_myco_shortage_signatures.get(cell_id, "")) == shortage_signature:
+				_myco_pending_shortage_signatures.erase(cell_id)
+				_myco_pending_shortage_ticks.erase(cell_id)
+				continue
+			if not _myco_pending_shortage_signatures.has(cell_id) or str(_myco_pending_shortage_signatures.get(cell_id, "")) != shortage_signature:
+				_myco_pending_shortage_signatures[cell_id] = shortage_signature
+				_myco_pending_shortage_ticks[cell_id] = _current_tick
+				continue
+			var pending_tick := int(_myco_pending_shortage_ticks.get(cell_id, _current_tick))
+			if _current_tick - pending_tick < ADAPTIVE_MYCO_REACTIVE_DWELL_TICKS:
+				continue
+			var candidate := _select_adaptive_myco_resources(cell, false)
+			var current := _evaluate_current_adaptive_myco_selection(cell)
+			if _should_accept_reactive_myco_selection(candidate, current):
+				precomputed_selections[myco_index] = candidate
+				queue.append(myco_index)
+				queued[myco_index] = 1
+			else:
+				_myco_shortage_signatures[cell_id] = shortage_signature
+				_myco_selections[cell_id] = current
+				_myco_pending_shortage_signatures.erase(cell_id)
+				_myco_pending_shortage_ticks.erase(cell_id)
 	if queue.is_empty():
 		_adaptive_topology_version = _topology_version
 		_last_adaptive_profile = {"myco": myco_count, "passes": 0, "selected": 0, "changed": 0, "deep": 0}
@@ -659,11 +709,18 @@ func _refresh_adaptive_myco(force: bool) -> void:
 			var myco_index := int(queue[cursor])
 			cursor += 1
 			var cell: Dictionary = _cells[myco_index]
-			var resources: Array[int] = _select_adaptive_myco_resources(cell, use_hints)
+			var selection: Dictionary = precomputed_selections.get(myco_index, {})
+			if selection.is_empty():
+				selection = _select_adaptive_myco_resources(cell, use_hints)
+			var resources: Array[int] = _int_array_from_variant(selection.get("resources", []))
 			selected_this_pass += 1
 			profile_selected += 1
 			var resources_changed := _replace_adaptive_myco_slots(cell, resources)
 			_myco_neighbor_signatures[str(cell["id"])] = _myco_neighbor_signature(myco_index)
+			_myco_shortage_signatures[str(cell["id"])] = _myco_shortage_signature(myco_index)
+			_myco_selections[str(cell["id"])] = selection
+			_myco_pending_shortage_signatures.erase(str(cell["id"]))
+			_myco_pending_shortage_ticks.erase(str(cell["id"]))
 			if resources_changed:
 				changed = true
 				profile_changed += 1
@@ -683,50 +740,59 @@ func _refresh_adaptive_myco(force: bool) -> void:
 	}
 
 
-func _select_adaptive_myco_resources(myco: Dictionary, use_hints: bool) -> Array[int]:
+func _select_adaptive_myco_resources(myco: Dictionary, use_hints: bool) -> Dictionary:
+	var context := _build_adaptive_myco_context(myco)
+	var useful_neighbors: Array[Dictionary] = _dictionary_array_from_variant(context.get("usefulNeighbors", []))
+	if useful_neighbors.is_empty():
+		return _empty_adaptive_myco_selection()
+	return _select_adaptive_myco_resources_from_context(myco, context, use_hints)
+
+
+func _evaluate_current_adaptive_myco_selection(myco: Dictionary) -> Dictionary:
+	var resources: Array[int] = []
+	_add_slot_resources(resources, myco["slots"] as Array)
+	if resources.is_empty():
+		return _empty_adaptive_myco_selection()
+	return _evaluate_adaptive_myco_resource_set(myco, resources, _build_adaptive_myco_context(myco), false)
+
+
+func _build_adaptive_myco_context(myco: Dictionary) -> Dictionary:
 	var useful_neighbors: Array[Dictionary] = []
 	var myco_index := int(myco["index"])
 	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
-	if myco_index < 0 or myco_index >= adjacent_indices.size():
-		return []
-	var neighbor_indices: Array = adjacent_indices[myco_index] as Array
-	for neighbor_index_value in neighbor_indices:
-		var neighbor_index := int(neighbor_index_value)
-		var neighbor: Dictionary = _cells[neighbor_index]
-		var neighbor_slots: Array = neighbor["slots"] as Array
-		if not _is_myco(neighbor) or neighbor_slots.size() > 0:
-			useful_neighbors.append(neighbor)
-	var resources: Array[int] = []
-	if useful_neighbors.is_empty():
-		return resources
-	if useful_neighbors.size() == 1:
-		var only_neighbor: Dictionary = useful_neighbors[0]
-		if _is_myco(only_neighbor):
-			_add_slot_resources(resources, only_neighbor["slots"] as Array)
-		else:
-			_add_normal_offers(resources, only_neighbor)
-			_add_role_resources(resources, only_neighbor["slots"] as Array, ROLE_NEED)
-		return resources
+	if myco_index >= 0 and myco_index < adjacent_indices.size():
+		var neighbor_indices: Array = adjacent_indices[myco_index] as Array
+		for neighbor_index_value in neighbor_indices:
+			var neighbor_index := int(neighbor_index_value)
+			var neighbor: Dictionary = _cells[neighbor_index]
+			var neighbor_slots: Array = neighbor["slots"] as Array
+			if not _is_myco(neighbor) or neighbor_slots.size() > 0:
+				useful_neighbors.append(neighbor)
+	var scores: Dictionary = {}
+	var local_offers: Array[int] = []
+	var need_signals: Array[Dictionary] = _collect_myco_need_signals(myco_index)
+	if not useful_neighbors.is_empty():
+		_add_connected_component_candidate_scores(myco, scores)
+		_score_multiple_myco_neighbors(useful_neighbors, scores, local_offers)
+		_add_myco_need_signal_scores(need_signals, scores)
+	return {
+		"usefulNeighbors": useful_neighbors,
+		"localOffers": local_offers,
+		"scores": scores,
+		"needSignals": need_signals
+	}
+
+
+func _select_adaptive_myco_resources_from_context(myco: Dictionary, context: Dictionary, use_hints: bool) -> Dictionary:
 	var hint_value: Variant = _initial_myco_hints.get(str(myco["id"]), [])
 	var hinted: Array[int] = []
 	if use_hints and hint_value is Array:
 		for resource_value in hint_value as Array:
 			_add_unique_int(hinted, int(resource_value))
 		if not hinted.is_empty():
-			var local_offer_scores: Dictionary = {}
-			var local_offers: Array[int] = []
-			_score_multiple_myco_neighbors(myco, useful_neighbors, local_offer_scores, local_offers)
-			_ensure_local_payment_resource(myco, hinted, local_offers, local_offer_scores)
-			return hinted
-	return _select_adaptive_myco_from_multiple_neighbors(myco, useful_neighbors)
-
-
-func _select_adaptive_myco_from_multiple_neighbors(myco: Dictionary, useful_neighbors: Array[Dictionary]) -> Array[int]:
+			return _evaluate_adaptive_myco_resource_set(myco, hinted, context, true)
 	_adaptive_deep_select_count += 1
-	var scores: Dictionary = {}
-	var local_offers: Array[int] = []
-	_add_connected_component_candidate_scores(myco, scores)
-	_score_multiple_myco_neighbors(myco, useful_neighbors, scores, local_offers)
+	var scores: Dictionary = context.get("scores", {})
 	var candidates: Array[Dictionary] = []
 	for resource_value in scores.keys():
 		var resource := int(resource_value)
@@ -737,10 +803,10 @@ func _select_adaptive_myco_from_multiple_neighbors(myco: Dictionary, useful_neig
 			"hash": _stable_adaptive_myco_hash(str(myco["id"]), "candidate", resource, score, 0, _topology_version)
 		})
 	candidates.sort_custom(Callable(self, "_compare_myco_resource_candidates"))
-	return _select_best_adaptive_myco_resource_set(myco, useful_neighbors, candidates, local_offers, scores)
+	return _select_best_adaptive_myco_resource_set(myco, context, candidates)
 
 
-func _score_multiple_myco_neighbors(myco: Dictionary, useful_neighbors: Array[Dictionary], scores: Dictionary, local_offers: Array[int]) -> void:
+func _score_multiple_myco_neighbors(useful_neighbors: Array[Dictionary], scores: Dictionary, local_offers: Array[int]) -> void:
 	for neighbor_index in range(useful_neighbors.size()):
 		var neighbor: Dictionary = useful_neighbors[neighbor_index]
 		var slots: Array = neighbor["slots"] as Array
@@ -750,11 +816,14 @@ func _score_multiple_myco_neighbors(myco: Dictionary, useful_neighbors: Array[Di
 			var role := str(slot["role"])
 			if _is_myco(neighbor):
 				_add_candidate_score(scores, resource, 170)
+				_add_unique_int(local_offers, resource)
 			elif role == ROLE_SOURCE_OUTPUT:
 				_add_candidate_score(scores, resource, 170)
 				_add_unique_int(local_offers, resource)
 			elif role == ROLE_NEED:
 				_add_candidate_score(scores, resource, 210)
+				if int(slot["quantity"]) > 1:
+					_add_unique_int(local_offers, resource)
 		var sources: Array = neighbor["sources"] as Array
 		for source_value in sources:
 			var source: Dictionary = source_value
@@ -763,20 +832,19 @@ func _score_multiple_myco_neighbors(myco: Dictionary, useful_neighbors: Array[Di
 			_add_unique_int(local_offers, source_resource)
 
 
-func _select_best_adaptive_myco_resource_set(myco: Dictionary, useful_neighbors: Array[Dictionary], candidates: Array[Dictionary], local_offers: Array[int], scores: Dictionary) -> Array[int]:
-	var best_resources: Array[int] = []
-	var best_score := -2147483648
-	var best_hash := 2147483647
+func _select_best_adaptive_myco_resource_set(myco: Dictionary, context: Dictionary, candidates: Array[Dictionary]) -> Dictionary:
+	var best_selection := _empty_adaptive_myco_selection()
+	var has_selection := false
 	var candidate_limit := mini(ADAPTIVE_MYCO_EXACT_CANDIDATE_LIMIT, candidates.size())
 	if candidate_limit <= MAX_SLOTS:
 		var resources: Array[int] = []
 		for index in range(candidate_limit):
 			var candidate: Dictionary = candidates[index]
 			_add_unique_int(resources, int(candidate["resource"]))
-		var considered := _consider_myco_resource_set(myco, resources, useful_neighbors, local_offers, scores)
-		best_resources = _int_array_from_variant(considered["resources"])
-		best_score = int(considered["score"])
-		best_hash = int(considered["hash"])
+		var considered := _evaluate_adaptive_myco_resource_set(myco, resources, context, false)
+		if _adaptive_myco_selection_is_better(considered, best_selection) or not has_selection:
+			best_selection = considered
+			has_selection = true
 	else:
 		for a in range(candidate_limit - 3):
 			for b in range(a + 1, candidate_limit - 2):
@@ -788,35 +856,51 @@ func _select_best_adaptive_myco_resource_set(myco: Dictionary, useful_neighbors:
 							int((candidates[c] as Dictionary)["resource"]),
 							int((candidates[d] as Dictionary)["resource"])
 						]
-						var considered_set := _consider_myco_resource_set(myco, set_resources, useful_neighbors, local_offers, scores)
-						var score := int(considered_set["score"])
-						var hash := int(considered_set["hash"])
-						if score > best_score or (score == best_score and hash < best_hash):
-							best_resources = _int_array_from_variant(considered_set["resources"])
-							best_score = score
-							best_hash = hash
-	if best_resources.is_empty() and candidate_limit > 0:
+						var considered_set := _evaluate_adaptive_myco_resource_set(myco, set_resources, context, false)
+						if _adaptive_myco_selection_is_better(considered_set, best_selection) or not has_selection:
+							best_selection = considered_set
+							has_selection = true
+	if not has_selection and candidate_limit > 0:
+		var best_resources: Array[int] = []
 		for index in range(mini(MAX_SLOTS, candidate_limit)):
 			_add_unique_int(best_resources, int((candidates[index] as Dictionary)["resource"]))
-		_ensure_local_payment_resource(myco, best_resources, local_offers, scores)
-	return best_resources
+		best_selection = _evaluate_adaptive_myco_resource_set(myco, best_resources, context, false)
+	return best_selection
 
 
-func _consider_myco_resource_set(myco: Dictionary, resources: Array[int], useful_neighbors: Array[Dictionary], local_offers: Array[int], scores: Dictionary) -> Dictionary:
+func _evaluate_adaptive_myco_resource_set(myco: Dictionary, resources: Array[int], context: Dictionary, is_initial_fixture_hint: bool) -> Dictionary:
 	var normalized: Array[int] = []
 	for resource in resources:
 		_add_unique_int(normalized, int(resource))
-	_ensure_local_payment_resource(myco, normalized, local_offers, scores)
-	var score := _score_adaptive_myco_resource_set(normalized, useful_neighbors, scores)
+	if normalized.is_empty():
+		return _empty_adaptive_myco_selection()
+	var local_offers: Array[int] = _int_array_from_variant(context.get("localOffers", []))
+	var scores: Dictionary = context.get("scores", {})
+	var need_signals: Array[Dictionary] = _dictionary_array_from_variant(context.get("needSignals", []))
+	_ensure_local_payment_resource(myco, normalized, local_offers, scores, need_signals)
+	var use_initial_hint_priority := is_initial_fixture_hint and _all_resources_have_candidate_scores(resources, scores)
+	var score := _score_adaptive_myco_resource_set(normalized, context)
+	if use_initial_hint_priority:
+		score += 100000
+	var adjacent_zero_coverage := _count_covered_myco_need_signals(normalized, need_signals, 1, true)
+	var two_hop_zero_coverage := _count_covered_myco_need_signals(normalized, need_signals, 2, true)
+	var local_payment_coverage := 1 if _contains_any_int(normalized, local_offers) else 0
 	var hash := _hash_adaptive_myco_resource_set(str(myco["id"]), normalized, score, _topology_version)
 	return {
 		"resources": normalized,
 		"score": score,
+		"adjacentZeroCoverage": adjacent_zero_coverage,
+		"twoHopZeroCoverage": two_hop_zero_coverage,
+		"localPaymentCoverage": local_payment_coverage,
+		"initialFixtureHint": 1 if use_initial_hint_priority else 0,
 		"hash": hash
 	}
 
 
-func _score_adaptive_myco_resource_set(resources: Array[int], useful_neighbors: Array[Dictionary], base_scores: Dictionary) -> int:
+func _score_adaptive_myco_resource_set(resources: Array[int], context: Dictionary) -> int:
+	var useful_neighbors: Array[Dictionary] = _dictionary_array_from_variant(context.get("usefulNeighbors", []))
+	var base_scores: Dictionary = context.get("scores", {})
+	var need_signals: Array[Dictionary] = _dictionary_array_from_variant(context.get("needSignals", []))
 	var score := 0
 	for resource in resources:
 		score += int(base_scores.get(int(resource), 0))
@@ -842,6 +926,10 @@ func _score_adaptive_myco_resource_set(resources: Array[int], useful_neighbors: 
 			reciprocal_neighbors += 1
 		elif receives_from_neighbor or pays_neighbor:
 			score += 250
+	score += _count_covered_myco_need_signals(resources, need_signals, 1, true) * 50000
+	score += _count_covered_myco_need_signals(resources, need_signals, 2, true) * 24000
+	score += _count_covered_myco_need_signals(resources, need_signals, 1, false) * 1200
+	score += _count_covered_myco_need_signals(resources, need_signals, 2, false) * 450
 	return score + reciprocal_neighbors * reciprocal_neighbors * 180
 
 
@@ -879,6 +967,123 @@ func _myco_neighbor_signature(myco_index: int) -> String:
 		else:
 			signature = str(signature, "|", name)
 	return signature
+
+
+func _myco_shortage_signature(myco_index: int) -> String:
+	var parts: Array[String] = []
+	for signal in _collect_myco_need_signals(myco_index):
+		if not bool(signal.get("zero", false)):
+			continue
+		parts.append("%d:%s:%d:%d" % [
+			int(signal.get("depth", 0)),
+			str(signal.get("cellId", "")),
+			int(signal.get("resource", -1)),
+			1 if bool(signal.get("bridgeCanCarry", false)) else 0
+		])
+	parts.sort()
+	var signature := ""
+	for part in parts:
+		signature = part if signature.is_empty() else str(signature, "|", part)
+	return signature
+
+
+func _collect_myco_need_signals(myco_index: int) -> Array[Dictionary]:
+	var best_signals: Dictionary = {}
+	if myco_index < 0 or myco_index >= _cells.size():
+		return []
+	var adjacent_indices: Array = _get_adjacent_indices_by_cell()
+	if myco_index < 0 or myco_index >= adjacent_indices.size():
+		return []
+	var adjacent: Array = adjacent_indices[myco_index] as Array
+	for neighbor_index_value in adjacent:
+		var neighbor_index := int(neighbor_index_value)
+		if neighbor_index < 0 or neighbor_index >= _cells.size():
+			continue
+		_add_need_signals_for_cell(_cells[neighbor_index], 1, true, best_signals)
+	for bridge_index_value in adjacent:
+		var bridge_index := int(bridge_index_value)
+		if bridge_index < 0 or bridge_index >= _cells.size():
+			continue
+		var bridge: Dictionary = _cells[bridge_index]
+		var bridge_neighbors: Array = adjacent_indices[bridge_index] as Array
+		for second_hop_value in bridge_neighbors:
+			var second_hop_index := int(second_hop_value)
+			if second_hop_index == myco_index or second_hop_index < 0 or second_hop_index >= _cells.size():
+				continue
+			_add_need_signals_for_cell(_cells[second_hop_index], 2, false, best_signals, bridge)
+	var signals: Array[Dictionary] = []
+	for signal_value in best_signals.values():
+		if signal_value is Dictionary:
+			signals.append(signal_value as Dictionary)
+	signals.sort_custom(Callable(self, "_compare_myco_need_signal_dicts"))
+	return signals
+
+
+func _add_need_signals_for_cell(cell: Dictionary, depth: int, bridge_can_carry: bool, best_signals: Dictionary, bridge: Dictionary = {}) -> void:
+	if depth <= 0 or depth > ADAPTIVE_MYCO_SHORTAGE_DEPTH:
+		return
+	var cell_index := int(cell.get("index", -1))
+	var slots: Array = cell["slots"] as Array
+	for slot_value in slots:
+		var slot: Dictionary = slot_value
+		if str(slot.get("role", "")) != ROLE_NEED:
+			continue
+		var resource := int(slot.get("resource", -1))
+		var can_carry := bridge_can_carry or (not bridge.is_empty() and _cell_can_receive_resource_statically(bridge, resource))
+		var signal := {
+			"cell": cell_index,
+			"cellId": str(cell.get("id", "")),
+			"resource": resource,
+			"depth": depth,
+			"zero": int(slot.get("quantity", 0)) <= 0,
+			"bridgeCanCarry": can_carry
+		}
+		var key := "%d:%d" % [cell_index, resource]
+		var existing_signal: Dictionary = best_signals.get(key, {}) as Dictionary
+		if existing_signal.is_empty() or _compare_myco_need_signal_values(signal, existing_signal) < 0:
+			best_signals[key] = signal
+
+
+func _add_myco_need_signal_scores(signals: Array[Dictionary], scores: Dictionary) -> void:
+	for signal in signals:
+		var resource := int(signal.get("resource", -1))
+		var depth := int(signal.get("depth", 0))
+		var is_zero := bool(signal.get("zero", false))
+		var bridge_can_carry := bool(signal.get("bridgeCanCarry", false))
+		var score := 0
+		if depth == 1 and is_zero:
+			score = ADAPTIVE_MYCO_ADJACENT_ZERO_NEED_SCORE
+		elif depth == 1:
+			score = ADAPTIVE_MYCO_ADJACENT_PARTIAL_NEED_SCORE
+		elif depth == 2 and is_zero:
+			score = ADAPTIVE_MYCO_TWO_HOP_ZERO_NEED_SCORE + (ADAPTIVE_MYCO_TWO_HOP_BRIDGE_SCORE if bridge_can_carry else 0)
+		elif depth == 2:
+			score = ADAPTIVE_MYCO_TWO_HOP_PARTIAL_NEED_SCORE + (int(ADAPTIVE_MYCO_TWO_HOP_BRIDGE_SCORE / 3) if bridge_can_carry else 0)
+		_add_candidate_score(scores, resource, score)
+
+
+func _compare_myco_need_signal_dicts(left: Dictionary, right: Dictionary) -> bool:
+	return _compare_myco_need_signal_values(left, right) < 0
+
+
+func _compare_myco_need_signal_values(left: Dictionary, right: Dictionary) -> int:
+	var left_zero := bool(left.get("zero", false))
+	var right_zero := bool(right.get("zero", false))
+	if left_zero != right_zero:
+		return -1 if left_zero else 1
+	var left_depth := int(left.get("depth", 0))
+	var right_depth := int(right.get("depth", 0))
+	if left_depth != right_depth:
+		return left_depth - right_depth
+	var left_bridge := bool(left.get("bridgeCanCarry", false))
+	var right_bridge := bool(right.get("bridgeCanCarry", false))
+	if left_bridge != right_bridge:
+		return -1 if left_bridge else 1
+	var left_cell := str(left.get("cellId", ""))
+	var right_cell := str(right.get("cellId", ""))
+	if left_cell != right_cell:
+		return -1 if left_cell < right_cell else 1
+	return int(left.get("resource", -1)) - int(right.get("resource", -1))
 
 
 func _enqueue_waiting_myco_neighbors(myco_index: int, queue: Array[int], queued: Dictionary) -> void:
@@ -1865,25 +2070,6 @@ func _cell_has_need_resource(cell: Dictionary, resource: int) -> bool:
 	return false
 
 
-func _add_normal_offers(resources: Array[int], cell: Dictionary) -> void:
-	_add_role_resources(resources, cell["slots"] as Array, ROLE_SOURCE_OUTPUT)
-	var sources: Array = cell["sources"] as Array
-	for source_value in sources:
-		if resources.size() >= MAX_SLOTS:
-			return
-		var source: Dictionary = source_value
-		_add_unique_int(resources, int(source["resource"]))
-
-
-func _add_role_resources(resources: Array[int], slots: Array, role: String) -> void:
-	for slot_value in slots:
-		if resources.size() >= MAX_SLOTS:
-			return
-		var slot: Dictionary = slot_value
-		if str(slot["role"]) == role:
-			_add_unique_int(resources, int(slot["resource"]))
-
-
 func _add_slot_resources(resources: Array[int], slots: Array) -> void:
 	for slot_value in slots:
 		if resources.size() >= MAX_SLOTS:
@@ -1892,7 +2078,7 @@ func _add_slot_resources(resources: Array[int], slots: Array) -> void:
 		_add_unique_int(resources, int(slot["resource"]))
 
 
-func _ensure_local_payment_resource(myco: Dictionary, resources: Array[int], local_offers: Array[int], scores: Dictionary) -> void:
+func _ensure_local_payment_resource(myco: Dictionary, resources: Array[int], local_offers: Array[int], scores: Dictionary, need_signals: Array[Dictionary]) -> void:
 	if resources.is_empty() or local_offers.is_empty():
 		return
 	for resource in resources:
@@ -1909,7 +2095,29 @@ func _ensure_local_payment_resource(myco: Dictionary, resources: Array[int], loc
 	if resources.size() < MAX_SLOTS:
 		_add_unique_int(resources, best_offer)
 	else:
-		resources[resources.size() - 1] = best_offer
+		resources[_select_local_payment_replacement_index(resources, scores, need_signals)] = best_offer
+
+
+func _select_local_payment_replacement_index(resources: Array[int], scores: Dictionary, need_signals: Array[Dictionary]) -> int:
+	var best_index := -1
+	var best_score := 2147483647
+	for offset in range(resources.size()):
+		var index := resources.size() - 1 - offset
+		var resource := int(resources[index])
+		if _is_adjacent_zero_shortage_resource(resource, need_signals):
+			continue
+		var score := int(scores.get(resource, 0))
+		if score < best_score:
+			best_score = score
+			best_index = index
+	return best_index if best_index >= 0 else resources.size() - 1
+
+
+func _is_adjacent_zero_shortage_resource(resource: int, need_signals: Array[Dictionary]) -> bool:
+	for signal in need_signals:
+		if int(signal.get("depth", 0)) == 1 and bool(signal.get("zero", false)) and int(signal.get("resource", -1)) == resource:
+			return true
+	return false
 
 
 func _add_candidate_score(scores: Dictionary, resource: int, score: int) -> void:
@@ -2079,6 +2287,108 @@ func _int_array_from_variant(value: Variant) -> Array[int]:
 		for item in value as Array:
 			result.append(int(item))
 	return result
+
+
+func _dictionary_array_from_variant(value: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if value is Array:
+		for item in value as Array:
+			if item is Dictionary:
+				result.append(item as Dictionary)
+	return result
+
+
+func _empty_adaptive_myco_selection() -> Dictionary:
+	return {
+		"resources": [],
+		"score": 0,
+		"adjacentZeroCoverage": 0,
+		"twoHopZeroCoverage": 0,
+		"localPaymentCoverage": 0,
+		"initialFixtureHint": 0,
+		"hash": 2147483647
+	}
+
+
+func _should_accept_reactive_myco_selection(candidate: Dictionary, current: Dictionary) -> bool:
+	var candidate_resources: Array[int] = _int_array_from_variant(candidate.get("resources", []))
+	var current_resources: Array[int] = _int_array_from_variant(current.get("resources", []))
+	if candidate_resources.is_empty() or _same_int_sequence(candidate_resources, current_resources):
+		return false
+	var candidate_adjacent := int(candidate.get("adjacentZeroCoverage", 0))
+	var current_adjacent := int(current.get("adjacentZeroCoverage", 0))
+	if candidate_adjacent != current_adjacent:
+		return candidate_adjacent > current_adjacent
+	var candidate_zero := candidate_adjacent + int(candidate.get("twoHopZeroCoverage", 0))
+	var current_zero := current_adjacent + int(current.get("twoHopZeroCoverage", 0))
+	if candidate_zero != current_zero:
+		return candidate_zero > current_zero
+	var candidate_payment := int(candidate.get("localPaymentCoverage", 0))
+	var current_payment := int(current.get("localPaymentCoverage", 0))
+	if candidate_payment != current_payment:
+		return candidate_payment > current_payment
+	return int(candidate.get("score", 0)) >= int(current.get("score", 0)) + ADAPTIVE_MYCO_REACTIVE_SCORE_MARGIN
+
+
+func _adaptive_myco_selection_is_better(left: Dictionary, right: Dictionary) -> bool:
+	var left_hint := int(left.get("initialFixtureHint", 0))
+	var right_hint := int(right.get("initialFixtureHint", 0))
+	if left_hint != right_hint:
+		return left_hint > right_hint
+	var left_adjacent := int(left.get("adjacentZeroCoverage", 0))
+	var right_adjacent := int(right.get("adjacentZeroCoverage", 0))
+	if left_adjacent != right_adjacent:
+		return left_adjacent > right_adjacent
+	var left_zero := left_adjacent + int(left.get("twoHopZeroCoverage", 0))
+	var right_zero := right_adjacent + int(right.get("twoHopZeroCoverage", 0))
+	if left_zero != right_zero:
+		return left_zero > right_zero
+	var left_payment := int(left.get("localPaymentCoverage", 0))
+	var right_payment := int(right.get("localPaymentCoverage", 0))
+	if left_payment != right_payment:
+		return left_payment > right_payment
+	var left_score := int(left.get("score", 0))
+	var right_score := int(right.get("score", 0))
+	if left_score != right_score:
+		return left_score > right_score
+	return int(left.get("hash", 2147483647)) < int(right.get("hash", 2147483647))
+
+
+func _count_covered_myco_need_signals(resources: Array[int], signals: Array[Dictionary], depth: int, zero_only: bool) -> int:
+	var count := 0
+	for signal in signals:
+		if int(signal.get("depth", 0)) != depth:
+			continue
+		if zero_only and not bool(signal.get("zero", false)):
+			continue
+		if resources.has(int(signal.get("resource", -1))):
+			count += 1
+	return count
+
+
+func _contains_any_int(values: Array[int], candidates: Array[int]) -> bool:
+	for candidate in candidates:
+		if values.has(int(candidate)):
+			return true
+	return false
+
+
+func _all_resources_have_candidate_scores(resources: Array[int], scores: Dictionary) -> bool:
+	if resources.is_empty():
+		return false
+	for resource in resources:
+		if not scores.has(int(resource)):
+			return false
+	return true
+
+
+func _same_int_sequence(left: Array[int], right: Array[int]) -> bool:
+	if left.size() != right.size():
+		return false
+	for index in range(left.size()):
+		if int(left[index]) != int(right[index]):
+			return false
+	return true
 
 
 func _compare_cells_stable(left: Dictionary, right: Dictionary) -> int:

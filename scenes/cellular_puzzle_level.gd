@@ -95,6 +95,7 @@ const VELOCITY_WINDOW_TICKS := 10
 const HINT_RECENT_MEMORY := 5
 const HINT_TOP_RANDOM_WINDOW := 8
 const HINT_TOP_SCORE_FALLOFF := 160.0
+const HINT_ZERO_NEED_MATCH_SCORE := 900.0
 const IDLE_HINT_DELAY_SECONDS := 5.0
 const IDLE_HINT_PULSE_SECONDS := 2.0
 const IDLE_HINT_MAX_SCALE := 1.22
@@ -1825,54 +1826,6 @@ func _spawn_myco(kind: String) -> void:
 			" snapshot_ms=", _profile_usecs_to_ms(float(profile_snapshot_usec)),
 			" save_ms=", _profile_usecs_to_ms(float(profile_save_usec))
 		))
-
-
-func _collect_myco_resource_names() -> Array[String]:
-	var resources: Array[String] = []
-	var seen := {}
-	var cells_value: Variant = _sim_snapshot.get("cells", [])
-	if cells_value is Array:
-		for cell_value in cells_value:
-			if not cell_value is Dictionary:
-				continue
-			var cell_data := cell_value as Dictionary
-			var slots_value: Variant = cell_data.get("slots", [])
-			if not slots_value is Array:
-				continue
-			for slot_value in slots_value:
-				if not slot_value is Dictionary:
-					continue
-				var slot := slot_value as Dictionary
-				_append_unique_resource(resources, seen, str(slot.get("resource", "")))
-	if resources.is_empty():
-		for cell in _cells:
-			_append_unique_resource(resources, seen, _cell_produced_resource(cell))
-			for need in _needs.get(cell, []):
-				_append_unique_resource(resources, seen, str(need))
-	return resources
-
-
-func _append_unique_resource(resources: Array[String], seen: Dictionary, resource: String) -> void:
-	if resource.is_empty() or seen.has(resource):
-		return
-	seen[resource] = true
-	resources.append(resource)
-
-
-func _choose_myco_needs(resources: Array[String]) -> Array[String]:
-	var shuffled: Array[String] = []
-	for resource in resources:
-		shuffled.append(resource)
-	for index in range(shuffled.size() - 1, 0, -1):
-		var swap_index := _myco_rng.randi_range(0, index)
-		var value := shuffled[index]
-		shuffled[index] = shuffled[swap_index]
-		shuffled[swap_index] = value
-	var count := mini(MYCO_MAX_NEEDS, shuffled.size())
-	var chosen: Array[String] = []
-	for index in range(count):
-		chosen.append(shuffled[index])
-	return chosen
 
 
 func _random_empty_tile() -> Vector2i:
@@ -4754,7 +4707,8 @@ func _hint_pair_score(a: String, b: String, strong_group_by_cell: Dictionary, we
 	if a_strong >= 0 and a_strong == b_strong:
 		return -1000000.0
 	var reciprocal_main_need := _cells_have_reciprocal_main_need(a, b)
-	if not reciprocal_main_need and not _is_myco_cell(a) and not _is_myco_cell(b):
+	var zero_need_score := _zero_need_hint_score(a, b) + _zero_need_hint_score(b, a)
+	if not reciprocal_main_need and not _is_myco_cell(a) and not _is_myco_cell(b) and zero_need_score <= 0.0:
 		return -1000000.0
 	var score := 0.0
 	if solution_pair:
@@ -4785,11 +4739,14 @@ func _hint_pair_score(a: String, b: String, strong_group_by_cell: Dictionary, we
 	score += _exchange_need_score(b, a)
 	score += _missing_need_score(a, _cell_produced_resource(b))
 	score += _missing_need_score(b, _cell_produced_resource(a))
+	score += zero_need_score
 	return score
 
 
 func _cell_pair_can_hint_match(a: String, b: String) -> bool:
 	if _cells_have_reciprocal_main_need(a, b):
+		return true
+	if _zero_need_hint_score(a, b) > 0.0 or _zero_need_hint_score(b, a) > 0.0:
 		return true
 	if not _is_myco_cell(a) and not _is_myco_cell(b):
 		return false
@@ -4809,6 +4766,19 @@ func _exchange_need_score(receiver: String, giver: String) -> float:
 		if _cell_can_offer_resource_to(giver, need, receiver):
 			best = maxf(best, (1.0 - _slot_fullness(receiver, need)) * 70.0)
 	return best
+
+
+func _zero_need_hint_score(receiver: String, giver: String) -> float:
+	if not _using_csharp_sim or not _cell_state_by_id.has(receiver):
+		return 0.0
+	var score := 0.0
+	for need_value in _needs.get(receiver, []):
+		var need := str(need_value)
+		if need.is_empty() or _slot_fullness(receiver, need) > 0.0:
+			continue
+		if _cell_can_offer_resource_to(giver, need, receiver):
+			score += HINT_ZERO_NEED_MATCH_SCORE
+	return score
 
 
 func _missing_need_score(cell: String, resource: String) -> float:

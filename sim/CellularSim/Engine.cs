@@ -54,6 +54,14 @@ public sealed class CellularEngine
     private const int RedMycoMinimumGrossSwapQuantity = RedMycoOutwardFeeQuantity + 1;
     private const int AdaptiveMycoStartingQuantity = 250;
     private const int AdaptiveMycoSlotCapacity = 500;
+    private const int AdaptiveMycoShortageDepth = 2;
+    private const int AdaptiveMycoReactiveDwellTicks = 6;
+    private const int AdaptiveMycoReactiveScoreMargin = 800;
+    private const int AdaptiveMycoAdjacentZeroNeedScore = 6000;
+    private const int AdaptiveMycoTwoHopZeroNeedScore = 3600;
+    private const int AdaptiveMycoTwoHopBridgeScore = 900;
+    private const int AdaptiveMycoAdjacentPartialNeedScore = 900;
+    private const int AdaptiveMycoTwoHopPartialNeedScore = 450;
 
     private readonly EventBuffer _events;
     private readonly List<SwapProposal> _swapProposals = new(1024);
@@ -69,6 +77,10 @@ public sealed class CellularEngine
     private int[,] _reservedIn = new int[0, 0];
     private long _adaptiveMycoTopologyVersion = long.MinValue;
     private readonly Dictionary<string, string> _adaptiveMycoNeighborSignatures = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _adaptiveMycoShortageSignatures = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AdaptiveMycoSelection> _adaptiveMycoSelections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _adaptiveMycoPendingShortageSignatures = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _adaptiveMycoPendingShortageTicks = new(StringComparer.Ordinal);
 
     public CellularEngine(GridWorld world, EngineOptions? options = null)
     {
@@ -161,16 +173,11 @@ public sealed class CellularEngine
             }
         }
 
-        RefreshAdaptiveMyco();
+        RefreshAdaptiveMyco(force: true);
     }
 
     public void RefreshAdaptiveMyco(bool force = false)
     {
-        if (!force && _adaptiveMycoTopologyVersion == World.TopologyVersion)
-        {
-            return;
-        }
-
         var mycoCells = new List<CellState>();
         foreach (var cell in World.Cells)
         {
@@ -183,6 +190,11 @@ public sealed class CellularEngine
         if (mycoCells.Count == 0)
         {
             _adaptiveMycoTopologyVersion = World.TopologyVersion;
+            _adaptiveMycoNeighborSignatures.Clear();
+            _adaptiveMycoShortageSignatures.Clear();
+            _adaptiveMycoSelections.Clear();
+            _adaptiveMycoPendingShortageSignatures.Clear();
+            _adaptiveMycoPendingShortageTicks.Clear();
             return;
         }
 
@@ -191,12 +203,17 @@ public sealed class CellularEngine
             || _adaptiveMycoNeighborSignatures.Count == 0;
         var useInitialFixtureHints = fullRefresh && _adaptiveMycoTopologyVersion == long.MinValue && CurrentTick == 0;
         Dictionary<int, List<ResourceId>>? initialFixtureHints = null;
+        var precomputedSelections = new Dictionary<int, AdaptiveMycoSelection>();
         var queue = new Queue<CellState>();
         var queuedCounts = new Dictionary<int, int>();
 
         if (fullRefresh)
         {
             _adaptiveMycoNeighborSignatures.Clear();
+            _adaptiveMycoShortageSignatures.Clear();
+            _adaptiveMycoSelections.Clear();
+            _adaptiveMycoPendingShortageSignatures.Clear();
+            _adaptiveMycoPendingShortageTicks.Clear();
             foreach (var cell in mycoCells)
             {
                 if (useInitialFixtureHints && cell.Pool.Slots.Count > 0)
@@ -226,6 +243,50 @@ public sealed class CellularEngine
                     cell.Pool.ClearSlots();
                     queue.Enqueue(cell);
                     queuedCounts[cell.Index] = 1;
+                    _adaptiveMycoPendingShortageSignatures.Remove(cell.Id);
+                    _adaptiveMycoPendingShortageTicks.Remove(cell.Id);
+                    continue;
+                }
+
+                var shortageSignature = BuildMycoShortageSignature(cell);
+                if (_adaptiveMycoShortageSignatures.TryGetValue(cell.Id, out var previousShortageSignature)
+                    && string.Equals(previousShortageSignature, shortageSignature, StringComparison.Ordinal))
+                {
+                    _adaptiveMycoPendingShortageSignatures.Remove(cell.Id);
+                    _adaptiveMycoPendingShortageTicks.Remove(cell.Id);
+                    continue;
+                }
+
+                if (!_adaptiveMycoPendingShortageSignatures.TryGetValue(cell.Id, out var pendingSignature)
+                    || !string.Equals(pendingSignature, shortageSignature, StringComparison.Ordinal))
+                {
+                    _adaptiveMycoPendingShortageSignatures[cell.Id] = shortageSignature;
+                    _adaptiveMycoPendingShortageTicks[cell.Id] = CurrentTick;
+                    continue;
+                }
+
+                var pendingTick = _adaptiveMycoPendingShortageTicks.TryGetValue(cell.Id, out var existingPendingTick)
+                    ? existingPendingTick
+                    : CurrentTick;
+                if (CurrentTick - pendingTick < AdaptiveMycoReactiveDwellTicks)
+                {
+                    continue;
+                }
+
+                var candidate = SelectAdaptiveMycoResources(cell, hintedResources: null);
+                var current = EvaluateCurrentAdaptiveMycoSelection(cell);
+                if (ShouldAcceptReactiveMycoSelection(candidate, current))
+                {
+                    precomputedSelections[cell.Index] = candidate;
+                    queue.Enqueue(cell);
+                    queuedCounts[cell.Index] = 1;
+                }
+                else
+                {
+                    _adaptiveMycoShortageSignatures[cell.Id] = shortageSignature;
+                    _adaptiveMycoSelections[cell.Id] = current;
+                    _adaptiveMycoPendingShortageSignatures.Remove(cell.Id);
+                    _adaptiveMycoPendingShortageTicks.Remove(cell.Id);
                 }
             }
         }
@@ -236,9 +297,15 @@ public sealed class CellularEngine
 
             List<ResourceId>? hintedResources = null;
             initialFixtureHints?.TryGetValue(cell.Index, out hintedResources);
-            var resources = SelectAdaptiveMycoResources(cell, hintedResources);
-            var changed = ReplaceAdaptiveMycoSlots(cell, resources);
+            var selection = precomputedSelections.TryGetValue(cell.Index, out var precomputedSelection)
+                ? precomputedSelection
+                : SelectAdaptiveMycoResources(cell, hintedResources);
+            var changed = ReplaceAdaptiveMycoSlots(cell, selection.Resources);
             _adaptiveMycoNeighborSignatures[cell.Id] = BuildMycoNeighborSignature(cell);
+            _adaptiveMycoShortageSignatures[cell.Id] = BuildMycoShortageSignature(cell);
+            _adaptiveMycoSelections[cell.Id] = selection;
+            _adaptiveMycoPendingShortageSignatures.Remove(cell.Id);
+            _adaptiveMycoPendingShortageTicks.Remove(cell.Id);
 
             if (changed)
             {
@@ -301,6 +368,127 @@ public sealed class CellularEngine
 
         names.Sort(StringComparer.Ordinal);
         return string.Join("|", names);
+    }
+
+    private string BuildMycoShortageSignature(CellState myco)
+    {
+        var parts = new List<string>();
+        foreach (var signal in CollectMycoNeedSignals(myco))
+        {
+            if (!signal.IsZero)
+            {
+                continue;
+            }
+
+            parts.Add($"{signal.Depth}:{signal.CellId}:{signal.Resource.Value}:{(signal.BridgeCanCarry ? 1 : 0)}");
+        }
+
+        parts.Sort(StringComparer.Ordinal);
+        return string.Join("|", parts);
+    }
+
+    private List<MycoNeedSignal> CollectMycoNeedSignals(CellState myco)
+    {
+        var signals = new List<MycoNeedSignal>();
+        var adjacent = GetAdjacentCellIndexes(myco.Index);
+        var bestSignals = new Dictionary<(int CellIndex, ResourceId Resource), MycoNeedSignal>();
+
+        foreach (var neighborIndex in adjacent)
+        {
+            if (neighborIndex < 0 || neighborIndex >= World.Cells.Count)
+            {
+                continue;
+            }
+
+            var neighbor = World.Cells[neighborIndex];
+            AddNeedSignalsForCell(neighbor, depth: 1, bridgeCanCarry: true, bestSignals);
+        }
+
+        foreach (var bridgeIndex in adjacent)
+        {
+            if (bridgeIndex < 0 || bridgeIndex >= World.Cells.Count)
+            {
+                continue;
+            }
+
+            var bridge = World.Cells[bridgeIndex];
+            foreach (var secondHopIndex in GetAdjacentCellIndexes(bridgeIndex))
+            {
+                if (secondHopIndex == myco.Index || secondHopIndex < 0 || secondHopIndex >= World.Cells.Count)
+                {
+                    continue;
+                }
+
+                var secondHop = World.Cells[secondHopIndex];
+                AddNeedSignalsForCell(secondHop, depth: 2, bridgeCanCarry: false, bestSignals, bridge);
+            }
+        }
+
+        foreach (var pair in bestSignals)
+        {
+            signals.Add(pair.Value);
+        }
+
+        signals.Sort(CompareMycoNeedSignals);
+        return signals;
+    }
+
+    private void AddNeedSignalsForCell(
+        CellState cell,
+        int depth,
+        bool bridgeCanCarry,
+        Dictionary<(int CellIndex, ResourceId Resource), MycoNeedSignal> bestSignals,
+        CellState? bridge = null)
+    {
+        if (depth <= 0 || depth > AdaptiveMycoShortageDepth)
+        {
+            return;
+        }
+
+        var slots = cell.Pool.Slots;
+        for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
+        {
+            var slot = slots[slotIndex];
+            if (slot.Role != PoolSlotRole.Need)
+            {
+                continue;
+            }
+
+            var canCarry = bridgeCanCarry
+                || bridge is not null && CellCanReceiveResourceStatically(bridge, slot.Resource);
+            var signal = new MycoNeedSignal(
+                cell.Index,
+                cell.Id,
+                slot.Resource,
+                depth,
+                slot.Quantity <= 0,
+                canCarry);
+            var key = (cell.Index, slot.Resource);
+            if (!bestSignals.TryGetValue(key, out var existing)
+                || CompareMycoNeedSignals(signal, existing) < 0)
+            {
+                bestSignals[key] = signal;
+            }
+        }
+    }
+
+    private List<int> GetAdjacentCellIndexes(int cellIndex)
+    {
+        var result = new List<int>(4);
+        var edges = World.GetAdjacentEdges();
+        foreach (var edge in edges)
+        {
+            if (edge.A == cellIndex)
+            {
+                result.Add(edge.B);
+            }
+            else if (edge.B == cellIndex)
+            {
+                result.Add(edge.A);
+            }
+        }
+
+        return result;
     }
 
     private static void ResetStrain(StrainState strain)
@@ -369,9 +557,33 @@ public sealed class CellularEngine
         UpdateWinCheck();
     }
 
-    private List<ResourceId> SelectAdaptiveMycoResources(
+    private AdaptiveMycoSelection SelectAdaptiveMycoResources(
         CellState myco,
         IReadOnlyList<ResourceId>? hintedResources)
+    {
+        var context = BuildAdaptiveMycoContext(myco);
+        if (context.UsefulNeighbors.Count == 0)
+        {
+            return AdaptiveMycoSelection.Empty;
+        }
+
+        return SelectAdaptiveMycoResources(myco, context, hintedResources);
+    }
+
+    private AdaptiveMycoSelection EvaluateCurrentAdaptiveMycoSelection(CellState myco)
+    {
+        var resources = new List<ResourceId>(SwapPoolState.MaxSlots);
+        AddSlotResources(resources, myco.Pool.Slots);
+        if (resources.Count == 0)
+        {
+            return AdaptiveMycoSelection.Empty;
+        }
+
+        var context = BuildAdaptiveMycoContext(myco);
+        return EvaluateAdaptiveMycoResourceSet(myco, resources, context, isInitialFixtureHint: false);
+    }
+
+    private AdaptiveMycoContext BuildAdaptiveMycoContext(CellState myco)
     {
         var usefulNeighbors = new List<CellState>(4);
         var edges = World.GetAdjacentEdges();
@@ -398,73 +610,27 @@ public sealed class CellularEngine
             }
         }
 
-        var resources = new List<ResourceId>(SwapPoolState.MaxSlots);
-        if (usefulNeighbors.Count == 0)
-        {
-            return resources;
-        }
-
-        if (usefulNeighbors.Count == 1)
-        {
-            var neighbor = usefulNeighbors[0];
-            if (neighbor.IsMyco)
-            {
-                AddSlotResources(resources, neighbor.Pool.Slots);
-            }
-            else
-            {
-                AddNormalOffers(resources, neighbor);
-                AddRoleResources(resources, neighbor.Pool.Slots, PoolSlotRole.Need);
-            }
-
-            return resources;
-        }
-
-        return SelectAdaptiveMycoResourcesFromMultipleNeighbors(myco, usefulNeighbors, hintedResources);
-    }
-
-    private List<ResourceId> SelectAdaptiveMycoResourcesFromMultipleNeighbors(
-        CellState myco,
-        List<CellState> usefulNeighbors,
-        IReadOnlyList<ResourceId>? hintedResources)
-    {
         var scores = new Dictionary<ResourceId, int>();
         var localOffers = new List<ResourceId>(SwapPoolState.MaxSlots);
-        AddConnectedComponentCandidateScores(myco, scores);
+        var needSignals = CollectMycoNeedSignals(myco);
 
-        for (var neighborIndex = 0; neighborIndex < usefulNeighbors.Count; neighborIndex++)
+        if (usefulNeighbors.Count > 0)
         {
-            var neighbor = usefulNeighbors[neighborIndex];
-            var slots = neighbor.Pool.Slots;
-            for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
-            {
-                var slot = slots[slotIndex];
-                if (neighbor.IsMyco)
-                {
-                    AddCandidateScore(scores, slot.Resource, 170);
-                    continue;
-                }
-
-                if (slot.Role == PoolSlotRole.SourceOutput)
-                {
-                    AddCandidateScore(scores, slot.Resource, 170);
-                    AddUniqueResource(localOffers, slot.Resource);
-                }
-                else if (slot.Role == PoolSlotRole.Need)
-                {
-                    AddCandidateScore(scores, slot.Resource, 210);
-                }
-            }
-
-            for (var sourceIndex = 0; sourceIndex < neighbor.Sources.Count; sourceIndex++)
-            {
-                AddCandidateScore(scores, neighbor.Sources[sourceIndex].Resource, 170);
-                AddUniqueResource(localOffers, neighbor.Sources[sourceIndex].Resource);
-            }
+            AddConnectedComponentCandidateScores(myco, scores);
+            AddAdjacentMycoCandidateScores(usefulNeighbors, scores, localOffers);
+            AddMycoNeedSignalScores(needSignals, scores);
         }
 
-        var candidates = new List<MycoResourceCandidate>(scores.Count);
-        foreach (var pair in scores)
+        return new AdaptiveMycoContext(usefulNeighbors, localOffers, scores, needSignals);
+    }
+
+    private AdaptiveMycoSelection SelectAdaptiveMycoResources(
+        CellState myco,
+        AdaptiveMycoContext context,
+        IReadOnlyList<ResourceId>? hintedResources)
+    {
+        var candidates = new List<MycoResourceCandidate>(context.Scores.Count);
+        foreach (var pair in context.Scores)
         {
             candidates.Add(new MycoResourceCandidate(
                 pair.Key,
@@ -472,23 +638,20 @@ public sealed class CellularEngine
                 StableAdaptiveMycoHash(myco.Id, "candidate", pair.Key, pair.Value, 0, World.TopologyVersion)));
         }
 
-        AddHintedResourcesToCandidates(myco, candidates, scores, hintedResources);
+        AddHintedResourcesToCandidates(myco, candidates, context.Scores, hintedResources);
         candidates.Sort(CompareMycoResourceCandidates);
 
-        return SelectBestAdaptiveMycoResourceSet(myco, usefulNeighbors, candidates, localOffers, scores, hintedResources);
+        return SelectBestAdaptiveMycoResourceSet(myco, context, candidates, hintedResources);
     }
 
-    private List<ResourceId> SelectBestAdaptiveMycoResourceSet(
+    private AdaptiveMycoSelection SelectBestAdaptiveMycoResourceSet(
         CellState myco,
-        List<CellState> usefulNeighbors,
+        AdaptiveMycoContext context,
         List<MycoResourceCandidate> candidates,
-        List<ResourceId> localOffers,
-        Dictionary<ResourceId, int> scores,
         IReadOnlyList<ResourceId>? hintedResources)
     {
-        var bestResources = new List<ResourceId>(SwapPoolState.MaxSlots);
-        var bestScore = int.MinValue;
-        var bestHash = int.MaxValue;
+        var bestSelection = AdaptiveMycoSelection.Empty;
+        var hasSelection = false;
 
         if (hintedResources is { Count: > 0 })
         {
@@ -536,8 +699,7 @@ public sealed class CellularEngine
             }
         }
 
-        EnsureLocalPaymentResource(myco, bestResources, localOffers, scores, World.TopologyVersion);
-        return bestResources;
+        return bestSelection;
 
         void ConsiderResourceSet(List<ResourceId> resources, bool isInitialFixtureHint)
         {
@@ -546,22 +708,11 @@ public sealed class CellularEngine
                 return;
             }
 
-            EnsureLocalPaymentResource(myco, resources, localOffers, scores, World.TopologyVersion);
-            var score = ScoreAdaptiveMycoResourceSet(resources, usefulNeighbors, scores);
-            if (isInitialFixtureHint)
+            var selection = EvaluateAdaptiveMycoResourceSet(myco, resources, context, isInitialFixtureHint);
+            if (!hasSelection || CompareAdaptiveMycoSelections(selection, bestSelection) < 0)
             {
-                // Old shipped fixtures often contain authored myco pips that make a verified
-                // circuit work. They are not authoritative after movement, but on initial load
-                // they are a useful candidate for the static solver.
-                score += 100_000;
-            }
-
-            var hash = HashAdaptiveMycoResourceSet(myco.Id, resources, score, World.TopologyVersion);
-            if (score > bestScore || score == bestScore && hash < bestHash)
-            {
-                bestScore = score;
-                bestHash = hash;
-                bestResources = new List<ResourceId>(resources);
+                hasSelection = true;
+                bestSelection = selection;
             }
         }
     }
@@ -608,24 +759,133 @@ public sealed class CellularEngine
         }
     }
 
+    private static void AddAdjacentMycoCandidateScores(
+        List<CellState> usefulNeighbors,
+        Dictionary<ResourceId, int> scores,
+        List<ResourceId> localOffers)
+    {
+        for (var neighborIndex = 0; neighborIndex < usefulNeighbors.Count; neighborIndex++)
+        {
+            var neighbor = usefulNeighbors[neighborIndex];
+            var slots = neighbor.Pool.Slots;
+            for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
+            {
+                var slot = slots[slotIndex];
+                if (neighbor.IsMyco)
+                {
+                    AddCandidateScore(scores, slot.Resource, 170);
+                    AddUniqueResource(localOffers, slot.Resource);
+                    continue;
+                }
+
+                if (slot.Role == PoolSlotRole.SourceOutput)
+                {
+                    AddCandidateScore(scores, slot.Resource, 170);
+                    AddUniqueResource(localOffers, slot.Resource);
+                }
+                else if (slot.Role == PoolSlotRole.Need)
+                {
+                    AddCandidateScore(scores, slot.Resource, 210);
+                    if (slot.Quantity > 1)
+                    {
+                        AddUniqueResource(localOffers, slot.Resource);
+                    }
+                }
+            }
+
+            for (var sourceIndex = 0; sourceIndex < neighbor.Sources.Count; sourceIndex++)
+            {
+                AddCandidateScore(scores, neighbor.Sources[sourceIndex].Resource, 170);
+                AddUniqueResource(localOffers, neighbor.Sources[sourceIndex].Resource);
+            }
+        }
+    }
+
+    private static void AddMycoNeedSignalScores(
+        List<MycoNeedSignal> signals,
+        Dictionary<ResourceId, int> scores)
+    {
+        for (var i = 0; i < signals.Count; i++)
+        {
+            var signal = signals[i];
+            var score = signal.Depth switch
+            {
+                1 when signal.IsZero => AdaptiveMycoAdjacentZeroNeedScore,
+                1 => AdaptiveMycoAdjacentPartialNeedScore,
+                2 when signal.IsZero => AdaptiveMycoTwoHopZeroNeedScore + (signal.BridgeCanCarry ? AdaptiveMycoTwoHopBridgeScore : 0),
+                2 => AdaptiveMycoTwoHopPartialNeedScore + (signal.BridgeCanCarry ? AdaptiveMycoTwoHopBridgeScore / 3 : 0),
+                _ => 0
+            };
+            AddCandidateScore(scores, signal.Resource, score);
+        }
+    }
+
+    private AdaptiveMycoSelection EvaluateAdaptiveMycoResourceSet(
+        CellState myco,
+        List<ResourceId> resources,
+        AdaptiveMycoContext context,
+        bool isInitialFixtureHint)
+    {
+        var normalized = new List<ResourceId>(SwapPoolState.MaxSlots);
+        for (var i = 0; i < resources.Count && normalized.Count < SwapPoolState.MaxSlots; i++)
+        {
+            AddUniqueResource(normalized, resources[i]);
+        }
+
+        if (normalized.Count == 0)
+        {
+            return AdaptiveMycoSelection.Empty;
+        }
+
+        EnsureLocalPaymentResource(
+            myco,
+            normalized,
+            context.LocalOffers,
+            context.Scores,
+            context.NeedSignals,
+            World.TopologyVersion);
+
+        var useInitialHintPriority = isInitialFixtureHint && AllResourcesHaveCandidateScores(resources, context.Scores);
+        var score = ScoreAdaptiveMycoResourceSet(normalized, context);
+        if (useInitialHintPriority)
+        {
+            // Old shipped fixtures often contain authored myco pips that make a verified
+            // circuit work. They are not authoritative after movement, but on initial load
+            // they are a useful candidate for the static solver.
+            score += 100_000;
+        }
+
+        var adjacentZeroCoverage = CountCoveredMycoNeedSignals(normalized, context.NeedSignals, depth: 1, zeroOnly: true);
+        var twoHopZeroCoverage = CountCoveredMycoNeedSignals(normalized, context.NeedSignals, depth: 2, zeroOnly: true);
+        var localPaymentCoverage = ContainsAnyResource(normalized, context.LocalOffers) ? 1 : 0;
+        var hash = HashAdaptiveMycoResourceSet(myco.Id, normalized, score, World.TopologyVersion);
+        return new AdaptiveMycoSelection(
+            normalized,
+            score,
+            adjacentZeroCoverage,
+            twoHopZeroCoverage,
+            localPaymentCoverage,
+            hash,
+            useInitialHintPriority ? 1 : 0);
+    }
+
     private static int ScoreAdaptiveMycoResourceSet(
         IReadOnlyList<ResourceId> resources,
-        List<CellState> usefulNeighbors,
-        Dictionary<ResourceId, int> baseScores)
+        AdaptiveMycoContext context)
     {
         var score = 0;
         for (var i = 0; i < resources.Count; i++)
         {
-            if (baseScores.TryGetValue(resources[i], out var baseScore))
+            if (context.Scores.TryGetValue(resources[i], out var baseScore))
             {
                 score += baseScore;
             }
         }
 
         var reciprocalNeighbors = 0;
-        for (var neighborIndex = 0; neighborIndex < usefulNeighbors.Count; neighborIndex++)
+        for (var neighborIndex = 0; neighborIndex < context.UsefulNeighbors.Count; neighborIndex++)
         {
-            var neighbor = usefulNeighbors[neighborIndex];
+            var neighbor = context.UsefulNeighbors[neighborIndex];
             var receivesFromNeighbor = false;
             var paysNeighbor = false;
             var localOfferMatches = 0;
@@ -663,7 +923,201 @@ public sealed class CellularEngine
             }
         }
 
+        score += CountCoveredMycoNeedSignals(resources, context.NeedSignals, depth: 1, zeroOnly: true) * 50_000;
+        score += CountCoveredMycoNeedSignals(resources, context.NeedSignals, depth: 2, zeroOnly: true) * 24_000;
+        score += CountCoveredMycoNeedSignals(resources, context.NeedSignals, depth: 1, zeroOnly: false) * 1_200;
+        score += CountCoveredMycoNeedSignals(resources, context.NeedSignals, depth: 2, zeroOnly: false) * 450;
         return score + reciprocalNeighbors * reciprocalNeighbors * 180;
+    }
+
+    private static bool ShouldAcceptReactiveMycoSelection(
+        AdaptiveMycoSelection candidate,
+        AdaptiveMycoSelection current)
+    {
+        if (candidate.Resources.Count == 0 || SameResourceSequence(candidate.Resources, current.Resources))
+        {
+            return false;
+        }
+
+        if (candidate.AdjacentZeroCoverage > current.AdjacentZeroCoverage)
+        {
+            return true;
+        }
+
+        if (candidate.AdjacentZeroCoverage < current.AdjacentZeroCoverage)
+        {
+            return false;
+        }
+
+        if (candidate.TotalZeroCoverage > current.TotalZeroCoverage)
+        {
+            return true;
+        }
+
+        if (candidate.TotalZeroCoverage < current.TotalZeroCoverage)
+        {
+            return false;
+        }
+
+        if (candidate.LocalPaymentCoverage > current.LocalPaymentCoverage)
+        {
+            return true;
+        }
+
+        return candidate.Score >= current.Score + AdaptiveMycoReactiveScoreMargin;
+    }
+
+    private static int CompareAdaptiveMycoSelections(
+        AdaptiveMycoSelection left,
+        AdaptiveMycoSelection right)
+    {
+        var compareInitialHint = right.InitialFixtureHint.CompareTo(left.InitialFixtureHint);
+        if (compareInitialHint != 0)
+        {
+            return compareInitialHint;
+        }
+
+        var compareAdjacentZero = right.AdjacentZeroCoverage.CompareTo(left.AdjacentZeroCoverage);
+        if (compareAdjacentZero != 0)
+        {
+            return compareAdjacentZero;
+        }
+
+        var compareTotalZero = right.TotalZeroCoverage.CompareTo(left.TotalZeroCoverage);
+        if (compareTotalZero != 0)
+        {
+            return compareTotalZero;
+        }
+
+        var comparePayment = right.LocalPaymentCoverage.CompareTo(left.LocalPaymentCoverage);
+        if (comparePayment != 0)
+        {
+            return comparePayment;
+        }
+
+        var compareScore = right.Score.CompareTo(left.Score);
+        if (compareScore != 0)
+        {
+            return compareScore;
+        }
+
+        return left.Hash.CompareTo(right.Hash);
+    }
+
+    private static int CompareMycoNeedSignals(MycoNeedSignal left, MycoNeedSignal right)
+    {
+        var compareZero = right.IsZero.CompareTo(left.IsZero);
+        if (compareZero != 0)
+        {
+            return compareZero;
+        }
+
+        var compareDepth = left.Depth.CompareTo(right.Depth);
+        if (compareDepth != 0)
+        {
+            return compareDepth;
+        }
+
+        var compareBridge = right.BridgeCanCarry.CompareTo(left.BridgeCanCarry);
+        if (compareBridge != 0)
+        {
+            return compareBridge;
+        }
+
+        var compareCell = string.CompareOrdinal(left.CellId, right.CellId);
+        return compareCell != 0 ? compareCell : left.Resource.Value.CompareTo(right.Resource.Value);
+    }
+
+    private static int CountCoveredMycoNeedSignals(
+        IReadOnlyList<ResourceId> resources,
+        List<MycoNeedSignal> signals,
+        int depth,
+        bool zeroOnly)
+    {
+        var count = 0;
+        for (var i = 0; i < signals.Count; i++)
+        {
+            var signal = signals[i];
+            if (signal.Depth != depth || zeroOnly && !signal.IsZero)
+            {
+                continue;
+            }
+
+            if (ContainsResource(resources, signal.Resource))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool ContainsAnyResource(
+        IReadOnlyList<ResourceId> resources,
+        IReadOnlyList<ResourceId> candidates)
+    {
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (ContainsResource(resources, candidates[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AllResourcesHaveCandidateScores(
+        IReadOnlyList<ResourceId> resources,
+        Dictionary<ResourceId, int> scores)
+    {
+        if (resources.Count == 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < resources.Count; i++)
+        {
+            if (!scores.ContainsKey(resources[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ContainsResource(IReadOnlyList<ResourceId> resources, ResourceId resource)
+    {
+        for (var i = 0; i < resources.Count; i++)
+        {
+            if (resources[i] == resource)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SameResourceSequence(
+        IReadOnlyList<ResourceId> left,
+        IReadOnlyList<ResourceId> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool CellCanOfferResourceStatically(CellState cell, ResourceId resource)
@@ -796,6 +1250,7 @@ public sealed class CellularEngine
         List<ResourceId> resources,
         List<ResourceId> localOffers,
         Dictionary<ResourceId, int> scores,
+        List<MycoNeedSignal> needSignals,
         long topologyVersion)
     {
         if (resources.Count == 0 || localOffers.Count == 0)
@@ -814,6 +1269,7 @@ public sealed class CellularEngine
             }
         }
 
+        var replacementIndex = SelectLocalPaymentReplacementIndex(resources, scores, needSignals);
         var bestOffer = localOffers[0];
         var bestScore = scores.TryGetValue(bestOffer, out var firstScore) ? firstScore : 0;
         for (var i = 1; i < localOffers.Count; i++)
@@ -829,7 +1285,53 @@ public sealed class CellularEngine
             }
         }
 
-        resources[^1] = bestOffer;
+        if (resources.Count < SwapPoolState.MaxSlots)
+        {
+            AddUniqueResource(resources, bestOffer);
+            return;
+        }
+
+        resources[replacementIndex] = bestOffer;
+    }
+
+    private static int SelectLocalPaymentReplacementIndex(
+        List<ResourceId> resources,
+        Dictionary<ResourceId, int> scores,
+        List<MycoNeedSignal> needSignals)
+    {
+        var bestIndex = -1;
+        var bestScore = int.MaxValue;
+        for (var i = resources.Count - 1; i >= 0; i--)
+        {
+            var resource = resources[i];
+            if (IsAdjacentZeroShortageResource(resource, needSignals))
+            {
+                continue;
+            }
+
+            var score = scores.TryGetValue(resource, out var resourceScore) ? resourceScore : 0;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex >= 0 ? bestIndex : resources.Count - 1;
+    }
+
+    private static bool IsAdjacentZeroShortageResource(ResourceId resource, List<MycoNeedSignal> needSignals)
+    {
+        for (var i = 0; i < needSignals.Count; i++)
+        {
+            var signal = needSignals[i];
+            if (signal.Depth == 1 && signal.IsZero && signal.Resource == resource)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ReplaceAdaptiveMycoSlots(CellState myco, List<ResourceId> resources)
@@ -867,30 +1369,6 @@ public sealed class CellularEngine
         }
 
         return true;
-    }
-
-    private static void AddNormalOffers(List<ResourceId> resources, CellState cell)
-    {
-        AddRoleResources(resources, cell.Pool.Slots, PoolSlotRole.SourceOutput);
-        for (var i = 0; i < cell.Sources.Count && resources.Count < SwapPoolState.MaxSlots; i++)
-        {
-            AddUniqueResource(resources, cell.Sources[i].Resource);
-        }
-    }
-
-    private static void AddRoleResources(
-        List<ResourceId> resources,
-        IReadOnlyList<PoolSlot> slots,
-        PoolSlotRole role)
-    {
-        for (var i = 0; i < slots.Count && resources.Count < SwapPoolState.MaxSlots; i++)
-        {
-            var slot = slots[i];
-            if (slot.Role == role)
-            {
-                AddUniqueResource(resources, slot.Resource);
-            }
-        }
     }
 
     private static void AddSlotResources(List<ResourceId> resources, IReadOnlyList<PoolSlot> slots)
@@ -1939,4 +2417,31 @@ public sealed class CellularEngine
         ResourceId Resource,
         int Score,
         int Hash);
+
+    private readonly record struct AdaptiveMycoSelection(
+        List<ResourceId> Resources,
+        int Score,
+        int AdjacentZeroCoverage,
+        int TwoHopZeroCoverage,
+        int LocalPaymentCoverage,
+        int Hash,
+        int InitialFixtureHint)
+    {
+        public static AdaptiveMycoSelection Empty { get; } = new([], 0, 0, 0, 0, int.MaxValue, 0);
+        public int TotalZeroCoverage => AdjacentZeroCoverage + TwoHopZeroCoverage;
+    }
+
+    private readonly record struct AdaptiveMycoContext(
+        List<CellState> UsefulNeighbors,
+        List<ResourceId> LocalOffers,
+        Dictionary<ResourceId, int> Scores,
+        List<MycoNeedSignal> NeedSignals);
+
+    private readonly record struct MycoNeedSignal(
+        int CellIndex,
+        string CellId,
+        ResourceId Resource,
+        int Depth,
+        bool IsZero,
+        bool BridgeCanCarry);
 }

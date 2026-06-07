@@ -74,7 +74,7 @@ public sealed class MycoTests
         _ = new CellularEngine(loaded.World, loaded.Options);
         var red = loaded.World.GetCell("red");
 
-        AssertSlotResources(red, [0, 1, 2, 3]);
+        AssertSlotResourceSet(red, [0, 1, 2, 3]);
         Assert.All(red.Pool.Slots, slot =>
         {
             Assert.Equal(PoolSlotRole.Need, slot.Role);
@@ -118,7 +118,7 @@ public sealed class MycoTests
 
         _ = new CellularEngine(world);
 
-        AssertSlotResources(myco, [0, 1, 2, 3]);
+        AssertSlotResourceSet(myco, [0, 1, 2, 3]);
     }
 
     [Fact]
@@ -200,6 +200,154 @@ public sealed class MycoTests
 
         AssertSlotResourceSet(first, [0, 1, 2, 3]);
         AssertSlotResourceSet(second, [0, 1, 2, 3]);
+    }
+
+    [Fact]
+    public void AdaptiveMyco_PrioritizesAdjacentZeroNeeds()
+    {
+        var leftPool = new SwapPoolState();
+        leftPool.AddSlot(new ResourceId(0), PoolSlotRole.SourceOutput);
+        leftPool.AddSlot(new ResourceId(1), PoolSlotRole.Need, quantity: 20);
+        leftPool.AddSlot(new ResourceId(2), PoolSlotRole.Need, quantity: 20);
+        leftPool.AddSlot(new ResourceId(3), PoolSlotRole.Need, quantity: 0);
+        var left = new CellState("left", new GridPosition(0, 1), leftPool);
+
+        var rightPool = new SwapPoolState();
+        rightPool.AddSlot(new ResourceId(4), PoolSlotRole.SourceOutput);
+        rightPool.AddSlot(new ResourceId(5), PoolSlotRole.Need, quantity: 20);
+        rightPool.AddSlot(new ResourceId(6), PoolSlotRole.Need, quantity: 20);
+        rightPool.AddSlot(new ResourceId(7), PoolSlotRole.Need, quantity: 20);
+        var right = new CellState("right", new GridPosition(2, 1), rightPool);
+
+        var myco = new CellState("red", new GridPosition(1, 1), new SwapPoolState(), CellKind.RedMyco);
+        var world = new GridWorld(3, 3);
+        world.AddCell(left);
+        world.AddCell(right);
+        world.AddCell(myco);
+
+        _ = new CellularEngine(world);
+
+        Assert.Contains(new ResourceId(3), myco.Pool.Slots.Select(slot => slot.Resource));
+    }
+
+    [Fact]
+    public void AdaptiveMyco_UsesTwoHopZeroNeedWhenBridgeCanCarryIt()
+    {
+        var bridgePool = new SwapPoolState();
+        bridgePool.AddSlot(new ResourceId(0), PoolSlotRole.SourceOutput);
+        bridgePool.AddSlot(new ResourceId(1), PoolSlotRole.AcceptOnly);
+        bridgePool.AddSlot(new ResourceId(2), PoolSlotRole.Need, quantity: 10);
+        var bridge = new CellState("bridge", new GridPosition(1, 0), bridgePool);
+
+        var targetPool = new SwapPoolState();
+        targetPool.AddSlot(new ResourceId(1), PoolSlotRole.Need, quantity: 0);
+        targetPool.AddSlot(new ResourceId(3), PoolSlotRole.Need, quantity: 10);
+        targetPool.AddSlot(new ResourceId(4), PoolSlotRole.Need, quantity: 10);
+        var target = new CellState("target", new GridPosition(2, 0), targetPool);
+
+        var myco = new CellState("red", new GridPosition(0, 0), new SwapPoolState(), CellKind.RedMyco);
+        var world = new GridWorld(3, 1);
+        world.AddCell(myco);
+        world.AddCell(bridge);
+        world.AddCell(target);
+
+        _ = new CellularEngine(world);
+
+        Assert.Contains(new ResourceId(1), myco.Pool.Slots.Select(slot => slot.Resource));
+    }
+
+    [Fact]
+    public void AdaptiveMyco_KeepsLocalPaymentResourceWithAdjacentShortages()
+    {
+        var neighborPool = new SwapPoolState();
+        neighborPool.AddSlot(new ResourceId(0), PoolSlotRole.SourceOutput);
+        neighborPool.AddSlot(new ResourceId(1), PoolSlotRole.Need, quantity: 0);
+        neighborPool.AddSlot(new ResourceId(2), PoolSlotRole.Need, quantity: 0);
+        neighborPool.AddSlot(new ResourceId(3), PoolSlotRole.Need, quantity: 0);
+        var neighbor = new CellState("neighbor", new GridPosition(0, 0), neighborPool);
+
+        var myco = new CellState("red", new GridPosition(1, 0), new SwapPoolState(), CellKind.RedMyco);
+        var world = new GridWorld(2, 1);
+        world.AddCell(neighbor);
+        world.AddCell(myco);
+
+        _ = new CellularEngine(world);
+
+        AssertSlotResourceSet(myco, [0, 1, 2, 3]);
+    }
+
+    [Fact]
+    public void AdaptiveMyco_WaitsBeforeReactiveShortageChange()
+    {
+        var leftPool = new SwapPoolState();
+        leftPool.AddSlot(new ResourceId(1), PoolSlotRole.Need, quantity: 0);
+        var changingSlot = leftPool.AddSlot(new ResourceId(2), PoolSlotRole.Need, quantity: 1);
+        leftPool.AddSlot(new ResourceId(3), PoolSlotRole.Need, quantity: 1);
+        leftPool.AddSlot(new ResourceId(4), PoolSlotRole.Need, quantity: 1);
+        var left = new CellState("left", new GridPosition(0, 1), leftPool);
+
+        var rightPool = new SwapPoolState();
+        rightPool.AddSlot(new ResourceId(5), PoolSlotRole.Need, quantity: 0);
+        rightPool.AddSlot(new ResourceId(6), PoolSlotRole.Need, quantity: 1);
+        rightPool.AddSlot(new ResourceId(7), PoolSlotRole.Need, quantity: 1);
+        rightPool.AddSlot(new ResourceId(8), PoolSlotRole.Need, quantity: 1);
+        var right = new CellState("right", new GridPosition(2, 1), rightPool);
+
+        var myco = new CellState("red", new GridPosition(1, 1), new SwapPoolState(), CellKind.RedMyco);
+        var world = new GridWorld(3, 3);
+        world.AddCell(left);
+        world.AddCell(right);
+        world.AddCell(myco);
+        var engine = new CellularEngine(world);
+        var initial = SlotResourceValues(myco);
+
+        if (initial.Contains(changingSlot.Resource.Value))
+        {
+            changingSlot = rightPool.Slots
+                .Where(slot => slot.Role == PoolSlotRole.Need && slot.Quantity > 0)
+                .First(slot => !initial.Contains(slot.Resource.Value));
+        }
+
+        changingSlot.Remove(1);
+        engine.RefreshAdaptiveMyco();
+
+        Assert.Equal(initial, SlotResourceValues(myco));
+
+        engine.RunTicks(6);
+        engine.RefreshAdaptiveMyco();
+
+        Assert.Contains(changingSlot.Resource.Value, SlotResourceValues(myco));
+    }
+
+    [Fact]
+    public void AdaptiveMyco_IgnoresNonzeroQuantityNoiseForReactiveSelection()
+    {
+        var leftPool = new SwapPoolState();
+        leftPool.AddSlot(new ResourceId(1), PoolSlotRole.Need, quantity: 0);
+        var noisySlot = leftPool.AddSlot(new ResourceId(2), PoolSlotRole.Need, quantity: 1);
+        leftPool.AddSlot(new ResourceId(3), PoolSlotRole.Need, quantity: 1);
+        leftPool.AddSlot(new ResourceId(4), PoolSlotRole.Need, quantity: 1);
+        var left = new CellState("left", new GridPosition(0, 1), leftPool);
+
+        var rightPool = new SwapPoolState();
+        rightPool.AddSlot(new ResourceId(5), PoolSlotRole.Need, quantity: 0);
+        rightPool.AddSlot(new ResourceId(6), PoolSlotRole.Need, quantity: 1);
+        rightPool.AddSlot(new ResourceId(7), PoolSlotRole.Need, quantity: 1);
+        rightPool.AddSlot(new ResourceId(8), PoolSlotRole.Need, quantity: 1);
+        var right = new CellState("right", new GridPosition(2, 1), rightPool);
+
+        var myco = new CellState("red", new GridPosition(1, 1), new SwapPoolState(), CellKind.RedMyco);
+        var world = new GridWorld(3, 3);
+        world.AddCell(left);
+        world.AddCell(right);
+        world.AddCell(myco);
+        var engine = new CellularEngine(world);
+        var initial = SlotResourceValues(myco);
+
+        noisySlot.Add(1);
+        engine.RefreshAdaptiveMyco();
+
+        Assert.Equal(initial, SlotResourceValues(myco));
     }
 
     [Fact]
@@ -303,4 +451,7 @@ public sealed class MycoTests
         var expected = resourceValues.Select(value => new ResourceId(value)).ToHashSet();
         Assert.True(actual.SetEquals(expected));
     }
+
+    private static int[] SlotResourceValues(CellState cell) =>
+        cell.Pool.Slots.Select(slot => slot.Resource.Value).ToArray();
 }

@@ -1,5 +1,7 @@
 extends Control
 
+const PuzzleOverlayLayer = preload("res://scenes/cellular_puzzle_overlay.gd")
+
 const BOARD_SIZE := 8
 const RESOURCE_LETTERS := [
 	"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
@@ -96,6 +98,13 @@ const HINT_RECENT_MEMORY := 5
 const HINT_TOP_RANDOM_WINDOW := 8
 const HINT_TOP_SCORE_FALLOFF := 160.0
 const HINT_ZERO_NEED_MATCH_SCORE := 900.0
+const LEVEL_COMPLETE_EFFECT_SECONDS := 1.65
+const LEVEL_COMPLETE_TEXT := "Alive!"
+const NEXT_BUTTON_PULSE_PERIOD_MSEC := 760.0
+const NEXT_BUTTON_PULSE_MIN_SCALE := 1.08
+const NEXT_BUTTON_PULSE_MAX_SCALE := 1.18
+const NEXT_BUTTON_GLOW_COLOR := Color(0.52, 1.0, 0.78, 1.0)
+const NEXT_BUTTON_GLOW_HOT_COLOR := Color(1.0, 0.92, 0.34, 1.0)
 const IDLE_HINT_DELAY_SECONDS := 5.0
 const IDLE_HINT_PULSE_SECONDS := 2.0
 const IDLE_HINT_MAX_SCALE := 1.22
@@ -189,6 +198,7 @@ var _final_win_title: Label = null
 var _final_win_menu_button: Button = null
 var _sim_bridge: Node = null
 var _board_renderer: Node = null
+var _overlay_layer: Control = null
 var _sim_snapshot: Dictionary = {}
 var _cell_state_by_id: Dictionary = {}
 var _sim_tick_accum := 0.0
@@ -246,6 +256,8 @@ var _latest_report_dirty := false
 var _level_high_velocity := 0
 var _level_high_velocity_dirty := false
 var _final_win_announced := false
+var _level_complete_effect_ids: Array[String] = []
+var _level_complete_effect_start_msec := -1
 
 
 func _ready() -> void:
@@ -256,6 +268,7 @@ func _ready() -> void:
 	_sim_bridge = get_node_or_null("/root/CellularSim")
 	_create_hud()
 	_try_create_board_renderer()
+	_create_overlay_layer()
 	_load_level(_clamp_puzzle_level(Global.cellular_puzzle_current_level))
 	set_process(true)
 	queue_redraw()
@@ -466,7 +479,7 @@ func _process(delta: float) -> void:
 	_process_visual_profile_scripted_actions(delta)
 	var idle_hint_active := _advance_idle_hint_nudge(delta)
 	if not _using_csharp_sim or _drag_cell != "":
-		if idle_hint_active:
+		if idle_hint_active or _solved or _is_level_complete_effect_active():
 			queue_redraw()
 		return
 	_sim_tick_accum += maxf(delta, 0.0)
@@ -728,6 +741,9 @@ func _layout_hud() -> void:
 	_layout_info_panel(safe_rect, landscape, margin)
 	_layout_final_win_panel(safe_rect, landscape, margin)
 	_update_info_button_state()
+	if is_instance_valid(_overlay_layer):
+		_set_control_rect(_overlay_layer, Vector2.ZERO, view_size)
+		_order_overlay_layer()
 	if is_instance_valid(_board_renderer) and _board_renderer is Control:
 		var renderer := _board_renderer as Control
 		_set_control_rect(renderer, Vector2.ZERO, view_size)
@@ -1071,6 +1087,25 @@ func _try_create_board_renderer() -> void:
 		return
 
 
+func _create_overlay_layer() -> void:
+	_overlay_layer = PuzzleOverlayLayer.new()
+	_overlay_layer.name = "CellularPuzzleOverlay"
+	_overlay_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay_layer.puzzle_owner = self
+	add_child(_overlay_layer)
+	_set_control_rect(_overlay_layer, Vector2.ZERO, get_viewport_rect().size)
+	_order_overlay_layer()
+
+
+func _order_overlay_layer() -> void:
+	if not is_instance_valid(_overlay_layer):
+		return
+	var overlay_index := 0
+	if is_instance_valid(_board_renderer):
+		overlay_index = mini(get_child_count() - 1, 1)
+	move_child(_overlay_layer, overlay_index)
+
+
 func _has_user_arg(name: String) -> bool:
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == name:
@@ -1117,6 +1152,8 @@ func _load_level(level_number: int, record_progress: bool = true) -> void:
 	_board_cols = BOARD_SIZE
 	_board_rows = BOARD_SIZE
 	_solved = false
+	_reset_level_complete_effect()
+	_reset_next_button_pulse_visual()
 	_final_win_announced = false
 	_hide_final_win_panel()
 	_reset_camera_state()
@@ -1958,6 +1995,8 @@ func _update_next_button_state() -> void:
 	var was_visible := _next_button.visible
 	_next_button.visible = can_go_next
 	_next_button.disabled = not can_go_next
+	if not can_go_next or not _solved:
+		_reset_next_button_pulse_visual()
 	if was_visible != can_go_next:
 		_request_hud_relayout()
 
@@ -2157,7 +2196,7 @@ func _draw() -> void:
 	_draw_idle_hint_nudge()
 	if _using_board_renderer and is_instance_valid(_board_renderer):
 		_sync_board_renderer()
-		_draw_next_level_pulse()
+		_queue_puzzle_overlay_redraw()
 		return
 	_prepare_need_pip_layouts()
 	_draw_board()
@@ -2165,7 +2204,6 @@ func _draw() -> void:
 	_draw_links()
 	_draw_drag_sticky_connections()
 	_draw_hint()
-	_draw_next_level_pulse()
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
@@ -2173,6 +2211,12 @@ func _draw() -> void:
 	if _drag_cell != "":
 		_draw_cell(_drag_cell, _drag_position, true)
 	_draw_zero_need_pip_overlays()
+	_queue_puzzle_overlay_redraw()
+
+
+func _queue_puzzle_overlay_redraw() -> void:
+	if is_instance_valid(_overlay_layer):
+		_overlay_layer.queue_redraw()
 
 
 func _prepare_need_pip_layouts() -> void:
@@ -3675,13 +3719,135 @@ func _smooth_pip_offset(key: String, target_offset: float, smooth: float = PIP_O
 	return smoothed
 
 
-func _draw_next_level_pulse() -> void:
-	if not _solved or not is_instance_valid(_next_button) or not _next_button.visible:
+func _draw_puzzle_overlay(layer: Control) -> void:
+	_draw_level_complete_effect(layer)
+	_draw_next_level_pulse(layer)
+
+
+func _start_level_complete_effect() -> void:
+	_level_complete_effect_ids.clear()
+	for cell in _cells:
+		if not _positions.has(cell):
+			continue
+		_level_complete_effect_ids.append(cell)
+	_level_complete_effect_start_msec = Time.get_ticks_msec()
+	_queue_puzzle_overlay_redraw()
+
+
+func _reset_level_complete_effect() -> void:
+	_level_complete_effect_ids.clear()
+	_level_complete_effect_start_msec = -1
+
+
+func _is_level_complete_effect_active() -> bool:
+	if _level_complete_effect_start_msec < 0:
+		return false
+	return _level_complete_effect_progress() < 1.0
+
+
+func _level_complete_effect_progress() -> float:
+	if _level_complete_effect_start_msec < 0:
+		return 1.0
+	var elapsed := float(Time.get_ticks_msec() - _level_complete_effect_start_msec) / 1000.0
+	return clampf(elapsed / LEVEL_COMPLETE_EFFECT_SECONDS, 0.0, 1.0)
+
+
+func _draw_level_complete_effect(layer: Control) -> void:
+	if not _is_level_complete_effect_active():
 		return
-	var rect := Rect2(_next_button.position, _next_button.size).grow(6.0)
-	var pulse := 0.5 + sin(Time.get_ticks_msec() / 130.0) * 0.5
-	draw_rect(rect, Color(0.52, 1.0, 0.78, 0.12 + pulse * 0.18), true)
-	draw_rect(rect, Color(0.72, 1.0, 0.86, 0.50 + pulse * 0.32), false, 3.0)
+	var progress := _level_complete_effect_progress()
+	var fade := 1.0 - progress
+	var burst := sin(progress * PI)
+	var flash := clampf(1.0 - absf(progress - 0.18) / 0.18, 0.0, 1.0)
+	var centers: Array[Vector2] = []
+	var effect_ids: Array[String] = []
+	for id in _level_complete_effect_ids:
+		if not _positions.has(id):
+			continue
+		effect_ids.append(id)
+		centers.append(_tile_center(_get_cell_tile(id)))
+	if centers.is_empty():
+		return
+	var scale := _level_complete_effect_scale(centers.size())
+	var connector_color := Color(1.0, 0.88, 0.28, 0.24 * fade + 0.34 * flash)
+	for i in range(centers.size()):
+		for j in range(i + 1, centers.size()):
+			if centers[i].distance_squared_to(centers[j]) <= _tile_size * _tile_size * 1.35:
+				layer.draw_line(centers[i], centers[j], connector_color, maxf(3.0, _tile_size * (0.08 + flash * 0.08) * scale), true)
+	for index in range(centers.size()):
+		var center := centers[index]
+		var ring_radius := _tile_size * (0.46 + progress * 0.82) * scale
+		var hot := Color(1.0, 0.96, 0.48, 0.24 * fade + 0.54 * flash)
+		layer.draw_circle(center, _tile_size * (0.45 + burst * 0.24) * scale, Color(1.0, 0.92, 0.34, 0.10 * fade + 0.24 * flash))
+		layer.draw_arc(center, ring_radius, 0.0, TAU, 48, hot, maxf(3.0, _tile_size * 0.08 * scale), true)
+		layer.draw_arc(center, ring_radius * 0.68, 0.0, TAU, 36, Color(1.0, 1.0, 1.0, 0.22 * fade + 0.42 * flash), maxf(2.0, _tile_size * 0.035 * scale), true)
+		var spark_count := int(roundf(8.0 + (scale - 1.0) * 10.0))
+		for spark in range(spark_count):
+			var angle_seed := float((abs(hash(str(effect_ids[index], ":", spark))) % 1000)) / 1000.0
+			var angle := angle_seed * TAU + progress * TAU * (0.35 + float(spark % 3) * 0.09)
+			var direction := Vector2(cos(angle), sin(angle))
+			var spark_start := center + direction * _tile_size * (0.24 + progress * 0.28) * scale
+			var spark_end := center + direction * _tile_size * (0.44 + progress * 0.74) * scale
+			var spark_color := Color(1.0, 0.90, 0.26, (0.18 + flash * 0.42) * fade)
+			layer.draw_line(spark_start, spark_end, spark_color, maxf(1.6, _tile_size * 0.024 * scale), true)
+	_draw_level_complete_message(layer, centers, scale, fade, flash)
+
+
+func _level_complete_effect_scale(cell_count: int) -> float:
+	var capped_count := clampi(cell_count, 4, 10)
+	return lerpf(1.0, 1.85, float(capped_count - 4) / 6.0)
+
+
+func _draw_level_complete_message(layer: Control, centers: Array[Vector2], scale: float, fade: float, flash: float) -> void:
+	var center := Vector2.ZERO
+	for point in centers:
+		center += point
+	center /= float(centers.size())
+	center.y = clampf(center.y - _tile_size * (0.85 + 0.25 * scale), _board_rect.position.y + _tile_size * 0.42, _board_rect.position.y + _board_rect.size.y - _tile_size * 0.35)
+	var font: Font = ThemeDB.fallback_font
+	var font_size := maxi(24, int(roundf(_tile_size * (0.44 + 0.13 * scale))))
+	var width := minf(_board_rect.size.x * 0.96, _tile_size * (4.4 + scale * 1.4))
+	var origin := Vector2(center.x - width * 0.5, center.y + float(font_size) * 0.38)
+	var alpha := clampf(0.42 + flash * 0.46 + fade * 0.22, 0.0, 1.0)
+	var pad := Vector2(_tile_size * 0.20, _tile_size * 0.13)
+	var box := Rect2(Vector2(center.x - width * 0.5 - pad.x, center.y - font_size * 0.82 - pad.y), Vector2(width + pad.x * 2.0, font_size * 1.32 + pad.y * 2.0))
+	layer.draw_rect(box, Color(0.02, 0.07, 0.06, 0.34 * alpha), true)
+	layer.draw_rect(box, Color(1.0, 0.88, 0.28, 0.60 * alpha), false, maxf(2.0, _tile_size * 0.030 * scale))
+	layer.draw_string(font, origin + Vector2(2.0, 2.0), LEVEL_COMPLETE_TEXT, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color(0.01, 0.025, 0.03, 0.88 * alpha))
+	layer.draw_string(font, origin, LEVEL_COMPLETE_TEXT, HORIZONTAL_ALIGNMENT_CENTER, width, font_size, Color(1.0, 0.92, 0.34, alpha))
+
+
+func _draw_next_level_pulse(layer: Control) -> void:
+	if not _solved or not is_instance_valid(_next_button) or not _next_button.visible:
+		_reset_next_button_pulse_visual()
+		return
+	var period_msec := maxi(1, int(NEXT_BUTTON_PULSE_PERIOD_MSEC))
+	var phase := float(Time.get_ticks_msec() % period_msec) / float(period_msec)
+	var pulse := 0.5 + sin(phase * TAU) * 0.5
+	var scale := lerpf(NEXT_BUTTON_PULSE_MIN_SCALE, NEXT_BUTTON_PULSE_MAX_SCALE, pulse)
+	_apply_next_button_pulse_visual(scale)
+	var rect := Rect2(_next_button.position, _next_button.size)
+	var hot_alpha := 0.30 + pulse * 0.34
+	var soft_rect := rect.grow(18.0 + pulse * 10.0)
+	var mid_rect := rect.grow(10.0 + pulse * 6.0)
+	var tight_rect := rect.grow(4.0 + pulse * 3.0)
+	layer.draw_rect(soft_rect, Color(NEXT_BUTTON_GLOW_COLOR.r, NEXT_BUTTON_GLOW_COLOR.g, NEXT_BUTTON_GLOW_COLOR.b, 0.16 + pulse * 0.18), true)
+	layer.draw_rect(mid_rect, Color(NEXT_BUTTON_GLOW_HOT_COLOR.r, NEXT_BUTTON_GLOW_HOT_COLOR.g, NEXT_BUTTON_GLOW_HOT_COLOR.b, 0.16 + pulse * 0.24), false, 5.0 + pulse * 2.0)
+	layer.draw_rect(tight_rect, Color(0.86, 1.0, 0.90, hot_alpha), false, 3.0 + pulse * 2.0)
+
+
+func _apply_next_button_pulse_visual(scale_amount: float) -> void:
+	if not is_instance_valid(_next_button):
+		return
+	_next_button.pivot_offset = _next_button.size * 0.5
+	_next_button.scale = Vector2(scale_amount, scale_amount)
+
+
+func _reset_next_button_pulse_visual() -> void:
+	if not is_instance_valid(_next_button):
+		return
+	_next_button.scale = Vector2.ONE
+	_next_button.pivot_offset = _next_button.size * 0.5
 
 
 func _draw_resource_mark(font: Font, center: Vector2, radius: float, resource: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
@@ -4874,9 +5040,11 @@ func _check_solution() -> void:
 func _handle_solved_state(was_solved: bool) -> void:
 	if not _solved:
 		return
-	if not was_solved and Global.has_method("record_cellular_puzzle_level_complete"):
-		_save_level_high_velocity_if_dirty()
-		Global.record_cellular_puzzle_level_complete(_level_number)
+	if not was_solved:
+		_start_level_complete_effect()
+		if Global.has_method("record_cellular_puzzle_level_complete"):
+			_save_level_high_velocity_if_dirty()
+			Global.record_cellular_puzzle_level_complete(_level_number)
 	if _is_final_puzzle_level():
 		_show_final_win_panel()
 

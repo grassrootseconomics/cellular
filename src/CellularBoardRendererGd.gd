@@ -54,10 +54,19 @@ const NEED_STATE_SATISFIED := "satisfied"
 const CELL_KIND_STANDARD := "Standard"
 const CELL_KIND_WHITE_MYCO := "WhiteMyco"
 const CELL_KIND_RED_MYCO := "RedMyco"
+const MARK_MODE_LETTERS := 0
+const MARK_MODE_SYMBOLS := 1
+const MARK_MODE_HIDDEN := 2
 const RESOURCE_LETTERS := [
 	"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
 	"M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X",
 	"Y", "Z"
+]
+const RESOURCE_SYMBOL_MARKS := [
+	"+", "*", "#", "@", "$", "%", "&", "!",
+	"?", "=", "~", "^", "<", ">", "/", "\\",
+	":", ";", "|", "_", "x", "o", "[", "]",
+	"{", "}"
 ]
 const RESOURCE_COLORS := [
 	Color(0.18, 0.72, 0.78, 1.0),
@@ -104,6 +113,7 @@ var _board_visible := true
 var _using_sim_state := false
 var _solved := false
 var _circuit_overlay_enabled := true
+var _resource_mark_mode := MARK_MODE_LETTERS
 var _drag_cell := ""
 var _drag_position := Vector2.ZERO
 var _original_drag_tile := Vector2i.ZERO
@@ -190,6 +200,7 @@ func set_render_state(state: Dictionary) -> void:
 	_using_sim_state = bool(state.get("usingSimState", state.get("usingCsharpSim", false)))
 	_solved = bool(state.get("solved", false))
 	_circuit_overlay_enabled = bool(state.get("circuitOverlayEnabled", true))
+	_resource_mark_mode = int(state.get("resourceMarkMode", _resource_mark_mode))
 	var profile_was_enabled := _visual_profile_enabled
 	_visual_profile_enabled = bool(state.get("visualProfileEnabled", _visual_profile_enabled))
 	_visual_profile_print_every = maxi(1, int(state.get("visualProfilePrintEvery", _visual_profile_print_every)))
@@ -273,15 +284,15 @@ func _draw() -> void:
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
-		_draw_cell(cell, _visual_cell_center(cell), false, true, _cell_visual_scale(cell))
+		_draw_cell(cell, _visual_cell_center(cell), false, _board_visible, _cell_visual_scale(cell))
 	if _board_visible:
 		_draw_inventory_cells(false)
 	if not _drag_cell.is_empty():
 		_draw_cell(_drag_cell, _drag_position, true, true, _cell_visual_scale(_drag_cell))
 	if _board_visible and not _inventory_drag_cell.is_empty():
-		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
+		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE, false)
 	_draw_zero_need_pip_overlays()
-	if _myco_transition_animation_active:
+	if _should_redraw_for_live_visuals():
 		queue_redraw()
 
 
@@ -311,13 +322,13 @@ func _draw_profiled() -> void:
 	for cell in _cells:
 		if cell == _drag_cell:
 			continue
-		_draw_cell(cell, _visual_cell_center(cell), false, true, _cell_visual_scale(cell))
+		_draw_cell(cell, _visual_cell_center(cell), false, _board_visible, _cell_visual_scale(cell))
 	if _board_visible:
 		_draw_inventory_cells(false)
 	if not _drag_cell.is_empty():
 		_draw_cell(_drag_cell, _drag_position, true, true, _cell_visual_scale(_drag_cell))
 	if _board_visible and not _inventory_drag_cell.is_empty():
-		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE)
+		_draw_cell(_inventory_drag_cell, _inventory_drag_position, true, false, INVENTORY_CELL_SCALE, false)
 	_draw_zero_need_pip_overlays()
 	_visual_profile_cells_usec += Time.get_ticks_usec() - section_start_usec
 	var frame_usec := Time.get_ticks_usec() - frame_start_usec
@@ -327,8 +338,40 @@ func _draw_profiled() -> void:
 	if _visual_profile_frames >= _visual_profile_print_every:
 		_print_visual_profile()
 		_reset_visual_profile()
-	if _myco_transition_animation_active:
+	if _should_redraw_for_live_visuals():
 		queue_redraw()
+
+
+func _should_redraw_for_live_visuals() -> bool:
+	if _myco_transition_animation_active:
+		return true
+	if _solved or (_using_sim_state and bool(_snapshot.get("alive", false))):
+		return true
+	if not _clearing_cells.is_empty() and _clear_effect_progress < 1.0:
+		return true
+	for cell_value in _inventory_fresh_starts.keys():
+		if _inventory_fresh_strength(str(cell_value)) > 0.0:
+			return true
+	if not _using_sim_state:
+		return false
+	if _snapshot_array_has_items("flows") or _snapshot_array_has_items("reactions") or _snapshot_array_has_items("swaps"):
+		return true
+	return _has_zero_need_pip()
+
+
+func _snapshot_array_has_items(key: String) -> bool:
+	var value: Variant = _snapshot.get(key, [])
+	return value is Array and not (value as Array).is_empty()
+
+
+func _has_zero_need_pip() -> bool:
+	for cell in _cells:
+		if not _cell_state_by_id.has(cell):
+			continue
+		for need in _cell_needs(cell):
+			if _cached_slot_fullness(cell, need) <= 0.0:
+				return true
+	return false
 
 
 func _clear_frame_draw_caches() -> void:
@@ -451,7 +494,7 @@ func _add_need_pip_layout_specs_for_cell(cell: String, center: Vector2, dragging
 		return
 	var kind := _cached_cell_kind(cell)
 	var is_myco := _is_myco_kind(kind)
-	var current_needed: Array[String] = _cached_visual_needs_for_cell(cell, is_myco)
+	var current_needed: Array[String] = _cached_visual_needs_for_cell(cell, is_myco, use_sim_state)
 	var myco_state: Dictionary = _build_myco_pip_visual_state(cell, current_needed) if is_myco else {"resources": current_needed, "progress": 1.0}
 	var needed: Array[String] = []
 	var needed_value: Variant = myco_state.get("resources", [])
@@ -484,7 +527,7 @@ func _add_need_pip_layout_specs_for_cell(cell: String, center: Vector2, dragging
 			continue
 		var need := needed[index]
 		var fading_obsolete_myco_resource := is_myco and not current_needed.has(need)
-		var visual := _fading_myco_need_visual(index, pip_count, radius) if fading_obsolete_myco_resource else _need_state_data(cell, need)
+		var visual := _fading_myco_need_visual(index, pip_count, radius) if fading_obsolete_myco_resource else _need_state_data(cell, need, use_sim_state)
 		var stable_partner := "" if fading_obsolete_myco_resource else _stabilize_need_partner(cell, need, index, str(visual.get("partner", "")))
 		visual["partner"] = stable_partner
 		_add_need_pip_layout_spec({
@@ -1185,7 +1228,7 @@ func _draw_swap_particle(position: Vector2, resource: String, alpha: float) -> v
 	color.a = clampf(alpha, 0.0, 1.0)
 	var radius := maxf(3.0, _tile_size * 0.055)
 	draw_circle(position, radius, color)
-	draw_arc(position, radius, 0.0, TAU, 24, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.6, true)
+	_draw_ring(position, radius, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.6)
 
 
 func _draw_hint() -> void:
@@ -1198,8 +1241,8 @@ func _draw_hint() -> void:
 	var color := Color(1.0, 0.92, 0.24, 0.86)
 	draw_line(a_center, b_center, Color(1.0, 0.92, 0.24, 0.34), 9.0, true)
 	draw_line(a_center, b_center, color, 3.0, true)
-	draw_arc(a_center, _tile_size * 0.49, 0.0, TAU, _arc_segments(_tile_size * 0.49), color, 5.0, true)
-	draw_arc(b_center, _tile_size * 0.49, 0.0, TAU, _arc_segments(_tile_size * 0.49), color, 5.0, true)
+	_draw_ring(a_center, _tile_size * 0.49, color, 5.0)
+	_draw_ring(b_center, _tile_size * 0.49, color, 5.0)
 
 
 func _draw_inventory_slot_backings() -> void:
@@ -1225,8 +1268,8 @@ func _draw_inventory_cells(draw_backings: bool = true) -> void:
 			if fresh > 0.0:
 				var halo_radius := _tile_size * (0.50 + burst * 0.08)
 				draw_circle(cell_center, halo_radius, Color(1.0, 0.90, 0.28, 0.18 * fresh + 0.12 * burst))
-				draw_arc(cell_center, halo_radius * 1.04, 0.0, TAU, 48, Color(1.0, 0.90, 0.30, 0.46 * fresh), maxf(3.0, _tile_size * 0.052), true)
-			_draw_cell(cell, cell_center, false, false, INVENTORY_CELL_SCALE + fresh * 0.10 + burst * 0.07)
+				_draw_ring(cell_center, halo_radius * 1.04, Color(1.0, 0.90, 0.30, 0.46 * fresh), maxf(3.0, _tile_size * 0.052))
+			_draw_cell(cell, cell_center, false, false, INVENTORY_CELL_SCALE + fresh * 0.10 + burst * 0.07, false)
 		_draw_inventory_slot_frame(center, slot_size)
 
 
@@ -1248,21 +1291,27 @@ func _draw_inventory_slot_frame(center: Vector2, slot_size: float) -> void:
 	draw_rect(slot_rect.grow(-_tile_size * 0.022), Color(0.54, 1.0, 0.84, 0.82), false, maxf(3.2, _tile_size * 0.046))
 
 
-func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport: bool, visual_scale: float = 1.0) -> void:
+func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport: bool, visual_scale: float = 1.0, use_sim_state: bool = true) -> void:
 	var radius := _tile_size * (0.43 if dragging else 0.39) * visual_scale
+	var clearing := _clearing_cells.has(cell)
+	var clear_alpha := _clearing_alpha() if clearing else 1.0
+	var clear_flash := _clearing_flash() if clearing else 0.0
+	if clearing:
+		radius *= 1.0 + (sin(_clear_effect_progress * PI) * 0.22 + clear_flash * 0.12) * _clear_effect_scale
 	if clip_to_viewport and not _board_viewport_rect.grow(radius * 1.95).has_point(center):
+		return
+	if clear_alpha <= 0.02:
 		return
 	var kind := _cached_cell_kind(cell)
 	var is_myco := _is_myco_kind(kind)
 	var produced := _cached_cell_produced_resource(cell)
 	var color := Color(0.94, 0.97, 0.94, 1.0) if is_myco else _resource_color(produced)
-	var clearing := _clearing_cells.has(cell)
-	var clear_alpha := _clearing_alpha() if clearing else 1.0
-	if clear_alpha <= 0.02:
-		return
-	var live_complete := _circuit_alive_now()
+	var live_complete := use_sim_state and _circuit_alive_now()
+	var has_live_state := use_sim_state and _using_sim_state and _cell_state_by_id.has(cell)
 	var body_glow_color := color
 	var glow_alpha := 0.56 if _cached_cell_is_glowing(cell) else 0.16
+	if not has_live_state:
+		glow_alpha = 0.46 if use_sim_state and _cell_has_all_needs(cell, use_sim_state) else 0.18
 	var glow_health := 1.0
 	var glow_alpha_health := 1.0
 	var need_health_info: Dictionary = _cached_need_health(cell)
@@ -1276,7 +1325,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 		glow_alpha_health = alpha_health
 		body_glow_color = CELL_STRESS_GLOW_COLOR.lerp(CELL_HEALTHY_GLOW_COLOR, color_health)
 		glow_alpha = lerpf(CELL_STRESS_GLOW_STRENGTH, CELL_HEALTHY_GLOW_STRENGTH, alpha_health)
-	var reaction_alpha := _cached_recent_reaction_alpha(cell)
+	var reaction_alpha := _cached_recent_reaction_alpha(cell) if has_live_state else 0.0
 	if reaction_alpha > 0.0:
 		var reaction_health := need_health if has_need_health else 1.0
 		if reaction_health > 0.0:
@@ -1291,18 +1340,21 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_MID_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_MID_ALPHA_FRACTION))
 	draw_circle(center, radius * (1.0 + glow_thickness * CELL_GLOW_INNER_RADIUS_FRACTION), Color(body_glow_color.r, body_glow_color.g, body_glow_color.b, glow_alpha_value * CELL_GLOW_INNER_ALPHA_FRACTION))
 	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.72 * clear_alpha))
-	draw_arc(center, radius * 0.96, 0.0, TAU, _arc_segments(radius), Color(0.92, 1.0, 0.95, 0.68 * clear_alpha), 3.0, true)
+	_draw_ring(center, radius * 0.96, Color(0.92, 1.0, 0.95, 0.68 * clear_alpha), 3.0)
+	if clearing:
+		draw_circle(center, radius * (1.05 + _clear_effect_progress * 0.28 * _clear_effect_scale), Color(1.0, 0.95, 0.34, clear_flash * 0.48 + (1.0 - _clear_effect_progress) * 0.10))
+		_draw_ring(center, radius * (1.12 + _clear_effect_progress * 0.34 * _clear_effect_scale), Color(1.0, 0.88, 0.22, clear_alpha * 0.46), 4.5 * _clear_effect_scale)
 	if kind == CELL_KIND_RED_MYCO:
 		_draw_red_myco_ring(center, radius, clear_alpha)
 	if live_complete:
 		var pulse_health := _health_pulse_amount(need_health) if has_need_health else 1.0
 		var solved_pulse := 0.5 + sin(Time.get_ticks_msec() / 160.0) * 0.5
 		if pulse_health > 0.02:
-			draw_arc(center, radius * (1.07 + pulse_health * 0.03 + solved_pulse * 0.03), 0.0, TAU, _arc_segments(radius), Color(0.62, 1.0, 0.88, (0.18 + solved_pulse * 0.24) * pulse_health * clear_alpha), 3.0, true)
-	if _using_sim_state and not is_myco and not produced.is_empty():
+			_draw_ring(center, radius * (1.07 + pulse_health * 0.03 + solved_pulse * 0.03), Color(0.62, 1.0, 0.88, (0.18 + solved_pulse * 0.24) * pulse_health * clear_alpha), 3.0)
+	if not clearing and has_live_state and not is_myco and not produced.is_empty():
 		_draw_fullness_arc(center, radius * 1.07, _displayed_fullness(cell, produced, _cached_slot_fullness(cell, produced)), color, 6.0)
 	var font := get_theme_default_font()
-	var current_needed: Array[String] = _cached_visual_needs_for_cell(cell, is_myco)
+	var current_needed: Array[String] = _cached_visual_needs_for_cell(cell, is_myco, use_sim_state)
 	var myco_state: Dictionary = _build_myco_pip_visual_state(cell, current_needed) if is_myco else {"resources": current_needed, "progress": 1.0}
 	var needed: Array[String] = []
 	var needed_value: Variant = myco_state.get("resources", [])
@@ -1330,7 +1382,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 			continue
 		var need := needed[index]
 		var key := _pip_key(cell, need, index)
-		var pip_data := _need_pip_draw_from_layout(_need_pip_layout_by_key.get(key, {})) if _need_pip_layout_by_key.has(key) else _build_fallback_need_pip_draw(cell, need, index, pip_count, center, radius, pip_radius, used_angles, is_myco, myco_progress, clear_alpha, clearing, current_needed)
+		var pip_data := _need_pip_draw_from_layout(_need_pip_layout_by_key.get(key, {})) if use_sim_state and _need_pip_layout_by_key.has(key) else _build_fallback_need_pip_draw(cell, need, index, pip_count, center, radius, pip_radius, used_angles, use_sim_state, is_myco, myco_progress, clear_alpha, clearing, has_live_state, current_needed)
 		if _should_elevate_need_pip(pip_data):
 			zero_need_pips.append(pip_data)
 			_zero_need_pip_overlay_pips.append({"pip": pip_data, "cellRadius": radius})
@@ -1341,7 +1393,7 @@ func _draw_cell(cell: String, center: Vector2, dragging: bool, clip_to_viewport:
 	for pip_data in zero_need_pips:
 		_draw_need_pip(font, pip_data, radius, true)
 	if not is_myco:
-		_draw_centered_text(font, center, radius, produced, int(radius * 1.48), Color(1.0, 1.0, 1.0, clear_alpha))
+		_draw_resource_mark(font, center, radius, produced, int(radius * 1.48), Color(1.0, 1.0, 1.0, clear_alpha))
 
 
 func _need_pip_draw_from_layout(layout_value: Variant) -> Dictionary:
@@ -1365,9 +1417,9 @@ func _need_pip_draw_from_layout(layout_value: Variant) -> Dictionary:
 	}
 
 
-func _build_fallback_need_pip_draw(cell: String, need: String, index: int, count: int, center: Vector2, cell_radius: float, pip_radius: float, used_angles: Array[float], is_myco: bool, myco_progress: float, clear_alpha: float, clearing: bool, current_needed: Array[String]) -> Dictionary:
+func _build_fallback_need_pip_draw(cell: String, need: String, index: int, count: int, center: Vector2, cell_radius: float, pip_radius: float, used_angles: Array[float], use_sim_state: bool, is_myco: bool, myco_progress: float, clear_alpha: float, clearing: bool, has_live_state: bool, current_needed: Array[String]) -> Dictionary:
 	var fading_obsolete_myco_resource := is_myco and not current_needed.has(need)
-	var visual := _fading_myco_need_visual(index, count, cell_radius) if fading_obsolete_myco_resource else _need_visual_data(cell, need, index, count, center, cell_radius, pip_radius, used_angles)
+	var visual := _fading_myco_need_visual(index, count, cell_radius) if fading_obsolete_myco_resource else _need_visual_data(cell, need, index, count, center, cell_radius, pip_radius, used_angles, true, use_sim_state)
 	var angle := float(visual.get("angle", 0.0))
 	used_angles.append(float(visual.get("targetAngle", angle)))
 	var pip_offset := float(visual.get("offset", cell_radius * 1.18))
@@ -1384,14 +1436,14 @@ func _build_fallback_need_pip_draw(cell: String, need: String, index: int, count
 		"mycoProgress": myco_progress,
 		"clearAlpha": clear_alpha,
 		"clearing": clearing,
-		"hasLiveState": _using_sim_state and _cell_state_by_id.has(cell)
+		"hasLiveState": has_live_state
 	}
 
 
 func _draw_blank_myco_pip(center: Vector2, radius: float, alpha: float) -> void:
 	draw_circle(center, radius, Color(0.92, 0.97, 0.96, alpha))
-	draw_arc(center, radius, 0.0, TAU, _arc_segments(radius), Color(0.01, 0.025, 0.03, 0.68 * alpha), 2.2, true)
-	draw_arc(center, radius * 0.84, 0.0, TAU, _arc_segments(radius), Color(1.0, 1.0, 1.0, 0.52 * alpha), 1.4, true)
+	_draw_ring(center, radius, Color(0.01, 0.025, 0.03, 0.68 * alpha), 2.2)
+	_draw_ring(center, radius * 0.84, Color(1.0, 1.0, 1.0, 0.52 * alpha), 1.4)
 
 
 func _draw_need_pip(font: Font, pip_data: Dictionary, cell_radius: float, draw_tether: bool = true) -> void:
@@ -1424,8 +1476,8 @@ func _draw_need_pip(font: Font, pip_data: Dictionary, cell_radius: float, draw_t
 		pip_color = waiting_color.lerp(pip_color, myco_progress)
 		pip_color.a = clear_alpha
 	draw_circle(pip_center, pip_radius, pip_color)
-	draw_arc(pip_center, pip_radius, 0.0, TAU, _arc_segments(pip_radius), Color(0.01, 0.025, 0.03, 0.82 * clear_alpha), 2.2, true)
-	draw_arc(pip_center, pip_radius * 0.86, 0.0, TAU, _arc_segments(pip_radius), Color(1.0, 1.0, 1.0, (0.44 if state != NEED_STATE_MISSING or fullness > 0.0 else 0.28) * clear_alpha), 1.4, true)
+	_draw_ring(pip_center, pip_radius, Color(0.01, 0.025, 0.03, 0.82 * clear_alpha), 2.2)
+	_draw_ring(pip_center, pip_radius * 0.86, Color(1.0, 1.0, 1.0, (0.44 if state != NEED_STATE_MISSING or fullness > 0.0 else 0.28) * clear_alpha), 1.4)
 	var pip_bar_radius := pip_radius * 1.12
 	var pip_bar_width := maxf(2.0, pip_radius * 0.20)
 	if not clearing:
@@ -1434,7 +1486,7 @@ func _draw_need_pip(font: Font, pip_data: Dictionary, cell_radius: float, draw_t
 	if _should_elevate_need_pip(pip_data):
 		_draw_zero_pip_pulse_arc(pip_center, pip_bar_radius, pip_bar_width)
 	var mark_alpha := clear_alpha * (myco_progress if is_myco else 1.0)
-	_draw_centered_text(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color(1.0, 1.0, 1.0, mark_alpha), NEED_PIP_MARK_WEIGHT_SCALE)
+	_draw_resource_mark(font, pip_center, pip_radius, need, int(pip_radius * 1.02 * NEED_PIP_MARK_SIZE_SCALE), Color(1.0, 1.0, 1.0, mark_alpha), NEED_PIP_MARK_WEIGHT_SCALE)
 
 
 func _should_elevate_need_pip(pip_data: Dictionary) -> bool:
@@ -1452,8 +1504,8 @@ func _draw_zero_need_pip_overlays() -> void:
 		_draw_need_pip(font, pip_value as Dictionary, float(overlay_data.get("cellRadius", 0.0)), false)
 
 
-func _need_visual_data(cell: String, need: String, index: int, count: int, center: Vector2, cell_radius: float, pip_radius: float, used_angles: Array[float], apply_smoothing: bool = true) -> Dictionary:
-	var state := _need_state_data(cell, need)
+func _need_visual_data(cell: String, need: String, index: int, count: int, center: Vector2, cell_radius: float, pip_radius: float, used_angles: Array[float], apply_smoothing: bool = true, use_sim_state: bool = true) -> Dictionary:
+	var state := _need_state_data(cell, need, use_sim_state)
 	state["partner"] = _stabilize_need_partner(cell, need, index, str(state.get("partner", "")))
 	var partner := str(state.get("partner", ""))
 	var base_angle := _base_need_angle(cell, need, index, count, center, partner)
@@ -1468,21 +1520,22 @@ func _need_visual_data(cell: String, need: String, index: int, count: int, cente
 	return state
 
 
-func _need_state_data(cell: String, need: String) -> Dictionary:
+func _need_state_data(cell: String, need: String, use_sim_state: bool = true) -> Dictionary:
+	var live_state := use_sim_state and _using_sim_state
 	var preferred_partner := _preferred_need_partner(cell, need)
-	var fullness := _cached_slot_fullness(cell, need) if _using_sim_state else 0.0
-	var active_partner := _recent_flow_source_for_need(cell, need) if _using_sim_state else ""
-	var active_alpha := _recent_flow_alpha_for_need(cell, need) if _using_sim_state else 0.0
-	if _using_sim_state and active_partner.is_empty():
+	var fullness := _cached_slot_fullness(cell, need) if live_state else 0.0
+	var active_partner := _recent_flow_source_for_need(cell, need) if live_state else ""
+	var active_alpha := _recent_flow_alpha_for_need(cell, need) if live_state else 0.0
+	if live_state and active_partner.is_empty():
 		active_partner = _recent_swap_partner_for_need(cell, need)
 	if not preferred_partner.is_empty() and _can_partner_satisfy_need(cell, need, preferred_partner):
-		if _using_sim_state and not active_partner.is_empty():
+		if live_state and not active_partner.is_empty():
 			return {"state": NEED_STATE_ACTIVE, "partner": preferred_partner, "fullness": maxf(fullness, 0.18), "activeAlpha": maxf(active_alpha, 0.45)}
 		return {"state": NEED_STATE_AVAILABLE, "partner": preferred_partner, "fullness": 1.0, "activeAlpha": 0.0}
-	var possible_partner := _possible_swap_partner_for_need(cell, need) if _using_sim_state else _adjacent_reciprocal_partner_for_need(cell, need)
-	if _using_sim_state and possible_partner.is_empty():
+	var possible_partner := _possible_swap_partner_for_need(cell, need) if live_state else _adjacent_reciprocal_partner_for_need(cell, need)
+	if live_state and possible_partner.is_empty():
 		possible_partner = _adjacent_exchange_partner_for_need(cell, need)
-	if _using_sim_state and not active_partner.is_empty():
+	if live_state and not active_partner.is_empty():
 		return {"state": NEED_STATE_ACTIVE, "partner": possible_partner, "fullness": maxf(fullness, 0.18), "activeAlpha": maxf(active_alpha, 0.45)}
 	if not possible_partner.is_empty():
 		return {"state": NEED_STATE_AVAILABLE, "partner": possible_partner, "fullness": fullness, "activeAlpha": 0.0}
@@ -1493,9 +1546,9 @@ func _need_state_data(cell: String, need: String) -> Dictionary:
 
 func _draw_red_myco_ring(center: Vector2, radius: float, alpha: float) -> void:
 	var ring_radius := radius * 0.54
-	draw_arc(center, ring_radius, 0.0, TAU, _arc_segments(ring_radius), Color(0.86, 0.02, 0.04, 0.16 * alpha), maxf(2.0, radius * 0.18), true)
-	draw_arc(center, ring_radius, 0.0, TAU, _arc_segments(ring_radius), Color(0.92, 0.04, 0.06, 0.44 * alpha), maxf(1.6, radius * 0.12), true)
-	draw_arc(center, ring_radius, 0.0, TAU, _arc_segments(ring_radius), Color(0.70, 0.00, 0.02, 0.88 * alpha), maxf(1.2, radius * 0.055), true)
+	_draw_ring(center, ring_radius, Color(0.86, 0.02, 0.04, 0.16 * alpha), maxf(2.0, radius * 0.18))
+	_draw_ring(center, ring_radius, Color(0.92, 0.04, 0.06, 0.44 * alpha), maxf(1.6, radius * 0.12))
+	_draw_ring(center, ring_radius, Color(0.70, 0.00, 0.02, 0.88 * alpha), maxf(1.2, radius * 0.055))
 
 
 func _draw_need_tether(center: Vector2, pip_center: Vector2, cell_radius: float, pip_radius: float, color: Color) -> void:
@@ -1508,7 +1561,7 @@ func _draw_need_tether(center: Vector2, pip_center: Vector2, cell_radius: float,
 
 func _draw_fullness_arc(center: Vector2, radius: float, fullness: float, color: Color, width: float) -> void:
 	var amount := clampf(fullness, 0.0, 1.0)
-	draw_arc(center, radius, -PI * 0.5, PI * 1.5, _arc_segments(radius), Color(0.0, 0.0, 0.0, 0.34), width, true)
+	_draw_ring(center, radius, Color(0.0, 0.0, 0.0, 0.34), width)
 	if amount <= 0.0:
 		return
 	var active := color.lightened(0.26)
@@ -1523,9 +1576,32 @@ func _draw_zero_pip_pulse_arc(center: Vector2, radius: float, width: float) -> v
 	var pulse_color := ZERO_PIP_PULSE_COLOR
 	var glow_radius := radius * ZERO_PIP_PULSE_GLOW_SCALE
 	pulse_color.a = minf(1.0, 0.58 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
-	draw_arc(center, glow_radius, -PI * 0.5, PI * 1.5, _arc_segments(glow_radius), pulse_color, (width + 1.2) * ZERO_PIP_PULSE_GLOW_SCALE, true)
+	_draw_ring(center, glow_radius, pulse_color, (width + 1.2) * ZERO_PIP_PULSE_GLOW_SCALE)
 	pulse_color.a = minf(1.0, 0.22 * ZERO_PIP_PULSE_BRIGHTNESS_SCALE * alpha)
-	draw_arc(center, radius * 1.08 * ZERO_PIP_PULSE_GLOW_SCALE, -PI * 0.5, PI * 1.5, _arc_segments(glow_radius), pulse_color, maxf(1.4, width * 0.55) * ZERO_PIP_PULSE_GLOW_SCALE, true)
+	_draw_ring(center, radius * 1.08 * ZERO_PIP_PULSE_GLOW_SCALE, pulse_color, maxf(1.4, width * 0.55) * ZERO_PIP_PULSE_GLOW_SCALE)
+
+
+func _draw_ring(center: Vector2, radius: float, color: Color, width: float, antialiased: bool = true) -> void:
+	if radius <= 0.0 or width <= 0.0 or color.a <= 0.0:
+		return
+	draw_circle(center, radius, color, false, width, antialiased)
+
+
+func _draw_resource_mark(font: Font, center: Vector2, radius: float, resource: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
+	var mark := _resource_mark_text(resource)
+	if mark.is_empty():
+		return
+	_draw_centered_text(font, center, radius, mark, font_size, color, mark_weight_scale)
+
+
+func _resource_mark_text(resource: String) -> String:
+	if _resource_mark_mode == MARK_MODE_HIDDEN:
+		return ""
+	if _resource_mark_mode == MARK_MODE_SYMBOLS:
+		var index := RESOURCE_LETTERS.find(resource)
+		if index >= 0 and index < RESOURCE_SYMBOL_MARKS.size():
+			return str(RESOURCE_SYMBOL_MARKS[index])
+	return resource
 
 
 func _draw_centered_text(font: Font, center: Vector2, radius: float, text: String, font_size: int, color: Color, mark_weight_scale: float = 1.0) -> void:
@@ -1778,6 +1854,17 @@ func _cell_needs_resource(cell: String, resource: String) -> bool:
 	return false
 
 
+func _cell_has_all_needs(cell: String, use_sim_state: bool = true) -> bool:
+	var needed := _cell_needs(cell)
+	for need in needed:
+		if use_sim_state and _using_sim_state:
+			if _cached_slot_fullness(cell, need) <= 0.0:
+				return false
+		elif _preferred_need_partner(cell, need).is_empty() and _adjacent_reciprocal_partner_for_need(cell, need).is_empty():
+			return false
+	return not needed.is_empty()
+
+
 func _cached_cell_is_glowing(cell: String) -> bool:
 	if _draw_cell_glow_cache.has(cell):
 		return bool(_draw_cell_glow_cache.get(cell, false))
@@ -1931,18 +2018,20 @@ func _cell_needs(cell: String) -> Array[String]:
 	return result
 
 
-func _cached_visual_needs_for_cell(cell: String, is_myco: bool) -> Array[String]:
-	var key := str(cell, LOOKUP_KEY_SEPARATOR, "myco" if is_myco else "normal")
+func _cached_visual_needs_for_cell(cell: String, is_myco: bool, use_sim_state: bool = true) -> Array[String]:
+	var kind_key := "myco" if is_myco else "normal"
+	var state_key := "sim" if use_sim_state else "base"
+	var key := str(cell, LOOKUP_KEY_SEPARATOR, kind_key, LOOKUP_KEY_SEPARATOR, state_key)
 	var cached_value: Variant = _draw_visual_needs_cache.get(key, null)
 	if cached_value is Array:
 		return _strings_from_array(cached_value as Array)
-	var needs := _visual_needs_for_cell(cell, is_myco)
+	var needs := _visual_needs_for_cell(cell, is_myco, use_sim_state)
 	_draw_visual_needs_cache[key] = needs
 	return needs
 
 
-func _visual_needs_for_cell(cell: String, is_myco: bool) -> Array[String]:
-	if is_myco and _using_sim_state and _cell_state_by_id.has(cell):
+func _visual_needs_for_cell(cell: String, is_myco: bool, use_sim_state: bool = true) -> Array[String]:
+	if is_myco and use_sim_state and _using_sim_state and _cell_state_by_id.has(cell):
 		return _need_slot_resources_for_cell(cell)
 	return _cell_needs(cell)
 
@@ -2194,6 +2283,10 @@ func _inventory_fresh_strength(cell: String) -> float:
 func _clearing_alpha() -> float:
 	var fade_progress := clampf((_clear_effect_progress - 0.18) / 0.82, 0.0, 1.0)
 	return clampf(1.0 - pow(fade_progress, 1.35), 0.0, 1.0)
+
+
+func _clearing_flash() -> float:
+	return clampf(1.0 - absf(_clear_effect_progress - 0.18) / 0.18, 0.0, 1.0)
 
 
 func _zero_pip_pulse_alpha() -> float:

@@ -46,8 +46,8 @@ if [[ "$GODOT_VERSION" == *".mono."* || "$GODOT_VERSION" == *"mono"* ]]; then
 GDScript-only Web export requires the standard non-.NET Godot editor binary.
 The current GODOT_BIN points to a Mono/.NET Godot build, which cannot export Web in Godot 4.
 
-Install/download the standard Godot 4.6.3 editor and rerun, for example:
-  GODOT_BIN=/path/to/Godot_v4.6.3-stable_linux.x86_64 bash scripts/export_web_gdscript.sh
+Install/download the standard Godot 4.5.1 editor and rerun, for example:
+  GODOT_BIN=/path/to/Godot_v4.5.1-stable_linux.x86_64 bash scripts/export_web_gdscript.sh
 EOF
   exit 1
 fi
@@ -56,8 +56,8 @@ if [[ "$CELLULAR_WEB_LOCAL_TEST" == "1" || "$CELLULAR_WEB_LOCAL_TEST" == "true" 
   CELLULAR_WEB_PWA=0
 fi
 
-if [[ "$GODOT_VERSION" != 4.6.3* ]]; then
-  echo "Warning: project is targeting Godot 4.6.3; exporting with $GODOT_BIN ($GODOT_VERSION)." >&2
+if [[ "$GODOT_VERSION" != 4.5.1* ]]; then
+  echo "Warning: web export is targeting Godot 4.5.1; exporting with $GODOT_BIN ($GODOT_VERSION)." >&2
 fi
 
 echo "Exporting Cellular Web in release mode with $GODOT_BIN ($GODOT_VERSION)."
@@ -203,6 +203,7 @@ PY
 
 python3 - "$TMP_DIR/export_presets.cfg" "$CELLULAR_WEB_PWA" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
@@ -214,6 +215,88 @@ if not pwa:
         "progressive_web_app/ensure_cross_origin_isolation_headers=true",
         "progressive_web_app/ensure_cross_origin_isolation_headers=false",
     )
+
+lines = text.splitlines()
+runnable_preset_names = set()
+in_runnable_presets = False
+for line in lines:
+    stripped = line.strip()
+    if re.match(r"^\[[^\]]+\]$", stripped):
+        in_runnable_presets = stripped == "[runnable_presets]"
+        continue
+    if in_runnable_presets:
+        match = re.match(r'^[^=]+="([^"]+)"$', stripped)
+        if match:
+            runnable_preset_names.add(match.group(1))
+
+out = []
+index = 0
+while index < len(lines):
+    line = lines[index]
+    if not re.match(r"^\[preset\.\d+\]$", line.strip()):
+        out.append(line)
+        index += 1
+        continue
+
+    section = [line]
+    index += 1
+    while index < len(lines) and not re.match(r"^\[[^\]]+\]$", lines[index].strip()):
+        section.append(lines[index])
+        index += 1
+
+    has_runnable = any(entry.strip().startswith("runnable=") for entry in section[1:])
+    if not has_runnable:
+        preset_name = ""
+        for entry in section[1:]:
+            match = re.match(r'^name="([^"]+)"$', entry.strip())
+            if match:
+                preset_name = match.group(1)
+                break
+        runnable = "true" if preset_name in runnable_preset_names else "false"
+        section.insert(1, f"runnable={runnable}")
+    out.extend(section)
+
+text = "\n".join(out) + "\n"
+
+lines = text.splitlines()
+preamble = []
+sections = []
+current_header = None
+current_lines = []
+for line in lines:
+    stripped = line.strip()
+    if re.match(r"^\[[^\]]+\]$", stripped):
+        if current_header is None:
+            preamble = current_lines
+        else:
+            sections.append((current_header, current_lines))
+        current_header = stripped
+        current_lines = [line]
+    else:
+        current_lines.append(line)
+if current_header is None:
+    preamble = current_lines
+else:
+    sections.append((current_header, current_lines))
+
+web_preset_index = None
+for header, section_lines in sections:
+    match = re.match(r"^\[preset\.(\d+)\]$", header)
+    if not match:
+        continue
+    if any(entry.strip() == 'name="Web"' for entry in section_lines[1:]):
+        web_preset_index = match.group(1)
+        break
+
+if web_preset_index is not None:
+    kept = list(preamble)
+    for header, section_lines in sections:
+        if header == "[runnable_presets]":
+            kept.extend(["[runnable_presets]", "", 'Web="Web"'])
+        elif header in {f"[preset.{web_preset_index}]", f"[preset.{web_preset_index}.options]"}:
+            kept.extend(section_lines)
+    text = "\n".join(kept) + "\n"
+
 path.write_text(text)
 PY
 

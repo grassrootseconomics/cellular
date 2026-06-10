@@ -971,14 +971,14 @@ func _myco_neighbor_signature(myco_index: int) -> String:
 
 func _myco_shortage_signature(myco_index: int) -> String:
 	var parts: Array[String] = []
-	for signal in _collect_myco_need_signals(myco_index):
-		if not bool(signal.get("zero", false)):
+	for need_signal in _collect_myco_need_signals(myco_index):
+		if not bool(need_signal.get("zero", false)):
 			continue
 		parts.append("%d:%s:%d:%d" % [
-			int(signal.get("depth", 0)),
-			str(signal.get("cellId", "")),
-			int(signal.get("resource", -1)),
-			1 if bool(signal.get("bridgeCanCarry", false)) else 0
+			int(need_signal.get("depth", 0)),
+			str(need_signal.get("cellId", "")),
+			int(need_signal.get("resource", -1)),
+			1 if bool(need_signal.get("bridgeCanCarry", false)) else 0
 		])
 	parts.sort()
 	var signature := ""
@@ -1030,7 +1030,7 @@ func _add_need_signals_for_cell(cell: Dictionary, depth: int, bridge_can_carry: 
 			continue
 		var resource := int(slot.get("resource", -1))
 		var can_carry := bridge_can_carry or (not bridge.is_empty() and _cell_can_receive_resource_statically(bridge, resource))
-		var signal := {
+		var need_signal := {
 			"cell": cell_index,
 			"cellId": str(cell.get("id", "")),
 			"resource": resource,
@@ -1040,16 +1040,16 @@ func _add_need_signals_for_cell(cell: Dictionary, depth: int, bridge_can_carry: 
 		}
 		var key := "%d:%d" % [cell_index, resource]
 		var existing_signal: Dictionary = best_signals.get(key, {}) as Dictionary
-		if existing_signal.is_empty() or _compare_myco_need_signal_values(signal, existing_signal) < 0:
-			best_signals[key] = signal
+		if existing_signal.is_empty() or _compare_myco_need_signal_values(need_signal, existing_signal) < 0:
+			best_signals[key] = need_signal
 
 
 func _add_myco_need_signal_scores(signals: Array[Dictionary], scores: Dictionary) -> void:
-	for signal in signals:
-		var resource := int(signal.get("resource", -1))
-		var depth := int(signal.get("depth", 0))
-		var is_zero := bool(signal.get("zero", false))
-		var bridge_can_carry := bool(signal.get("bridgeCanCarry", false))
+	for need_signal in signals:
+		var resource := int(need_signal.get("resource", -1))
+		var depth := int(need_signal.get("depth", 0))
+		var is_zero := bool(need_signal.get("zero", false))
+		var bridge_can_carry := bool(need_signal.get("bridgeCanCarry", false))
 		var score := 0
 		if depth == 1 and is_zero:
 			score = ADAPTIVE_MYCO_ADJACENT_ZERO_NEED_SCORE
@@ -2114,8 +2114,8 @@ func _select_local_payment_replacement_index(resources: Array[int], scores: Dict
 
 
 func _is_adjacent_zero_shortage_resource(resource: int, need_signals: Array[Dictionary]) -> bool:
-	for signal in need_signals:
-		if int(signal.get("depth", 0)) == 1 and bool(signal.get("zero", false)) and int(signal.get("resource", -1)) == resource:
+	for need_signal in need_signals:
+		if int(need_signal.get("depth", 0)) == 1 and bool(need_signal.get("zero", false)) and int(need_signal.get("resource", -1)) == resource:
 			return true
 	return false
 
@@ -2356,12 +2356,12 @@ func _adaptive_myco_selection_is_better(left: Dictionary, right: Dictionary) -> 
 
 func _count_covered_myco_need_signals(resources: Array[int], signals: Array[Dictionary], depth: int, zero_only: bool) -> int:
 	var count := 0
-	for signal in signals:
-		if int(signal.get("depth", 0)) != depth:
+	for need_signal in signals:
+		if int(need_signal.get("depth", 0)) != depth:
 			continue
-		if zero_only and not bool(signal.get("zero", false)):
+		if zero_only and not bool(need_signal.get("zero", false)):
 			continue
-		if resources.has(int(signal.get("resource", -1))):
+		if resources.has(int(need_signal.get("resource", -1))):
 			count += 1
 	return count
 
